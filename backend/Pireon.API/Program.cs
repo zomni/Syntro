@@ -67,12 +67,22 @@ builder.Services
         options.Cookie.SecurePolicy = ParseCookieSecurePolicy(
             cookieSecurePolicyValue,
             builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always);
-        options.SlidingExpiration = false;
+        options.SlidingExpiration = true;
         options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionMinutes);
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>
             {
+                // Las APIs responden 401 JSON: un redirect 302 al login hacia un
+                // fetch con Accept json produce respuestas HTML ilegibles y loops
+                // de re-login en las vistas SPA/Razor.
+                if (context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    context.Response.ContentType = "application/json";
+                    return context.Response.WriteAsJsonAsync(new { error = "session-expired" });
+                }
+
                 var publicPath = context.Request.Headers.TryGetValue("X-Pireon-Public-Path", out var value)
                     ? value.ToString()
                     : string.Empty;

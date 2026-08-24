@@ -74,7 +74,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 var nowUtc = DateTime.UtcNow;
                 var schedules = await LoadActiveSchedulesAsync(stoppingToken);
                 var normalizedCron = string.Join(";", schedules.Select(s => s.Cron));
-                var slotCampusKey = ResolveSlotCampusKeys(schedules, scheduledAtUtc);
+                var slotInfo = ResolveSlotInfo(schedules, scheduledAtUtc);
 
                 var existingRunForSlot = await db.ScheduledScanRuns
                     .Where(r => r.ScheduledAtUtc == scheduledAtUtc && r.Status != "failed")
@@ -88,15 +88,22 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                     continue;
                 }
 
+                // Contador cronologico por organizacion: siguiente numero del campus.
+                var nextRunNumber = await db.ScheduledScanRuns
+                    .Where(r => r.CampusKey == slotInfo.CampusKey)
+                    .MaxAsync(r => (int?)r.RunNumber, stoppingToken) ?? 0;
+
                 var run = new ScheduledScanRun
                 {
-                    CampusKey = slotCampusKey,
+                    CampusKey = slotInfo.CampusKey,
+                    RunNumber = nextRunNumber + 1,
                     ScheduledAtUtc = scheduledAtUtc,
                     StartedAtUtc = nowUtc,
                     Status = "running",
                     ScheduledTimeLocal = TimeZoneInfo.ConvertTime(scheduledAtUtc, _scheduleTimeZone).ToString("HH:mm"),
                     ScheduledDayLocal = TimeZoneInfo.ConvertTime(scheduledAtUtc, _scheduleTimeZone).ToString("dddd", TelemetryTimeSettings.ResolveCulture(_configuration)),
                     NormalizedCron = normalizedCron,
+                    ScheduleLabel = slotInfo.ScheduleLabel,
                     CreatedAtUtc = nowUtc
                 };
                 db.ScheduledScanRuns.Add(run);
@@ -106,7 +113,8 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
 
                 if (bridge.UseAgentMode())
                 {
-                    var agentStatus = await bridge.GetStatusAsync(stoppingToken);
+                    // Estado del agente de la sede (campusKey) del slot, no global.
+                    var agentStatus = await bridge.GetStatusAsync(slotInfo.CampusKey, stoppingToken);
                     if (string.Equals(agentStatus.State, "pending", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(agentStatus.State, "running", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(agentStatus.State, "paused", StringComparison.OrdinalIgnoreCase) ||
@@ -138,14 +146,14 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                             "Falling back to inline scan. Reason: {Reason}",
                             reason);
 
-                        var result = await scanner.ScanAndStoreAsync("system", new NetworkTelemetryLiveScanRequest
-                        {
-                            CampusKey = slotCampusKey,
-                            ResolveInteractiveSessions = true,
-                            ScanMode = "full",
-                            TriggerType = "scheduled"
-                        }, stoppingToken);
-                        _logger.LogInformation("Live network telemetry auto scan completed inline (agent bypassed).");
+                    var result = await scanner.ScanAndStoreAsync("system", new NetworkTelemetryLiveScanRequest
+                    {
+                        CampusKey = slotInfo.CampusKey,
+                        ResolveInteractiveSessions = true,
+                        ScanMode = "full",
+                        TriggerType = "scheduled"
+                    }, stoppingToken);
+                    _logger.LogInformation("Live network telemetry auto scan completed inline (agent bypassed).");
 
                         run.Status = "completed";
                         run.CompletedAtUtc = DateTime.UtcNow;
@@ -158,7 +166,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
 
                     await bridge.QueueScanAsync("system", new NetworkTelemetryLiveScanRequest
                     {
-                        CampusKey = slotCampusKey,
+                        CampusKey = slotInfo.CampusKey,
                         ResolveInteractiveSessions = true,
                         ScanMode = "full",
                         TriggerType = "scheduled"
@@ -172,7 +180,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 {
                     var result = await scanner.ScanAndStoreAsync("system", new NetworkTelemetryLiveScanRequest
                     {
-                        CampusKey = slotCampusKey,
+                        CampusKey = slotInfo.CampusKey,
                         ResolveInteractiveSessions = true,
                         ScanMode = "full",
                         TriggerType = "scheduled"
@@ -227,7 +235,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
             .Where(s => s.IsEnabled)
             .OrderBy(s => s.SortOrder)
             .ThenBy(s => s.CreatedAtUtc)
-            .Select(s => new ActiveSchedule(s.Cron, s.TimeZone, s.CampusKey))
+            .Select(s => new ActiveSchedule(s.Cron, s.TimeZone, s.CampusKey, s.Label))
             .ToListAsync(stoppingToken);
 
         if (dbSchedules.Count > 0)
@@ -239,7 +247,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         if (configExpressions.Count > 0)
         {
             return configExpressions
-                .Select(expression => new ActiveSchedule(expression.ToString(), _scheduleTimeZone.Id, string.Empty))
+                .Select(expression => new ActiveSchedule(expression.ToString(), _scheduleTimeZone.Id, string.Empty, string.Empty))
                 .ToList();
         }
 
@@ -355,11 +363,14 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         return bool.TryParse(_configuration[configKey], out parsed) ? parsed : fallback;
     }
 
-    private readonly record struct ActiveSchedule(string Cron, string TimeZone, string CampusKey);
+    private readonly record struct ActiveSchedule(string Cron, string TimeZone, string CampusKey, string Label);
 
-    private static string ResolveSlotCampusKeys(IReadOnlyList<ActiveSchedule> schedules, DateTime scheduledAtUtc)
+    private readonly record struct SlotResolution(string CampusKey, string ScheduleLabel);
+
+    private static SlotResolution ResolveSlotInfo(IReadOnlyList<ActiveSchedule> schedules, DateTime scheduledAtUtc)
     {
         var keys = new List<string>();
+        var labels = new List<string>();
         foreach (var schedule in schedules)
         {
             if (string.IsNullOrWhiteSpace(schedule.CampusKey))
@@ -378,11 +389,19 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 Math.Abs((nextUtc.Value - scheduledAtUtc).TotalSeconds) <= 2)
             {
                 keys.Add(schedule.CampusKey);
+                if (!string.IsNullOrWhiteSpace(schedule.Label))
+                {
+                    labels.Add(schedule.Label);
+                }
             }
         }
 
-        return string.Join(";", keys
+        var campusKey = string.Join(";", keys
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(key => key, StringComparer.OrdinalIgnoreCase));
+        var scheduleLabel = string.Join(", ", labels
+            .Distinct(StringComparer.OrdinalIgnoreCase));
+
+        return new SlotResolution(campusKey, scheduleLabel);
     }
 }

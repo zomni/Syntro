@@ -39,14 +39,24 @@ public class TelemetryScanSchedulesController : ControllerBase
     [HttpPost("preview")]
     public async Task<IActionResult> Preview([FromBody] TelemetryScanSchedulePreviewRequest request, CancellationToken cancellationToken)
     {
-        if (!TelemetryScanScheduleService.TryParseCron(request.Cron, out _))
+        string cron;
+        if (request.Slots is { Count: > 0 })
         {
-            return BadRequest(new { message = $"La expresion cron no es valida: '{request.Cron}'." });
+            cron = TelemetryScanScheduleService.BuildCronFromSlots(request.Slots);
+        }
+        else
+        {
+            cron = request.Cron ?? string.Empty;
+        }
+
+        if (string.IsNullOrWhiteSpace(cron) || !TelemetryScanScheduleService.IsValidCompoundCron(cron))
+        {
+            return BadRequest(new { message = "No se pudo generar una expresion cron valida." });
         }
 
         var fromUtc = request.FromUtc ?? DateTime.UtcNow;
         var count = request.Count is > 0 and <= 20 ? request.Count.Value : 5;
-        var occurrences = TelemetryScanScheduleService.GetNextOccurrencesUtc(request.Cron, request.TimeZone, fromUtc, count);
+        var occurrences = TelemetryScanScheduleService.GetNextOccurrencesUtc(cron, request.TimeZone, fromUtc, count);
         var timeZone = TelemetryScanScheduleService.ResolveTimeZone(request.TimeZone);
 
         var items = occurrences
@@ -60,6 +70,7 @@ public class TelemetryScanSchedulesController : ControllerBase
         return Ok(new
         {
             valid = true,
+            cron,
             timeZone = timeZone.Id,
             occurrences = items
         });
@@ -72,12 +83,35 @@ public class TelemetryScanSchedulesController : ControllerBase
         [FromBody] TelemetryScanScheduleRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Cron))
+        if (request.Slots is not { Count: > 0 } && string.IsNullOrWhiteSpace(request.Cron))
         {
-            return BadRequest(new { message = "La expresion cron es obligatoria." });
+            return BadRequest(new { message = "Debe agregar al menos un horario." });
+        }
+
+        string cron;
+        try
+        {
+            cron = request.Slots is { Count: > 0 }
+                ? TelemetryScanScheduleService.BuildCronFromSlots(request.Slots)
+                : (request.Cron ?? string.Empty).Trim();
+        }
+        catch
+        {
+            return BadRequest(new { message = "No se pudo generar la expresion cron." });
         }
 
         var campusKeys = await _access.ResolveCampusKeysAsync(organizationId, cancellationToken);
+
+        var overlaps = await _service.DetectOverlapsAsync(cron, null, request.CampusKey, campusKeys, cancellationToken);
+        if (overlaps.Count > 0)
+        {
+            return Conflict(new
+            {
+                message = "Este horario se superpone con horarios existentes:",
+                overlaps
+            });
+        }
+
         TelemetryScanScheduleDto schedule;
         try
         {
@@ -108,12 +142,35 @@ public class TelemetryScanSchedulesController : ControllerBase
         [FromBody] TelemetryScanScheduleRequest request,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(request.Cron))
+        if (request.Slots is not { Count: > 0 } && string.IsNullOrWhiteSpace(request.Cron))
         {
-            return BadRequest(new { message = "La expresion cron es obligatoria." });
+            return BadRequest(new { message = "Debe agregar al menos un horario." });
+        }
+
+        string cron;
+        try
+        {
+            cron = request.Slots is { Count: > 0 }
+                ? TelemetryScanScheduleService.BuildCronFromSlots(request.Slots)
+                : (request.Cron ?? string.Empty).Trim();
+        }
+        catch
+        {
+            return BadRequest(new { message = "No se pudo generar la expresion cron." });
         }
 
         var campusKeys = await _access.ResolveCampusKeysAsync(organizationId, cancellationToken);
+
+        var overlaps = await _service.DetectOverlapsAsync(cron, id, request.CampusKey, campusKeys, cancellationToken);
+        if (overlaps.Count > 0)
+        {
+            return Conflict(new
+            {
+                message = "Este horario se superpone con horarios existentes:",
+                overlaps
+            });
+        }
+
         TelemetryScanScheduleDto? schedule;
         try
         {
@@ -169,7 +226,8 @@ public class TelemetryScanSchedulesController : ControllerBase
 
     public sealed class TelemetryScanSchedulePreviewRequest
     {
-        public string Cron { get; set; } = string.Empty;
+        public string? Cron { get; set; }
+        public List<ScheduleSlotDto>? Slots { get; set; }
         public string TimeZone { get; set; } = "America/Santiago";
         public DateTime? FromUtc { get; set; }
         public int? Count { get; set; }

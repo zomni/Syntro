@@ -93,6 +93,13 @@ Pireon es un SaaS white-label starter kit derivado de los proyectos cliente
   - Gestor de capturas scopeado por campus (CRUD `TelemetryScanScheduleService` + `TelemetryScanSchedulesController` con `organizationId`); fuera de scope → listas vacías / 400 / 404 según endpoint.
   - Verificación: 0 filas con `CampusKey` vacío (97 snapshots + 95 runs todos `sotero`); smoke autenticado pasa (login, schedules CRUD, scheduled-scans 95, snapshots scoped 97 `sotero` vs 0 `duoc`, 4 páginas con selector, sin 500).
 
+- **Fix: schedules soft-deleted + auto-scan + agent volume**:
+  - **Auto-scan habilitado**: `.env` (`NETWORK_TELEMETRY_AUTOSCAN=true`, `NETWORK_TELEMETRY_ENABLED=true`); `BackgroundService` ahora ejecuta el timer loop del scheduler.
+  - **ScheduleLabel en runs**: propiedad `ScheduleLabel` en `ScheduledScanRun` (modelo, ViewModel, DB con migración `AddScheduledScanRunScheduleLabel`); el scheduler resuelve el label desde schedules activos y lo almacena al crear cada run; UI muestra columna "Planificación" en la tabla de escaneos programados.
+  - **Schedules restaurados**: todos los `TelemetryScanSchedules` estaban soft-deleted (`DeletedAtUtc != null`), causando que el `HasQueryFilter` los excluyera tanto del UI como del scheduler. Se restauraron los 2 schedules activos y se limpiaron 4 duplicados obsoletos.
+  - **Agent volume montado**: `./runtime/network-telemetry-agent:/runtime/network-telemetry-agent` en `docker-compose.yml` + directorio creado; el backend ahora puede leer `agent-heartbeat.json` y el agente puede escribir archivos compartidos.
+  - Verificación: scheduler log "Next live telemetry scan scheduled in 00:09:56" confirma que detecta schedules habilitados.
+
 ## Pendiente
 
 - F2 (importar Sotero): registrar Organization "Hospital Sótero del Río" + CampusSite `sotero` (school `cs`, floors `["-1".."5"]`, defaultFloor `b1`), copiar estáticos de `/app/frontend-data` renombrando sin `.map`, sembrar schedules ("Lun-Jue 08:30/13:30/17:30; Vie 08:30/13:30/16:30" en `America/Santiago`, cron por fila), agregar `sotero` a `campuses.js`.

@@ -806,7 +806,35 @@ public static class ExtendedSchemaInitializer
             ON ScheduledScanRuns (Status);
             """);
 
+        await EnsureColumnAsync(context, "ScheduledScanRuns", "ScheduleLabel", "TEXT NOT NULL DEFAULT ''");
+        await EnsureColumnAsync(context, "ScheduledScanRuns", "RunNumber", "INTEGER NOT NULL DEFAULT 0");
+
+        await BackfillScheduledScanRunNumbersAsync(context);
         await BackfillScheduledScanRunsAsync(context, configuration);
+    }
+
+    // Contador cronologico por organizacion (#1 = run mas antiguo del campus).
+    private static async Task BackfillScheduledScanRunNumbersAsync(AppDbContext context)
+    {
+        var pending = await context.ScheduledScanRuns
+            .AsNoTracking()
+            .AnyAsync(run => run.RunNumber == 0);
+        if (!pending)
+        {
+            return;
+        }
+
+        await context.Database.ExecuteSqlRawAsync("""
+            UPDATE ScheduledScanRuns
+            SET RunNumber = (
+                SELECT COUNT(*) + 1
+                FROM ScheduledScanRuns AS s
+                WHERE s.CampusKey = ScheduledScanRuns.CampusKey
+                  AND (s.CreatedAtUtc < ScheduledScanRuns.CreatedAtUtc
+                       OR (s.CreatedAtUtc = ScheduledScanRuns.CreatedAtUtc AND s.ScheduledAtUtc < ScheduledScanRuns.ScheduledAtUtc)
+                       OR (s.CreatedAtUtc = ScheduledScanRuns.CreatedAtUtc AND s.ScheduledAtUtc = ScheduledScanRuns.ScheduledAtUtc AND s.Id < ScheduledScanRuns.Id))
+            );
+            """);
     }
 
     private static async Task BackfillScheduledScanRunsAsync(AppDbContext context, IConfiguration? configuration)
@@ -829,7 +857,9 @@ public static class ExtendedSchemaInitializer
             return;
 
         var now = DateTime.UtcNow;
-        var runs = scheduledSnapshots.Select(s =>
+        var runs = scheduledSnapshots
+            .OrderBy(s => s.ObservedAtUtc)
+            .Select(s =>
         {
             var localDateTime = s.ObservedAtUtc.Kind == DateTimeKind.Utc
                 ? TimeZoneInfo.ConvertTimeFromUtc(s.ObservedAtUtc, displayTimeZone)
@@ -847,9 +877,20 @@ public static class ExtendedSchemaInitializer
                 DeviceCount = s.DeviceCount,
                 UserCount = s.ConnectedUserCount,
                 NormalizedCron = "",
-                CreatedAtUtc = now
+                CreatedAtUtc = now,
+                RunNumber = 0
             };
         }).ToList();
+
+        // Numerar cronologicamente dentro de cada organizacion.
+        foreach (var group in runs.GroupBy(run => run.CampusKey))
+        {
+            var sequence = 0;
+            foreach (var run in group.OrderBy(run => run.ScheduledAtUtc))
+            {
+                run.RunNumber = ++sequence;
+            }
+        }
 
         context.ScheduledScanRuns.AddRange(runs);
         await context.SaveChangesAsync();

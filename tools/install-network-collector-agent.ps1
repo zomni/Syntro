@@ -1,9 +1,22 @@
 param(
     [string]$TaskName = "Pireon Network Collector Agent",
-    [string]$ConfigPath = ""
+    [string]$ConfigPath = "",
+    [string]$CampusKey = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# Cada agente atiende una organizacion (campusKey) y trabaja sobre su propia
+# subcarpeta dentro de runtime\network-telemetry-agent.
+$sanitizedCampusKey = ""
+if (-not [string]::IsNullOrWhiteSpace($CampusKey)) {
+    $sanitizedCampusKey = ($CampusKey.Trim().ToLowerInvariant() -replace '[^a-z0-9_\-]', '-').Trim('-')
+}
+if ([string]::IsNullOrWhiteSpace($sanitizedCampusKey)) {
+    Write-Host "Debes indicar la organizacion del agente con -CampusKey (por ejemplo: -CampusKey sotero)." -ForegroundColor Red
+    Write-Host "El backend encola cada escaneo en la carpeta de su organizacion." -ForegroundColor Yellow
+    exit 1
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runnerPath = Join-Path $repoRoot "tools\run-network-collector.ps1"
@@ -23,7 +36,7 @@ if (-not (Test-Path $ConfigPath)) {
 $config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
 $config.WatchMode = $true
 $config.PromptForCredential = $false
-$config.SharedPath = "..\\..\\runtime\\network-telemetry-agent"
+$config.SharedPath = "..\\..\\runtime\\network-telemetry-agent\\$sanitizedCampusKey"
 $config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -88,6 +101,7 @@ catch {
 Write-Host ""
 Write-Host "Agente instalado correctamente para inicio automatico." -ForegroundColor Green
 Write-Host "Nombre tarea : $TaskName"
+Write-Host "Organizacion : $sanitizedCampusKey"
 Write-Host "Config       : $ConfigPath"
 Write-Host "Modo         : $taskMode"
 Write-Host "Inicio       : $startedMessage"

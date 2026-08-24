@@ -1188,6 +1188,33 @@ internal sealed class Collector
                     }
                 }
             }
+
+            if (string.IsNullOrWhiteSpace(device.SerialNumber))
+            {
+                using (var biosSearcher = new ManagementObjectSearcher(scope, new ObjectQuery("SELECT SerialNumber FROM Win32_BIOS")))
+                {
+                    foreach (ManagementObject item in biosSearcher.Get())
+                    {
+                        device.SerialNumber = item["SerialNumber"]?.ToString()?.Trim() ?? device.SerialNumber;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(device.MacAddress))
+            {
+                using (var nicSearcher = new ManagementObjectSearcher(scope, new ObjectQuery("SELECT MACAddress, IPEnabled FROM Win32_NetworkAdapterConfiguration WHERE IPEnabled = TRUE")))
+                {
+                    foreach (ManagementObject item in nicSearcher.Get())
+                    {
+                        var mac = item["MACAddress"]?.ToString()?.Trim();
+                        if (!string.IsNullOrWhiteSpace(mac))
+                        {
+                            device.MacAddress = mac;
+                            break;
+                        }
+                    }
+                }
+            }
         }
         catch
         {

@@ -14,3 +14,10 @@
   (frontend).
 - Antes de entregar una tarea, verificar con un smoke check que los servicios
   respondan (p. ej. `GET /api/health/integrity` en el backend).
+
+## Git
+
+- **NO hacer `git push` sin autorización explícita del usuario.**
+  El agente puede commitear localmente, pero el push solo se ejecuta cuando el
+  usuario lo autoriza verbalmente (p. ej. "dale push", "sube", "push").
+  Si el usuario no autoriza, dejar el commit local listo y avisar.

@@ -228,7 +228,6 @@
         const SESSION_MINUTES = @(sessionMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
         const WARNING_MINUTES = @(warningMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
         const storageKey = "pireon-admin-last-activity";
-        const authTransitionKey = "pireon-admin-auth-transition";
         const warningOverlay = document.getElementById("session-warning-overlay");
         const warningEl = document.getElementById("session-warning");
         const countdownEl = document.getElementById("session-warning-countdown");
@@ -253,16 +252,6 @@
             const raw = localStorage.getItem(storageKey);
             const parsed = Number(raw);
             return Number.isFinite(parsed) ? parsed : Date.now();
-        };
-
-        const consumeAuthTransition = () => {
-            const value = sessionStorage.getItem(authTransitionKey);
-            if (value === "1") {
-                sessionStorage.removeItem(authTransitionKey);
-                return true;
-            }
-
-            return false;
         };
 
         const formatRemaining = (remainingMs) => {
@@ -338,7 +327,7 @@
                 const remainingMs = sessionMs - idleMs;
 
                 if (remainingMs <= 0) {
-                    showExpired();
+                    window.setTimeout(() => validateSession({ force: true }), 0);
                     return false;
                 }
 
@@ -372,27 +361,12 @@
                     return false;
                 }
 
-                if (consumeAuthTransition()) {
-                    registerActivity(now);
-                    hideWarning();
-                    return true;
-                }
-
-                const lastActivity = getLastActivity();
-                const idleMs = now - lastActivity;
-                const remainingMs = sessionMs - idleMs;
-
-                if (remainingMs <= 0) {
-                    showExpired();
-                    return false;
-                }
-
-                if (showWarningWhenNearExpiry && idleMs >= warningAtMs) {
-                    showWarning(remainingMs);
-                } else if (!warningActive) {
-                    hideWarning();
-                }
-
+                // El servidor es la autoridad: con cookie deslizante, una respuesta
+                // positiva renueva la actividad local y descarta timestamps viejos
+                // de localStorage (evita falsos "Sesion caducada" tras ausencias).
+                registerActivity(now);
+                hideWarning();
+                hideExpired();
                 return true;
             } catch (_) {
                 showExpired();
@@ -409,7 +383,7 @@
 
             const now = Date.now();
             if (now - getLastActivity() >= sessionMs) {
-                showExpired();
+                validateSession({ force: true });
                 return;
             }
 
@@ -530,7 +504,7 @@
             const remainingMs = sessionMs - idleMs;
 
             if (remainingMs <= 0) {
-                showExpired();
+                validateSession({ force: true });
                 return;
             }
 
@@ -541,10 +515,13 @@
             }
         };
 
-        if (consumeAuthTransition() || !localStorage.getItem(storageKey)) {
+        if (!localStorage.getItem(storageKey)) {
             registerActivity(Date.now());
         } else {
             lastActivityUpdate = getLastActivity();
+            if (isLocallyExpired()) {
+                validateSession({ force: true });
+            }
         }
         tick();
         window.setInterval(tick, 1000);

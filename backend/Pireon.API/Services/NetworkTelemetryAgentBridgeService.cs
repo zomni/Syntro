@@ -25,29 +25,56 @@ public class NetworkTelemetryAgentBridgeService
             "agent",
             StringComparison.OrdinalIgnoreCase);
 
-    public string GetSharedPath()
+    // Cada organizacion (campusKey) trabaja sobre su propia carpeta dentro del
+    // directorio compartido; sin campusKey se mantiene la carpeta raiz legado.
+    public string GetSharedPath(string? campusKey = null)
     {
         var configured = _configuration["NetworkTelemetrySettings:AgentSharedPath"];
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return Path.GetFullPath(configured, _environment.ContentRootPath);
-        }
+        var basePath = !string.IsNullOrWhiteSpace(configured)
+            ? Path.GetFullPath(configured, _environment.ContentRootPath)
+            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, "..", "runtime", "network-telemetry-agent"));
 
-        return Path.GetFullPath(Path.Combine(_environment.ContentRootPath, "..", "runtime", "network-telemetry-agent"));
+        var folder = NormalizeCampusFolder(campusKey);
+        return string.IsNullOrEmpty(folder)
+            ? basePath
+            : Path.Combine(basePath, folder);
     }
 
-    public string GetRequestPath() => Path.Combine(GetSharedPath(), "scan-request.json");
+    private static string? NormalizeCampusFolder(string? campusKey)
+    {
+        if (string.IsNullOrWhiteSpace(campusKey))
+        {
+            return null;
+        }
 
-    public string GetStatusPath() => Path.Combine(GetSharedPath(), "scan-status.json");
+        var sanitized = new string(campusKey
+            .Trim()
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) || character == '-' || character == '_' ? character : '-')
+            .ToArray())
+            .Trim('-');
 
-    public string GetHeartbeatPath() => Path.Combine(GetSharedPath(), "agent-heartbeat.json");
+        if (sanitized.Length == 0)
+        {
+            return null;
+        }
 
-    public string GetControlPath() => Path.Combine(GetSharedPath(), "scan-control.json");
+        return sanitized.Length <= 64 ? sanitized : sanitized[..64];
+    }
+
+    public string GetRequestPath(string? campusKey = null) => Path.Combine(GetSharedPath(campusKey), "scan-request.json");
+
+    public string GetStatusPath(string? campusKey = null) => Path.Combine(GetSharedPath(campusKey), "scan-status.json");
+
+    public string GetHeartbeatPath(string? campusKey = null) => Path.Combine(GetSharedPath(campusKey), "agent-heartbeat.json");
+
+    public string GetControlPath(string? campusKey = null) => Path.Combine(GetSharedPath(campusKey), "scan-control.json");
 
     public async Task<NetworkTelemetryAgentStatusViewModel> QueueScanAsync(string requestedByUsername, NetworkTelemetryLiveScanRequest? request, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(GetSharedPath());
-        TryDeleteControl();
+        var campusKey = request?.CampusKey?.Trim() ?? string.Empty;
+        Directory.CreateDirectory(GetSharedPath(campusKey));
+        TryDeleteControl(campusKey);
 
         var requestPayload = new NetworkTelemetryAgentRequest
         {
@@ -60,7 +87,7 @@ public class NetworkTelemetryAgentBridgeService
             TriggerType = NormalizeTriggerType(request?.TriggerType)
         };
 
-        await File.WriteAllTextAsync(GetRequestPath(), JsonSerializer.Serialize(requestPayload, JsonOptions), cancellationToken);
+        await File.WriteAllTextAsync(GetRequestPath(campusKey), JsonSerializer.Serialize(requestPayload, JsonOptions), cancellationToken);
 
         var statusPayload = new NetworkTelemetryAgentStatus
         {
@@ -73,16 +100,16 @@ public class NetworkTelemetryAgentBridgeService
             UpdatedAtUtc = DateTime.UtcNow
         };
 
-        await File.WriteAllTextAsync(GetStatusPath(), JsonSerializer.Serialize(statusPayload, JsonOptions), cancellationToken);
+        await File.WriteAllTextAsync(GetStatusPath(campusKey), JsonSerializer.Serialize(statusPayload, JsonOptions), cancellationToken);
         return MapStatus(statusPayload);
     }
 
-    public async Task<NetworkTelemetryAgentStatusViewModel> SendControlAsync(string requestedByUsername, string action, CancellationToken cancellationToken = default)
+    public async Task<NetworkTelemetryAgentStatusViewModel> SendControlAsync(string requestedByUsername, string action, string? campusKey = null, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(GetSharedPath());
+        Directory.CreateDirectory(GetSharedPath(campusKey));
 
         var normalizedAction = NormalizeControlAction(action);
-        var current = await GetRawStatusAsync(cancellationToken) ?? new NetworkTelemetryAgentStatus
+        var current = await GetRawStatusAsync(campusKey, cancellationToken) ?? new NetworkTelemetryAgentStatus
         {
             State = "idle",
             Message = "Sin solicitudes recientes para el agente Windows."
@@ -96,7 +123,7 @@ public class NetworkTelemetryAgentBridgeService
             RequestedAtUtc = DateTime.UtcNow
         };
 
-        await File.WriteAllTextAsync(GetControlPath(), JsonSerializer.Serialize(payload, JsonOptions), cancellationToken);
+        await File.WriteAllTextAsync(GetControlPath(campusKey), JsonSerializer.Serialize(payload, JsonOptions), cancellationToken);
 
         if (string.Equals(normalizedAction, "pause", StringComparison.OrdinalIgnoreCase) &&
             string.Equals(current.State, "running", StringComparison.OrdinalIgnoreCase))
@@ -104,7 +131,7 @@ public class NetworkTelemetryAgentBridgeService
             current.State = "paused";
             current.Message = $"Escaneo pausado por {payload.RequestedByUsername}.";
             current.UpdatedAtUtc = DateTime.UtcNow;
-            await SaveStatusAsync(current, cancellationToken);
+            await SaveStatusAsync(campusKey, current, cancellationToken);
         }
         else if (string.Equals(normalizedAction, "resume", StringComparison.OrdinalIgnoreCase) &&
                  string.Equals(current.State, "paused", StringComparison.OrdinalIgnoreCase))
@@ -112,35 +139,35 @@ public class NetworkTelemetryAgentBridgeService
             current.State = "running";
             current.Message = $"Escaneo reanudado por {payload.RequestedByUsername}.";
             current.UpdatedAtUtc = DateTime.UtcNow;
-            await SaveStatusAsync(current, cancellationToken);
+            await SaveStatusAsync(campusKey, current, cancellationToken);
         }
         else if (string.Equals(normalizedAction, "stop", StringComparison.OrdinalIgnoreCase))
         {
             if (string.Equals(current.State, "pending", StringComparison.OrdinalIgnoreCase))
             {
-                TryDeleteRequest();
+                TryDeleteRequest(campusKey);
                 current.State = "failed";
                 current.Error = "scan-stopped-before-start";
                 current.Message = $"Solicitud detenida por {payload.RequestedByUsername} antes de iniciar.";
                 current.CompletedAtUtc = DateTime.UtcNow;
                 current.UpdatedAtUtc = DateTime.UtcNow;
-                await SaveStatusAsync(current, cancellationToken);
+                await SaveStatusAsync(campusKey, current, cancellationToken);
             }
             else
             {
                 current.State = "stopping";
                 current.Message = $"Deteniendo escaneo por solicitud de {payload.RequestedByUsername}.";
                 current.UpdatedAtUtc = DateTime.UtcNow;
-                await SaveStatusAsync(current, cancellationToken);
+                await SaveStatusAsync(campusKey, current, cancellationToken);
             }
         }
 
         return MapStatus(current);
     }
 
-    public async Task<NetworkTelemetryAgentRequest?> TryReadPendingRequestAsync(CancellationToken cancellationToken = default)
+    public async Task<NetworkTelemetryAgentRequest?> TryReadPendingRequestAsync(string? campusKey = null, CancellationToken cancellationToken = default)
     {
-        var requestPath = GetRequestPath();
+        var requestPath = GetRequestPath(campusKey);
         if (!File.Exists(requestPath))
         {
             return null;
@@ -150,49 +177,57 @@ public class NetworkTelemetryAgentBridgeService
         return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentRequest>(stream, JsonOptions, cancellationToken);
     }
 
-    public async Task MarkRunningAsync(string requestId, string agentId, CancellationToken cancellationToken = default)
+    private async Task UpdateStatusAsync(
+        string? campusKey,
+        string requestId,
+        Action<NetworkTelemetryAgentStatus> mutate,
+        CancellationToken cancellationToken,
+        bool deleteRequest = false)
     {
-        var current = await GetRawStatusAsync(cancellationToken) ?? new NetworkTelemetryAgentStatus();
+        var current = await GetRawStatusAsync(campusKey, cancellationToken) ?? new NetworkTelemetryAgentStatus();
         current.RequestId = requestId;
-        current.State = "running";
-        current.AgentId = agentId;
-        current.Message = $"Agente {agentId} ejecutando escaneo.";
-        current.StartedAtUtc ??= DateTime.UtcNow;
+        mutate(current);
         current.UpdatedAtUtc = DateTime.UtcNow;
-        await SaveStatusAsync(current, cancellationToken);
+        await SaveStatusAsync(campusKey, current, cancellationToken);
+        if (deleteRequest)
+        {
+            TryDeleteRequest(campusKey);
+        }
     }
 
-    public async Task MarkCompletedAsync(string requestId, string agentId, Guid? snapshotId, string? message, CancellationToken cancellationToken = default)
-    {
-        var current = await GetRawStatusAsync(cancellationToken) ?? new NetworkTelemetryAgentStatus();
-        current.RequestId = requestId;
-        current.State = "completed";
-        current.AgentId = agentId;
-        current.SnapshotId = snapshotId;
-        current.Message = string.IsNullOrWhiteSpace(message) ? "Escaneo completado." : message.Trim();
-        current.CompletedAtUtc = DateTime.UtcNow;
-        current.UpdatedAtUtc = DateTime.UtcNow;
-        await SaveStatusAsync(current, cancellationToken);
-        TryDeleteRequest();
-    }
+    public Task MarkRunningAsync(string requestId, string agentId, string? campusKey = null, CancellationToken cancellationToken = default)
+        => UpdateStatusAsync(campusKey, requestId, status =>
+        {
+            status.State = "running";
+            status.AgentId = agentId;
+            status.Message = $"Agente {agentId} ejecutando escaneo.";
+            status.StartedAtUtc ??= DateTime.UtcNow;
+        }, cancellationToken);
 
-    public async Task MarkFailedAsync(string requestId, string agentId, string? error, CancellationToken cancellationToken = default)
-    {
-        var current = await GetRawStatusAsync(cancellationToken) ?? new NetworkTelemetryAgentStatus();
-        current.RequestId = requestId;
-        current.State = "failed";
-        current.AgentId = agentId;
-        current.Error = string.IsNullOrWhiteSpace(error) ? "Error no especificado." : error.Trim();
-        current.Message = "El agente Windows no pudo completar el escaneo.";
-        current.CompletedAtUtc = DateTime.UtcNow;
-        current.UpdatedAtUtc = DateTime.UtcNow;
-        await SaveStatusAsync(current, cancellationToken);
-    }
+    public Task MarkCompletedAsync(string requestId, string agentId, Guid? snapshotId, string? message, string? campusKey = null, CancellationToken cancellationToken = default)
+        => UpdateStatusAsync(campusKey, requestId, status =>
+        {
+            status.State = "completed";
+            status.AgentId = agentId;
+            status.SnapshotId = snapshotId;
+            status.Message = string.IsNullOrWhiteSpace(message) ? "Escaneo completado." : message.Trim();
+            status.CompletedAtUtc = DateTime.UtcNow;
+        }, cancellationToken, deleteRequest: true);
 
-    public async Task<NetworkTelemetryAgentStatusViewModel> GetStatusAsync(CancellationToken cancellationToken = default)
+    public Task MarkFailedAsync(string requestId, string agentId, string? error, string? campusKey = null, CancellationToken cancellationToken = default)
+        => UpdateStatusAsync(campusKey, requestId, status =>
+        {
+            status.State = "failed";
+            status.AgentId = agentId;
+            status.Error = string.IsNullOrWhiteSpace(error) ? "Error no especificado." : error.Trim();
+            status.Message = "El agente Windows no pudo completar el escaneo.";
+            status.CompletedAtUtc = DateTime.UtcNow;
+        }, cancellationToken);
+
+    public async Task<NetworkTelemetryAgentStatusViewModel> GetStatusAsync(string? campusKey = null, CancellationToken cancellationToken = default)
     {
-        var current = await GetRawStatusAsync(cancellationToken);
-        var heartbeat = await GetHeartbeatAsync(cancellationToken);
+        var current = await GetRawStatusAsync(campusKey, cancellationToken);
+        var heartbeat = await GetHeartbeatAsync(campusKey, cancellationToken);
         var nowUtc = DateTime.UtcNow;
         var heartbeatTimeout = TimeSpan.FromSeconds(GetHeartbeatTimeoutSeconds());
         var mapped = current is null
@@ -205,7 +240,7 @@ public class NetworkTelemetryAgentBridgeService
 
         if (string.IsNullOrWhiteSpace(mapped.TriggerType))
         {
-            var request = await TryReadPendingRequestAsync(cancellationToken);
+            var request = await TryReadPendingRequestAsync(campusKey, cancellationToken);
             if (request is not null)
             {
                 mapped.TriggerType = request.TriggerType;
@@ -243,9 +278,9 @@ public class NetworkTelemetryAgentBridgeService
             : 30;
     }
 
-    private async Task<NetworkTelemetryAgentStatus?> GetRawStatusAsync(CancellationToken cancellationToken)
+    private async Task<NetworkTelemetryAgentStatus?> GetRawStatusAsync(string? campusKey, CancellationToken cancellationToken)
     {
-        var statusPath = GetStatusPath();
+        var statusPath = GetStatusPath(campusKey);
         if (!File.Exists(statusPath))
         {
             return null;
@@ -255,9 +290,9 @@ public class NetworkTelemetryAgentBridgeService
         return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentStatus>(stream, JsonOptions, cancellationToken);
     }
 
-    private async Task<NetworkTelemetryAgentHeartbeat?> GetHeartbeatAsync(CancellationToken cancellationToken)
+    private async Task<NetworkTelemetryAgentHeartbeat?> GetHeartbeatAsync(string? campusKey, CancellationToken cancellationToken)
     {
-        var heartbeatPath = GetHeartbeatPath();
+        var heartbeatPath = GetHeartbeatPath(campusKey);
         if (!File.Exists(heartbeatPath))
         {
             return null;
@@ -267,24 +302,24 @@ public class NetworkTelemetryAgentBridgeService
         return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentHeartbeat>(stream, JsonOptions, cancellationToken);
     }
 
-    private async Task SaveStatusAsync(NetworkTelemetryAgentStatus status, CancellationToken cancellationToken)
+    private async Task SaveStatusAsync(string? campusKey, NetworkTelemetryAgentStatus status, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(GetSharedPath());
-        await File.WriteAllTextAsync(GetStatusPath(), JsonSerializer.Serialize(status, JsonOptions), cancellationToken);
+        Directory.CreateDirectory(GetSharedPath(campusKey));
+        await File.WriteAllTextAsync(GetStatusPath(campusKey), JsonSerializer.Serialize(status, JsonOptions), cancellationToken);
     }
 
-    private void TryDeleteRequest()
+    private void TryDeleteRequest(string? campusKey)
     {
-        var requestPath = GetRequestPath();
+        var requestPath = GetRequestPath(campusKey);
         if (File.Exists(requestPath))
         {
             File.Delete(requestPath);
         }
     }
 
-    private void TryDeleteControl()
+    private void TryDeleteControl(string? campusKey)
     {
-        var controlPath = GetControlPath();
+        var controlPath = GetControlPath(campusKey);
         if (File.Exists(controlPath))
         {
             File.Delete(controlPath);

@@ -7,6 +7,7 @@
     var selectorName = ViewData["OrganizationSelectorName"] as string ?? "organizationId";
     var selectorId = ViewData["OrganizationSelectorId"] as string ?? "organization-selector";
     var compact = ViewData["OrganizationSelectorCompact"] as bool? ?? false;
+    var allowAll = ViewData["OrganizationSelectorAllowAll"] as bool? ?? true;
 
     var effectiveOrg = organizations.FirstOrDefault(org => effectiveOrganizationId.HasValue && effectiveOrganizationId.Value == org.Id);
     var displayOrg = effectiveOrganizationId.HasValue ? effectiveOrg : null;
@@ -25,7 +26,10 @@
                 class="@(compact ? "form-select form-select-sm" : "form-select")"
                 data-organization-selector="true"
                 title="Filtrar por organizacion">
-            <option value="">Todas las organizaciones</option>
+            @if (allowAll || !effectiveOrganizationId.HasValue)
+            {
+                <option value="">Todas las organizaciones</option>
+            }
             @foreach (var org in organizations)
             {
                 <option value="@org.Id" selected="@(effectiveOrganizationId.HasValue && effectiveOrganizationId.Value == org.Id)">@org.Name</option>

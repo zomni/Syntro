@@ -425,6 +425,8 @@ public class NetworkTelemetryService
         IReadOnlyCollection<string>? campusKeys = null,
         CancellationToken cancellationToken = default)
     {
+        var segmentStopwatch = System.Diagnostics.Stopwatch.StartNew();
+
         request.Page = Math.Max(1, request.Page);
         request.PageSize = Math.Clamp(request.PageSize, 10, 200);
         request.SortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "observedAt" : request.SortBy.Trim();
@@ -465,7 +467,34 @@ public class NetworkTelemetryService
             };
         }
 
-        var items = await query.ToListAsync(cancellationToken);
+        var buildElapsedMs = segmentStopwatch.ElapsedMilliseconds;
+        var materializeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        // Proyección liviana SIN PayloadJson (~2MB por fila): materializar
+        // entidades completas convertía cada paginado en un full-scan de la tabla.
+        var items = await query
+            .Select(snapshot => new SnapshotListItem
+            {
+                Id = snapshot.Id,
+                CampusKey = snapshot.CampusKey,
+                SourceName = snapshot.SourceName,
+                SourceType = snapshot.SourceType,
+                Status = snapshot.Status,
+                RiskLevel = snapshot.RiskLevel,
+                RiskScore = snapshot.RiskScore,
+                DeviceCount = snapshot.DeviceCount,
+                ConnectedUserCount = snapshot.ConnectedUserCount,
+                HighRiskDeviceCount = snapshot.HighRiskDeviceCount,
+                MediumRiskDeviceCount = snapshot.MediumRiskDeviceCount,
+                LowRiskDeviceCount = snapshot.LowRiskDeviceCount,
+                ObservedAtUtc = snapshot.ObservedAtUtc,
+                WindowStartUtc = snapshot.WindowStartUtc,
+                WindowEndUtc = snapshot.WindowEndUtc,
+                Notes = snapshot.Notes,
+                CreatedBy = snapshot.CreatedBy
+            })
+            .ToListAsync(cancellationToken);
+        materializeStopwatch.Stop();
+        var postProcessStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         if (!string.IsNullOrWhiteSpace(request.Weekday))
         {
@@ -489,7 +518,7 @@ public class NetworkTelemetryService
                 .ToList();
         }
 
-        items = ApplySnapshotSorting(items.AsQueryable(), request).ToList();
+        items = ApplySnapshotListItemSorting(items.AsQueryable(), request).ToList();
 
         var totalCount = items.Count;
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)request.PageSize));
@@ -503,6 +532,16 @@ public class NetworkTelemetryService
             .Take(request.PageSize)
             .ToList();
 
+        postProcessStopwatch.Stop();
+        segmentStopwatch.Stop();
+        _logger.LogInformation(
+            "NetworkTelemetry SnapshotPage segmentos: build={BuildMs} ms, materialize={MaterializeMs} ms, postprocess={PostMs} ms, total={TotalMs} ms ({TotalCount} filas)",
+            buildElapsedMs,
+            materializeStopwatch.ElapsedMilliseconds,
+            postProcessStopwatch.ElapsedMilliseconds,
+            segmentStopwatch.ElapsedMilliseconds,
+            totalCount);
+
         return new NetworkTelemetrySnapshotPageViewModel
         {
             Search = request.Search,
@@ -515,7 +554,7 @@ public class NetworkTelemetryService
             PageSize = request.PageSize,
             TotalCount = totalCount,
             TotalPages = totalPages,
-            Items = items.Select(MapSnapshot).ToList()
+            Items = items.Select(MapSnapshotListItem).ToList()
         };
     }
 
@@ -642,7 +681,18 @@ public class NetworkTelemetryService
             WindowStartUtc = request.WindowStartUtc,
             WindowEndUtc = request.WindowEndUtc,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : request.Notes.Trim(),
-            PayloadJson = JsonSerializer.Serialize(request),
+            // Resumen compacto en vez del request completo: serializar todos los
+            // devices/users hincho la tabla (~2MB por snapshot) y cada full-scan
+            // de la vista paginada tardaba ~8s.
+            PayloadJson = JsonSerializer.Serialize(new
+            {
+                request.SourceName,
+                request.SourceType,
+                CampusKey = (request.CampusKey ?? string.Empty).Trim(),
+                DeviceCount = normalizedDevices.Count,
+                UserCount = normalizedUsers.Count,
+                ObservedAtUtc = observedAtUtc
+            }),
             CreatedBy = createdByUsername,
             CreatedAtUtc = DateTime.UtcNow
         };
@@ -1046,7 +1096,11 @@ public class NetworkTelemetryService
                 o.MacAddress, o.IpAddress, o.HostName, o.SerialNumber, o.ImportedInventoryItemId,
                 o.MatchKey,
                 o.Status, o.RiskLevel, o.RiskScore, o.ObservedAtUtc, o.DeviceCategory,
-                o.OperatingSystem, o.IsOnline, o.DomainJoined, o.IsVirtualMachine, o.PingMs,
+                o.OperatingSystem, o.OperatingSystemVersion,
+                o.Manufacturer, o.Model, o.Processor, o.MemoryGb,
+                o.DiskTotalGb, o.DiskFreeGb, o.LastBootAtUtc,
+                o.AntivirusStatus, o.AntivirusVersion, o.PatchStatus,
+                o.IsOnline, o.DomainJoined, o.IsVirtualMachine, o.PingMs,
                 o.AgentVersion, o.OpenPorts, o.SubnetCidr, o.NetworkProfile, o.RiskReasonsJson
             })
             .ToListAsync(cancellationToken);
@@ -1094,21 +1148,21 @@ public class NetworkTelemetryService
                 HostName = raw.HostName,
                 DeviceCategory = raw.DeviceCategory,
                 OperatingSystem = raw.OperatingSystem,
-                OperatingSystemVersion = string.Empty,
-                Manufacturer = string.Empty,
-                Model = string.Empty,
-                Processor = string.Empty,
-                MemoryGb = null,
-                DiskTotalGb = null,
-                DiskFreeGb = null,
-                LastBootAtUtc = null,
+                OperatingSystemVersion = raw.OperatingSystemVersion,
+                Manufacturer = raw.Manufacturer,
+                Model = raw.Model,
+                Processor = raw.Processor,
+                MemoryGb = raw.MemoryGb,
+                DiskTotalGb = raw.DiskTotalGb,
+                DiskFreeGb = raw.DiskFreeGb,
+                LastBootAtUtc = raw.LastBootAtUtc,
                 IsOnline = raw.IsOnline,
                 DomainJoined = raw.DomainJoined,
                 IsVirtualMachine = raw.IsVirtualMachine,
                 PingMs = raw.PingMs,
-                AntivirusStatus = string.Empty,
-                AntivirusVersion = string.Empty,
-                PatchStatus = string.Empty,
+                AntivirusStatus = raw.AntivirusStatus,
+                AntivirusVersion = raw.AntivirusVersion,
+                PatchStatus = raw.PatchStatus,
                 AgentVersion = raw.AgentVersion,
                 OpenPorts = raw.OpenPorts,
                 SubnetCidr = raw.SubnetCidr,
@@ -1245,8 +1299,79 @@ public class NetworkTelemetryService
         };
     }
 
-    private static IQueryable<NetworkTelemetrySnapshot> ApplySnapshotSorting(
-        IQueryable<NetworkTelemetrySnapshot> query,
+    private sealed class SnapshotListItem
+    {
+        public Guid Id { get; init; }
+        public string CampusKey { get; init; } = string.Empty;
+        public string? SourceName { get; init; }
+        public string? SourceType { get; init; }
+        public string? Status { get; init; }
+        public string? RiskLevel { get; init; }
+        public int RiskScore { get; init; }
+        public int DeviceCount { get; init; }
+        public int ConnectedUserCount { get; init; }
+        public int HighRiskDeviceCount { get; init; }
+        public int MediumRiskDeviceCount { get; init; }
+        public int LowRiskDeviceCount { get; init; }
+        public DateTime ObservedAtUtc { get; init; }
+        public DateTime? WindowStartUtc { get; init; }
+        public DateTime? WindowEndUtc { get; init; }
+        public string? Notes { get; init; }
+        public string? CreatedBy { get; init; }
+    }
+
+    private static NetworkTelemetrySnapshotViewModel MapSnapshotListItem(SnapshotListItem item)
+    {
+        var triggerType = ResolveTriggerTypeFromParts(item.SourceType, item.CreatedBy);
+        return new NetworkTelemetrySnapshotViewModel
+        {
+            Id = item.Id,
+            CampusKey = item.CampusKey ?? string.Empty,
+            SourceName = item.SourceName ?? string.Empty,
+            SourceType = item.SourceType ?? string.Empty,
+            TriggerType = triggerType,
+            TriggerLabel = triggerType switch
+            {
+                "scheduled" => "Programado",
+                "automatic" => "Automatico",
+                _ => "Manual"
+            },
+            Status = item.Status ?? string.Empty,
+            RiskLevel = item.RiskLevel ?? "unknown",
+            RiskScore = item.RiskScore,
+            DeviceCount = item.DeviceCount,
+            ConnectedUserCount = item.ConnectedUserCount,
+            HighRiskDeviceCount = item.HighRiskDeviceCount,
+            MediumRiskDeviceCount = item.MediumRiskDeviceCount,
+            LowRiskDeviceCount = item.LowRiskDeviceCount,
+            ObservedAtUtc = item.ObservedAtUtc,
+            WindowStartUtc = item.WindowStartUtc,
+            WindowEndUtc = item.WindowEndUtc,
+            Notes = item.Notes ?? string.Empty,
+            CreatedByUsername = item.CreatedBy ?? string.Empty
+        };
+    }
+
+    private static string ResolveTriggerTypeFromParts(string? sourceType, string? createdBy)
+    {
+        var sourceTypeValue = sourceType?.Trim().ToLowerInvariant() ?? string.Empty;
+        var createdByValue = createdBy?.Trim().ToLowerInvariant() ?? string.Empty;
+
+        if (sourceTypeValue.Contains("scheduled") || createdByValue == "system")
+        {
+            return "scheduled";
+        }
+
+        if (sourceTypeValue.Contains("auto"))
+        {
+            return "automatic";
+        }
+
+        return "manual";
+    }
+
+    private static IQueryable<SnapshotListItem> ApplySnapshotListItemSorting(
+        IQueryable<SnapshotListItem> query,
         NetworkTelemetrySnapshotQueryRequest request)
     {
         var descending = !string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase);
@@ -2590,7 +2715,8 @@ public class NetworkTelemetryService
                 r.ScheduledDayLocal.Contains(s) ||
                 r.ScheduledTimeLocal.Contains(s) ||
                 r.Status.Contains(s) ||
-                r.NormalizedCron.Contains(s));
+                r.NormalizedCron.Contains(s) ||
+                (r.ScheduleLabel != null && r.ScheduleLabel.Contains(s)));
         }
 
         if (!string.IsNullOrWhiteSpace(request.Status))
@@ -2639,6 +2765,7 @@ public class NetworkTelemetryService
         var items = runs.Select(run => new ScheduledScanRunViewModel
         {
             Id = run.Id,
+            RunNumber = run.RunNumber,
             CampusKey = run.CampusKey ?? string.Empty,
             ScheduledAtUtc = run.ScheduledAtUtc,
             StartedAtUtc = run.StartedAtUtc,
@@ -2661,6 +2788,7 @@ public class NetworkTelemetryService
             DeviceCount = run.DeviceCount,
             UserCount = run.UserCount,
             NormalizedCron = run.NormalizedCron,
+            ScheduleLabel = run.ScheduleLabel,
             CreatedAtUtc = run.CreatedAtUtc
         }).ToList();
 

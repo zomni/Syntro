@@ -60,6 +60,8 @@ services:
       - api_bin:/app/Pireon.API/bin
       - api_obj:/app/Pireon.API/obj
       - ./backend/data:/app/data
+      - ./runtime/network-telemetry-agent:/runtime/network-telemetry-agent
+      - ./runtime/network-telemetry-agent:/app/runtime/network-telemetry-agent
       - nuget_cache:/root/.nuget/packages
       - ${FRONTEND_DATA_HOST_PATH:-./frontend/src/data}:/app/frontend-data
       - ${IMPORT_HOST_PATH:-./backend/import}:/app/import:ro

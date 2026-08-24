@@ -54,3 +54,6 @@ backend/Pireon.API/Data/ml-state.json
 # Contenido de datos de frontend (opcional, nunca versionar)
 frontend/src/data/*.json
 frontend/src/data/interiors/
+
+# Estado runtime del agente de telemetria (bridge por campus)
+/runtime/**

@@ -375,6 +375,97 @@
             grid-template-columns: 1fr;
         }
     }
+
+    .schedule-slot-row {
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 12px;
+        padding: 12px 14px;
+        background: #f8fafc;
+        margin-bottom: 10px;
+    }
+
+    .schedule-slot-row .schedule-time-input {
+        width: 110px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        padding: 6px 10px;
+        font-size: 0.95rem;
+        font-weight: 600;
+    }
+
+    .schedule-day-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 34px;
+        border-radius: 10px;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        background: #fff;
+        color: #64748b;
+        font-size: 0.78rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        user-select: none;
+    }
+
+    .schedule-day-btn:hover {
+        border-color: #38bdf8;
+        color: #0284c7;
+    }
+
+    .schedule-day-btn.active {
+        background: linear-gradient(135deg, #2d79a0, #38bdf8);
+        border-color: transparent;
+        color: #fff;
+    }
+
+    .schedule-card {
+        border: 1px solid rgba(148, 163, 184, 0.16);
+        border-radius: 14px;
+        padding: 14px 16px;
+        margin-bottom: 10px;
+        background: #fff;
+        transition: box-shadow 0.15s ease;
+    }
+
+    .schedule-card:hover {
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    }
+
+    .schedule-card .schedule-card-title {
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #1e293b;
+    }
+
+    .schedule-card .schedule-card-detail {
+        font-size: 0.82rem;
+        color: #64748b;
+    }
+
+    .schedule-card .schedule-day-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 28px;
+        height: 22px;
+        border-radius: 6px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        padding: 0 6px;
+    }
+
+    .schedule-card .schedule-day-badge.active {
+        background: #dbeafe;
+        color: #2563eb;
+    }
+
+    .schedule-card .schedule-day-badge.inactive {
+        background: #f1f5f9;
+        color: #94a3b8;
+    }
 </style>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -457,6 +548,7 @@
                                 ViewData["OrganizationSelectorCompact"] = true;
                                 ViewData["OrganizationSelectorId"] = "organization-selector-network";
                                 ViewData["OrganizationSelectorName"] = "organizationId";
+                                ViewData["OrganizationSelectorAllowAll"] = false;
                             }
                             @await Html.PartialAsync("_OrganizationSelector")
                         </div>
@@ -962,44 +1054,114 @@
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div>
-                <h5 class="mb-1">Planificaciones de captura</h5>
-                <div class="small text-muted">Programas de captura automatica (cron) por campus</div>
+                <h5 class="mb-1">Escaneos programados</h5>
+                <div class="small text-muted">Configura horarios de escaneo y revisa el historial automatico</div>
             </div>
             <div class="d-flex gap-2">
                 @if (User.IsInRole(Pireon.API.Models.AppRoles.Admin) || User.IsInRole(Pireon.API.Models.AppRoles.SuperAdmin))
                 {
-                    <button type="button" class="btn btn-sm btn-primary" id="telemetry-schedule-new">
-                        <i class="bi bi-plus-lg me-1"></i>Nueva planificacion
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="telemetry-schedule-toggle" title="Gestionar horarios">
+                        <i class="bi bi-calendar-event me-1"></i><span>Horarios</span>
                     </button>
                 }
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="telemetry-schedules-refresh" title="Refrescar">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="telemetry-scheduled-refresh" title="Refrescar historial">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
             </div>
         </div>
-        <div id="telemetry-schedules-summary" class="small text-muted mb-3"></div>
-        <div id="telemetry-schedules-table" class="text-muted">Cargando planificaciones...</div>
-    </div>
-</div>
 
-<div class="card telemetry-card telemetry-card-static mb-4">
-    <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div>
-                <h5 class="mb-1">Escaneos programados</h5>
-                <div class="small text-muted">Historial paginado de escaneos automaticos programados</div>
+        @if (User.IsInRole(Pireon.API.Models.AppRoles.Admin) || User.IsInRole(Pireon.API.Models.AppRoles.SuperAdmin))
+        {
+            <div id="telemetry-schedule-panel" class="d-none mb-4">
+                <div class="telemetry-filter-panel p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="fw-semibold">Horarios configurados</div>
+                        <button type="button" class="btn btn-sm btn-primary" id="telemetry-schedule-add">
+                            <i class="bi bi-plus-lg me-1"></i>Agregar horario
+                        </button>
+                    </div>
+                    <div id="telemetry-schedule-table"><div class="text-muted small">Cargando horarios...</div></div>
+                </div>
             </div>
-            <div class="d-flex gap-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="telemetry-scheduled-refresh" title="Refrescar">
-                    <i class="bi bi-arrow-clockwise"></i>
-                </button>
+
+            <div id="telemetry-schedule-modal" class="telemetry-scan-modal" aria-hidden="true">
+                <div class="telemetry-scan-dialog" style="max-width:540px">
+                    <div class="modal-content telemetry-scan-card border-0 shadow">
+                        <div class="modal-header">
+                            <div>
+                                <div class="text-uppercase small fw-semibold text-muted mb-1">Horario de escaneo</div>
+                                <h6 class="modal-title mb-0" id="telemetry-schedule-modal-title">Nuevo horario</h6>
+                            </div>
+                            <button type="button" class="btn-close" id="telemetry-schedule-modal-close" aria-label="Cerrar"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" id="telemetry-schedule-id" />
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold" for="telemetry-schedule-label">Nombre</label>
+                                <input type="text" class="form-control" id="telemetry-schedule-label" placeholder="Ej: Escaneo diario" />
+                            </div>
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label fw-semibold mb-0">Horarios del escaneo</label>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="telemetry-schedule-add-slot">
+                                        <i class="bi bi-plus-lg me-1"></i>Agregar
+                                    </button>
+                                </div>
+                                <div id="telemetry-schedule-slots"></div>
+                            </div>
+                            <div class="mb-3 d-none" id="telemetry-schedule-campus-group">
+                                <label class="form-label fw-semibold" for="telemetry-schedule-campus">Campus</label>
+                                <select class="form-select" id="telemetry-schedule-campus">
+                                    @{
+                                        var scheduleCampusKeys = ViewData["CampusKeys"] as IReadOnlyList<string> ?? new List<string>();
+                                    }
+                                    @foreach (var campusKey in scheduleCampusKeys)
+                                    {
+                                        <option value="@campusKey">@campusKey</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label fw-semibold" for="telemetry-schedule-timezone">Zona horaria</label>
+                                    <select class="form-select" id="telemetry-schedule-timezone">
+                                        <option value="America/Santiago" selected>America/Santiago</option>
+                                        <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires</option>
+                                        <option value="America/Lima">America/Lima</option>
+                                        <option value="UTC">UTC</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 d-flex align-items-end">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="telemetry-schedule-enabled" checked />
+                                        <label class="form-check-label fw-semibold" for="telemetry-schedule-enabled">Habilitado</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="telemetry-schedule-preview" class="p-3 bg-light rounded small d-none"></div>
+                        </div>
+                        <div class="modal-footer d-flex justify-content-between">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-none" id="telemetry-schedule-delete">
+                                <i class="bi bi-trash me-1"></i>Eliminar
+                            </button>
+                            <div class="d-flex gap-2 ms-auto">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="telemetry-schedule-preview-btn">
+                                    <i class="bi bi-eye me-1"></i>Vista previa
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="telemetry-schedule-cancel">Cancelar</button>
+                                <button type="button" class="btn btn-primary btn-sm" id="telemetry-schedule-save">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
+        }
+
         <div class="telemetry-filter-panel p-3 mb-3">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-4">
                     <label class="form-label small text-muted">Buscar</label>
-                    <input id="telemetry-scheduled-search" type="text" class="form-control" placeholder="Dia, hora, estado o cron" />
+                    <input id="telemetry-scheduled-search" type="text" class="form-control" placeholder="Dia, hora, estado, cron o planificacion" />
                 </div>
                 <div class="col-lg-2">
                     <label class="form-label small text-muted">Estado</label>
@@ -1217,6 +1379,32 @@
             }
         };
 
+        // Sin organizacion elegida la vista se muestra vacia: mismos contenedores,
+        // sin datos y con la seleccion de organizacion como paso obligatorio.
+        const organizationRequiredMessage = "Selecciona una organización para ver datos.";
+        const setOrganizationRequiredPlaceholder = (table, summary) => {
+            if (table) {
+                table.innerHTML = `<div class="text-muted d-flex align-items-center gap-2 py-3"><i class="bi bi-buildings"></i>${organizationRequiredMessage}</div>`;
+            }
+            if (summary) {
+                summary.textContent = organizationRequiredMessage;
+            }
+        };
+        const renderOrganizationRequiredState = () => {
+            setOrganizationRequiredPlaceholder(deviceTable, deviceSummary);
+            setOrganizationRequiredPlaceholder(subnetTable, subnetSummary);
+            setOrganizationRequiredPlaceholder(sessionTable, sessionSummary);
+            setOrganizationRequiredPlaceholder(snapshotTable, snapshotSummary);
+            setOrganizationRequiredPlaceholder(scheduledTable, scheduledSummary);
+            [devicePagination, subnetPagination, sessionPagination, snapshotPagination, scheduledPagination]
+                .forEach((element) => { if (element) element.innerHTML = ""; });
+            [scanButton, pauseButton, resumeButton, stopButton]
+                .forEach((button) => { if (button) button.disabled = true; });
+            if (agentState) {
+                agentState.innerHTML = "";
+            }
+        };
+
         const openScanModal = () => {
             if (!scanModalElement) {
                 return false;
@@ -1280,6 +1468,13 @@
         });
 
         scanConfirmButton?.addEventListener("click", async () => {
+            if (!currentOrganizationId()) {
+                if (scanFeedback) {
+                    scanFeedback.textContent = organizationRequiredMessage;
+                    scanFeedback.className = "small text-danger mt-3";
+                }
+                return;
+            }
             const originalConfirmHtml = scanConfirmButton.innerHTML;
             const originalScanHtml = scanButton ? scanButton.innerHTML : "";
             const controller = new AbortController();
@@ -1295,7 +1490,8 @@
                 scanFeedback.className = "small text-muted mt-3";
             }
             try {
-                const response = await fetch("/api/network-telemetry/scan", {
+                const scanOrganizationId = currentOrganizationId();
+                const response = await fetch(`/api/network-telemetry/scan${scanOrganizationId ? `?organizationId=${encodeURIComponent(scanOrganizationId)}` : ""}`, {
                     method: "POST",
                     credentials: "include",
                     signal: controller.signal,
@@ -1348,6 +1544,9 @@
         });
 
         const sendAgentControl = async (action) => {
+            if (!currentOrganizationId()) {
+                return;
+            }
             try {
                 const response = await fetch("/api/network-telemetry/agent/control", {
                     method: "POST",
@@ -1355,7 +1554,7 @@
                     headers: {
                         "Content-Type": "application/json"
                     },
-                    body: JSON.stringify({ action })
+                    body: JSON.stringify({ action, organizationId: currentOrganizationId() || null })
                 });
 
                 if (!response.ok) {
@@ -2168,7 +2367,8 @@
                 return;
             }
             scheduledTable.innerHTML = `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr>
-                <th>#</th>
+                <th>ID</th>
+                <th>Planificacion</th>
                 <th>${buildSortableHeader("Dia", "scheduledDayLocal", currentSortBy, currentDirection, "scheduled")}</th>
                 <th>${buildSortableHeader("Hora", "scheduledTimeLocal", currentSortBy, currentDirection, "scheduled")}</th>
                 <th>${buildSortableHeader("Fecha", "scheduledAtUtc", currentSortBy, currentDirection, "scheduled")}</th>
@@ -2178,7 +2378,7 @@
                 <th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "scheduled")}</th>
                 <th>${buildSortableHeader("Usuarios", "userCount", currentSortBy, currentDirection, "scheduled")}</th>
                 <th>Accion</th>
-            </tr></thead><tbody>            ${items.map((item, index) => {
+            </tr></thead><tbody>            ${items.map((item) => {
                 const statusBadge = item.status === "completed" ? '<span class="badge bg-success">Completado</span>'
                     : item.status === "failed" ? '<span class="badge bg-danger">Fallado</span>'
                     : item.status === "running" ? '<span class="badge bg-primary">Ejecutando</span>'
@@ -2192,7 +2392,8 @@
                     ? `<a href="/dashboard/network-telemetry?snapshotId=${item.snapshotId}" class="btn btn-sm btn-outline-primary" title="Cargar esta snapshot"><i class="bi bi-eye"></i></a>`
                     : '<span class="text-muted">-</span>';
                 return `<tr>
-                    <td class="fw-semibold" title="${item.snapshotId || item.id || '-'}">#${index + 1}</td>
+                    <td class="fw-semibold" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</td>
+                    <td>${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
                     <td>${item.scheduledDayLocal || ""}</td>
                     <td>${item.scheduledTimeLocal || ""}</td>
                     <td>${createdAt}</td>
@@ -2437,7 +2638,13 @@
         };
 
         const loadAgentStatus = (reloadWhenCompleted = false) => {
-            fetch("/api/network-telemetry/agent/status", {
+            if (!currentOrganizationId()) {
+                return;
+            }
+            const statusParams = new URLSearchParams();
+            applyOrganizationParam(statusParams);
+            const statusQuery = statusParams.toString() ? `?${statusParams.toString()}` : "";
+            fetch(`/api/network-telemetry/agent/status${statusQuery}`, {
                 credentials: "include",
                 cache: "no-store"
             })
@@ -2480,40 +2687,54 @@
         scheduledPageSizeSelect?.addEventListener("change", () => loadScheduledScans(1));
         document.getElementById("telemetry-scheduled-refresh")?.addEventListener("click", () => loadScheduledScans());
 
-        renderSubnetRiskSummaries(1);
-        loadDevices(1);
-        renderSessions(1);
-        loadSnapshots(1);
-        loadScheduledScans();
-        loadAgentStatus(false);
-        window.setInterval(() => loadAgentStatus(true), 5000);
-        window.setInterval(() => loadScheduledScans(Number(scheduledTable?.dataset.currentPage || 1), { silent: true }), 30000);
+        if (!currentOrganizationId()) {
+            renderOrganizationRequiredState();
+        }
+        else {
+            renderSubnetRiskSummaries(1);
+            loadDevices(1);
+            renderSessions(1);
+            loadSnapshots(1);
+            loadScheduledScans();
+            loadAgentStatus(false);
+            window.setInterval(() => loadAgentStatus(true), 5000);
+            window.setInterval(() => loadScheduledScans(Number(scheduledTable?.dataset.currentPage || 1), { silent: true }), 30000);
+        }
     })();
 </script>
 
 <script>
 (function () {
-    const scheduleTable = document.getElementById("telemetry-schedules-table");
-    const scheduleSummary = document.getElementById("telemetry-schedules-summary");
-    const scheduleNewButton = document.getElementById("telemetry-schedule-new");
-    const scheduleRefreshButton = document.getElementById("telemetry-schedules-refresh");
-    const scheduleModalElement = document.getElementById("scheduleModal");
-    const scheduleIdInput = document.getElementById("schedule-id");
-    const scheduleLabelInput = document.getElementById("schedule-label");
-    const scheduleCampusSelect = document.getElementById("schedule-campus");
-    const scheduleCronInput = document.getElementById("schedule-cron");
-    const scheduleTimezoneSelect = document.getElementById("schedule-timezone");
-    const scheduleEnabledCheckbox = document.getElementById("schedule-enabled");
-    const scheduleSortInput = document.getElementById("schedule-sort");
-    const scheduleFeedback = document.getElementById("schedule-feedback");
-    const schedulePreviewList = document.getElementById("schedule-preview-list");
-    const schedulePreviewButton = document.getElementById("schedule-preview");
-    const scheduleSaveButton = document.getElementById("schedule-save");
+    // --- Schedule CRUD (puerto 1:1 de sotero_map_api) ---
+    const DAY_LABELS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
+    const DAY_KEYS = ["lu", "ma", "mi", "ju", "vi", "sa", "do"];
 
-    if (!scheduleTable || !scheduleSummary) {
+    const schedulePanel = document.getElementById("telemetry-schedule-panel");
+    const scheduleToggle = document.getElementById("telemetry-schedule-toggle");
+    const scheduleTable = document.getElementById("telemetry-schedule-table");
+    const scheduleModal = document.getElementById("telemetry-schedule-modal");
+    const scheduleModalTitle = document.getElementById("telemetry-schedule-modal-title");
+    const scheduleIdInput = document.getElementById("telemetry-schedule-id");
+    const scheduleLabelInput = document.getElementById("telemetry-schedule-label");
+    const scheduleTimezoneSelect = document.getElementById("telemetry-schedule-timezone");
+    const scheduleEnabledInput = document.getElementById("telemetry-schedule-enabled");
+    const schedulePreviewDiv = document.getElementById("telemetry-schedule-preview");
+    const scheduleSlotsContainer = document.getElementById("telemetry-schedule-slots");
+    const scheduleAddSlotBtn = document.getElementById("telemetry-schedule-add-slot");
+    const scheduleAddBtn = document.getElementById("telemetry-schedule-add");
+    const scheduleSaveBtn = document.getElementById("telemetry-schedule-save");
+    const scheduleCancelBtn = document.getElementById("telemetry-schedule-cancel");
+    const scheduleDeleteBtn = document.getElementById("telemetry-schedule-delete");
+    const schedulePreviewBtn = document.getElementById("telemetry-schedule-preview-btn");
+    const scheduleModalClose = document.getElementById("telemetry-schedule-modal-close");
+    const scheduleCampusGroup = document.getElementById("telemetry-schedule-campus-group");
+    const scheduleCampusSelect = document.getElementById("telemetry-schedule-campus");
+
+    if (!scheduleTable || !scheduleToggle) {
         return;
     }
 
+    // Adaptacion Pireon: scoping por organizacion del selector superior.
     const currentOrganizationId = () => {
         const selector = document.querySelector("[data-organization-selector]");
         if (!selector) {
@@ -2525,232 +2746,291 @@
         const organizationId = currentOrganizationId();
         return organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : "";
     };
-    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
-        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    })[ch]);
 
-    let scheduleModalInstance = null;
-
-    const loadSchedules = () => {
-        fetch(`/api/network-telemetry/schedule${organizationQuery()}`, {
-            credentials: "include",
-            headers: { "Accept": "application/json" }
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`La API respondio ${response.status}`);
-                }
-                return response.json();
-            })
-            .then(renderSchedules)
-            .catch((error) => {
-                console.error("Error cargando planificaciones:", error);
-                scheduleSummary.textContent = "";
-                scheduleTable.innerHTML = '<div class="text-muted">No fue posible cargar las planificaciones.</div>';
-            });
+    // Adaptacion Pireon: campus se resuelve del selector superior; solo se muestra
+    // el select si la organizacion tiene mas de un campus.
+    const campusOptions = () => scheduleCampusSelect ? [...scheduleCampusSelect.options].filter((o) => o.value) : [];
+    const resolveCampusKey = () => {
+        const options = campusOptions();
+        if (options.length === 0) {
+            return "";
+        }
+        if (options.length === 1) {
+            return options[0].value;
+        }
+        return scheduleCampusSelect.value || options[0].value;
     };
-
-    const renderSchedules = (schedules) => {
-        const items = Array.isArray(schedules) ? schedules : [];
-        scheduleSummary.textContent = `${items.length} planificacion${items.length === 1 ? "" : "es"} configurada${items.length === 1 ? "" : "s"}.`;
-        if (items.length === 0) {
-            scheduleTable.innerHTML = '<div class="text-muted">No hay planificaciones configuradas. Usa "Nueva planificacion" para crear una.</div>';
+    const prepareCampusForEdit = (campusKey) => {
+        if (!scheduleCampusSelect || !scheduleCampusGroup) {
             return;
         }
+        const options = campusOptions();
+        scheduleCampusGroup.classList.toggle("d-none", options.length <= 1);
+        if (options.length > 0) {
+            if (campusKey && options.some((o) => o.value === campusKey)) {
+                scheduleCampusSelect.value = campusKey;
+            } else if (scheduleCampusSelect.selectedIndex < 0) {
+                scheduleCampusSelect.selectedIndex = 0;
+            }
+        }
+    };
 
-        scheduleTable.innerHTML = `
-            <div class="telemetry-table-wrap table-responsive">
-                <table class="table align-middle table-sm">
-                    <thead>
-                        <tr>
-                            <th>Nombre</th>
-                            <th>Cron</th>
-                            <th>Campus</th>
-                            <th>Zona</th>
-                            <th>Estado</th>
-                            <th>Proxima corrida</th>
-                            <th class="text-end">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${items.map((schedule) => `
-                            <tr>
-                                <td><div class="fw-semibold">${escapeHtml(schedule.label || schedule.cron)}</div></td>
-                                <td><code>${escapeHtml(schedule.cron)}</code></td>
-                                <td><span class="badge bg-secondary-subtle text-secondary-emphasis">${escapeHtml(schedule.campusKey)}</span></td>
-                                <td>${escapeHtml(schedule.timeZone)}</td>
-                                <td>${schedule.isEnabled
-                                    ? '<span class="badge bg-success-subtle text-success-emphasis">Habilitada</span>'
-                                    : '<span class="badge bg-secondary-subtle text-secondary-emphasis">Deshabilitada</span>'}</td>
-                                <td>${schedule.isValid
-                                    ? (schedule.nextOccurrenceLocal
-                                        ? new Date(schedule.nextOccurrenceLocal).toLocaleString("es-CL")
-                                        : "Sin proxima corrida")
-                                    : '<span class="text-danger">Cron invalido</span>'}</td>
-                                <td class="text-end text-nowrap">
-                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Editar" data-schedule-edit="${schedule.id}"><i class="bi bi-pencil"></i></button>
-                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar" data-schedule-delete="${schedule.id}"><i class="bi bi-trash3"></i></button>
-                                </td>
-                            </tr>`).join("")}
-                    </tbody>
-                </table>
+    const buildCronFromSlots = (slots) => {
+        const groups = {};
+        for (const slot of slots) {
+            if (!slot.time || !slot.days || slot.days.length === 0) continue;
+            const [h, m] = slot.time.split(":").map(Number);
+            const key = `${h}:${m}`;
+            if (!groups[key]) groups[key] = new Set();
+            for (const d of slot.days) {
+                const idx = DAY_KEYS.indexOf(d);
+                if (idx >= 0) groups[key].add(String(idx === 6 ? 0 : idx + 1));
+            }
+        }
+        const parts = [];
+        for (const [time, days] of Object.entries(groups)) {
+            const [h, m] = time.split(":").map(Number);
+            const sortedDays = [...days].sort((a, b) => Number(a) - Number(b));
+            parts.push(`0 ${m} ${h} * * ${sortedDays.join(",")}`);
+        }
+        return parts.join(";");
+    };
+
+    const readSlotsFromModal = () => {
+        const rows = scheduleSlotsContainer.querySelectorAll(".schedule-slot-row");
+        const slots = [];
+        rows.forEach(row => {
+            const timeInput = row.querySelector(".schedule-time-input");
+            const dayBtns = row.querySelectorAll(".schedule-day-btn");
+            const days = [];
+            dayBtns.forEach(btn => { if (btn.classList.contains("active")) days.push(btn.dataset.day); });
+            if (timeInput?.value && days.length > 0) {
+                slots.push({ time: timeInput.value, days });
+            }
+        });
+        return slots;
+    };
+
+    const createSlotRow = (time, activeDays) => {
+        const row = document.createElement("div");
+        row.className = "schedule-slot-row";
+        const daysHtml = DAY_LABELS.map((label, i) => {
+            const key = DAY_KEYS[i];
+            const isActive = activeDays?.includes(key) ? "active" : "";
+            return `<button type="button" class="schedule-day-btn ${isActive}" data-day="${key}">${label}</button>`;
+        }).join("");
+        row.innerHTML = `
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-clock text-muted"></i>
+                    <input type="time" class="form-control form-control-sm schedule-time-input" value="${time || '08:30'}" />
+                </div>
+                <div class="d-flex gap-1 flex-wrap">${daysHtml}</div>
+                <button type="button" class="btn btn-sm btn-outline-danger ms-auto schedule-remove-slot" title="Eliminar"><i class="bi bi-trash"></i></button>
             </div>`;
-
-        scheduleTable.querySelectorAll("[data-schedule-edit]").forEach((button) => {
-            button.addEventListener("click", () => {
-                const item = items.find((x) => x.id === button.getAttribute("data-schedule-edit"));
-                if (item) {
-                    openScheduleModal(item);
-                }
-            });
+        row.querySelectorAll(".schedule-day-btn").forEach(btn => {
+            btn.addEventListener("click", () => btn.classList.toggle("active"));
         });
-
-        scheduleTable.querySelectorAll("[data-schedule-delete]").forEach((button) => {
-            button.addEventListener("click", () => {
-                const item = items.find((x) => x.id === button.getAttribute("data-schedule-delete"));
-                if (!item) {
-                    return;
-                }
-                if (!confirm(`Eliminar la planificacion "${item.label || item.cron}"?`)) {
-                    return;
-                }
-                deleteSchedule(item.id);
-            });
+        row.querySelector(".schedule-remove-slot")?.addEventListener("click", () => {
+            row.remove();
         });
+        return row;
     };
 
-    const openScheduleModal = (schedule) => {
-        const editing = Boolean(schedule && schedule.id);
-        scheduleIdInput.value = editing ? schedule.id : "";
-        scheduleLabelInput.value = schedule ? (schedule.label || "") : "";
-        scheduleCronInput.value = schedule ? (schedule.cron || "") : "";
-        scheduleTimezoneSelect.value = schedule ? (schedule.timeZone || "America/Santiago") : "America/Santiago";
-        if (schedule && schedule.campusKey && [...scheduleCampusSelect.options].some((option) => option.value === schedule.campusKey)) {
-            scheduleCampusSelect.value = schedule.campusKey;
+    const formatSlotDescription = (slots) => {
+        if (!slots || slots.length === 0) return "Sin horarios";
+        const timeDayMap = {};
+        for (const slot of slots) {
+            for (const d of (slot.days || [])) {
+                const label = DAY_LABELS[DAY_KEYS.indexOf(d)] || d;
+                if (!timeDayMap[label]) timeDayMap[label] = [];
+                timeDayMap[label].push(slot.time);
+            }
         }
-        scheduleEnabledCheckbox.checked = schedule ? schedule.isEnabled : true;
-        scheduleSortInput.value = schedule ? (schedule.sortOrder ?? 0) : 0;
-        scheduleFeedback.textContent = "";
-        schedulePreviewList.innerHTML = "";
-        document.getElementById("scheduleModalTitle").textContent = editing ? "Editar planificacion" : "Nueva planificacion";
-
-        if (!scheduleModalInstance) {
-            scheduleModalInstance = new bootstrap.Modal(scheduleModalElement);
+        const dayOrder = [...DAY_LABELS];
+        const groups = [];
+        let current = [];
+        for (const d of dayOrder) {
+            if (timeDayMap[d]) {
+                current.push(d);
+            } else {
+                if (current.length > 0) { groups.push([...current]); current = []; }
+            }
         }
-        scheduleModalInstance.show();
+        if (current.length > 0) groups.push(current);
+
+        const parts = groups.map(g => {
+            const dayStr = g.length >= 3 && DAY_KEYS.indexOf(g[g.length - 1]) - DAY_KEYS.indexOf(g[0]) === g.length - 1
+                ? `${g[0]}-${g[g.length - 1]}`
+                : g.join(", ");
+            const times = [...new Set([].concat(...g.map(d => timeDayMap[d])))].sort().join(", ");
+            return `${dayStr} ${times}`;
+        });
+        return parts.join(" | ");
     };
 
-    const deleteSchedule = (id) => {
-        fetch(`/api/network-telemetry/schedule/${id}${organizationQuery()}`, {
-            method: "DELETE",
-            credentials: "include",
-            headers: { "Accept": "application/json" }
-        })
-            .then((response) => {
-                if (!response.ok) {
-                    throw new Error(`La API respondio ${response.status}`);
-                }
-                loadSchedules();
-            })
-            .catch((error) => {
-                console.error("Error eliminando planificacion:", error);
-                alert("No se pudo eliminar la planificacion.");
+    const openScheduleModal = (sched) => {
+        if (!currentOrganizationId()) {
+            alert("Selecciona una organización antes de configurar horarios.");
+            return;
+        }
+        const editing = Boolean(sched && sched.id);
+        scheduleIdInput.value = editing ? sched.id : "";
+        scheduleLabelInput.value = sched ? (sched.label || "") : "";
+        scheduleTimezoneSelect.value = sched ? (sched.timeZone || "America/Santiago") : "America/Santiago";
+        scheduleEnabledInput.checked = sched ? Boolean(sched.isEnabled) : true;
+        prepareCampusForEdit(sched ? sched.campusKey : null);
+        schedulePreviewDiv.classList.add("d-none");
+        scheduleDeleteBtn.classList.toggle("d-none", !editing);
+        scheduleModalTitle.textContent = editing ? "Editar horario" : "Nuevo horario";
+        scheduleSlotsContainer.innerHTML = "";
+        if (sched && sched.scheduleSlots && sched.scheduleSlots.length > 0) {
+            sched.scheduleSlots.forEach(slot => {
+                scheduleSlotsContainer.appendChild(createSlotRow(slot.time, slot.days));
             });
+        } else {
+            scheduleSlotsContainer.appendChild(createSlotRow("08:30", ["lu", "ma", "mi", "ju", "vi"]));
+        }
+        scheduleModal?.classList.add("is-open");
     };
 
-    const saveSchedule = () => {
-        const id = scheduleIdInput.value;
-        const payload = {
-            label: scheduleLabelInput.value.trim(),
-            cron: scheduleCronInput.value.trim(),
-            campusKey: scheduleCampusSelect.value || "",
-            timeZone: scheduleTimezoneSelect.value || "America/Santiago",
-            isEnabled: scheduleEnabledCheckbox.checked,
-            sortOrder: Number(scheduleSortInput.value) || 0
-        };
-        const endpoint = id
-            ? `/api/network-telemetry/schedule/${id}${organizationQuery()}`
-            : `/api/network-telemetry/schedule${organizationQuery()}`;
+    scheduleToggle?.addEventListener("click", () => {
+        schedulePanel?.classList.toggle("d-none");
+        if (!schedulePanel?.classList.contains("d-none")) {
+            loadSchedules();
+        }
+    });
 
-        scheduleSaveButton.disabled = true;
-        const originalHtml = scheduleSaveButton.innerHTML;
-        scheduleSaveButton.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Guardando...';
-        scheduleFeedback.textContent = "";
+    scheduleAddSlotBtn?.addEventListener("click", () => {
+        scheduleSlotsContainer.appendChild(createSlotRow("08:30", []));
+    });
 
-        fetch(endpoint, {
-            method: id ? "PUT" : "POST",
-            credentials: "include",
-            headers: { "Accept": "application/json", "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        })
-            .then(async (response) => {
-                if (!response.ok) {
-                    const data = await response.json().catch(() => null);
-                    throw new Error(data?.message || `La API respondio ${response.status}`);
-                }
-                if (response.status === 204) {
-                    return null;
-                }
-                return response.json();
-            })
-            .then(() => {
-                if (scheduleModalInstance) {
-                    scheduleModalInstance.hide();
-                }
-                loadSchedules();
-            })
-            .catch((error) => {
-                console.error("Error guardando planificacion:", error);
-                scheduleFeedback.textContent = error.message || "No se pudo guardar la planificacion.";
-            })
-            .finally(() => {
-                scheduleSaveButton.disabled = false;
-                scheduleSaveButton.innerHTML = originalHtml;
-            });
-    };
+    scheduleAddBtn?.addEventListener("click", () => openScheduleModal(null));
+    scheduleCancelBtn?.addEventListener("click", () => scheduleModal?.classList.remove("is-open"));
+    scheduleModalClose?.addEventListener("click", () => scheduleModal?.classList.remove("is-open"));
 
-    const previewOccurrences = () => {
-        const cron = scheduleCronInput.value.trim();
-        const timeZone = scheduleTimezoneSelect.value || "America/Santiago";
-        schedulePreviewButton.disabled = true;
-        schedulePreviewList.innerHTML = '<div class="text-muted">Calculando...</div>';
-
+    schedulePreviewBtn?.addEventListener("click", () => {
+        const slots = readSlotsFromModal();
+        if (slots.length === 0) { schedulePreviewDiv.classList.add("d-none"); return; }
         fetch("/api/network-telemetry/schedule/preview", {
             method: "POST",
+            headers: { "Content-Type": "application/json" },
             credentials: "include",
-            headers: { "Accept": "application/json", "Content-Type": "application/json" },
-            body: JSON.stringify({ cron, timeZone, count: 5 })
+            body: JSON.stringify({ slots, timeZone: scheduleTimezoneSelect.value, count: 5 })
         })
-            .then(async (response) => {
-                if (!response.ok) {
-                    const data = await response.json().catch(() => null);
-                    throw new Error(data?.message || `La API respondio ${response.status}`);
-                }
-                return response.json();
-            })
-            .then((data) => {
-                const occurrences = Array.isArray(data?.occurrences) ? data.occurrences : [];
-                schedulePreviewList.innerHTML = occurrences.length === 0
-                    ? '<div class="text-muted">No se pudieron calcular proximas corridas.</div>'
-                    : `<div class="fw-semibold mb-1">Proximas corridas (${escapeHtml(data.timeZone || timeZone)}):</div>` +
-                      `<ul class="mb-0 ps-3">${occurrences.map((occurrence) => `<li>${new Date(occurrence.local).toLocaleString("es-CL")}</li>`).join("")}</ul>`;
-            })
-            .catch((error) => {
-                console.error("Error en preview de corridas:", error);
-                schedulePreviewList.innerHTML = `<span class="text-danger">${escapeHtml(error.message || "Cron invalido")}</span>`;
-            })
-            .finally(() => {
-                schedulePreviewButton.disabled = false;
+        .then(r => r.json())
+        .then(data => {
+            if (!data.valid) { schedulePreviewDiv.innerHTML = '<span class="text-danger">No se pudo generar el horario.</span>'; schedulePreviewDiv.classList.remove("d-none"); return; }
+            const lines = (data.occurrences || []).map(o => {
+                const local = new Date(o.local);
+                return "- " + local.toLocaleString("es-CL", { weekday: "long", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
             });
+            schedulePreviewDiv.innerHTML = '<strong>Proximas ejecuciones:</strong><br/>' + lines.join("<br/>");
+            schedulePreviewDiv.classList.remove("d-none");
+        })
+        .catch(() => { schedulePreviewDiv.innerHTML = '<span class="text-danger">Error al previsualizar.</span>'; schedulePreviewDiv.classList.remove("d-none"); });
+    });
+
+    scheduleSaveBtn?.addEventListener("click", () => {
+        const id = scheduleIdInput.value.trim();
+        const slots = readSlotsFromModal();
+        if (slots.length === 0) { alert("Debe agregar al menos un horario con al menos un dia seleccionado."); return; }
+        const payload = {
+            label: scheduleLabelInput.value.trim(),
+            slots,
+            campusKey: resolveCampusKey(),
+            timeZone: scheduleTimezoneSelect.value,
+            isEnabled: scheduleEnabledInput.checked,
+            sortOrder: 0
+        };
+        const url = id ? `/api/network-telemetry/schedule/${id}${organizationQuery()}` : `/api/network-telemetry/schedule${organizationQuery()}`;
+        const method = id ? "PUT" : "POST";
+        scheduleSaveBtn.disabled = true;
+        fetch(url, {
+            method,
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(payload)
+        })
+        .then(r => {
+            if (r.status === 409) {
+                return r.json().then(e => {
+                    const msg = e.message + "\n" + (e.overlaps || []).map(o => "- " + o).join("\n");
+                    throw new Error(msg);
+                });
+            }
+            if (!r.ok) return r.json().then(e => { throw new Error(e.message || `HTTP ${r.status}`); });
+            return r.json();
+        })
+        .then(() => {
+            scheduleModal?.classList.remove("is-open");
+            loadSchedules();
+        })
+        .catch(err => alert("Error guardando horario: " + err.message))
+        .finally(() => { scheduleSaveBtn.disabled = false; });
+    });
+
+    scheduleDeleteBtn?.addEventListener("click", () => {
+        const id = scheduleIdInput.value.trim();
+        if (!id) return;
+        if (!confirm("Eliminar este horario?")) return;
+        fetch(`/api/network-telemetry/schedule/${id}${organizationQuery()}`, { method: "DELETE", credentials: "include" })
+        .then(r => { if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`); })
+        .then(() => { scheduleModal?.classList.remove("is-open"); loadSchedules(); })
+        .catch(err => alert("Error eliminando horario: " + err.message));
+    });
+
+    const loadSchedules = () => {
+        if (!scheduleTable) return;
+        if (!currentOrganizationId()) {
+            scheduleTable.innerHTML = '<div class="text-muted small d-flex align-items-center gap-2"><i class="bi bi-buildings"></i>Selecciona una organización para ver o configurar horarios.</div>';
+            return;
+        }
+        fetch(`/api/network-telemetry/schedule${organizationQuery()}`, { credentials: "include", cache: "no-store" })
+        .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then(schedules => {
+            if (!Array.isArray(schedules) || schedules.length === 0) {
+                scheduleTable.innerHTML = '<div class="text-muted small">No hay horarios configurados. Puedes crear uno con "Agregar horario".</div>';
+                return;
+            }
+            scheduleTable.innerHTML = schedules.map(s => {
+                const nextLocal = s.nextOccurrenceLocal ? new Date(s.nextOccurrenceLocal).toLocaleString("es-CL", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+                const statusBadge = s.isEnabled
+                    ? '<span class="badge bg-success-subtle text-success">Activo</span>'
+                    : '<span class="badge bg-secondary-subtle text-secondary">Inactivo</span>';
+                const desc = formatSlotDescription(s.scheduleSlots);
+                const dayBadges = DAY_LABELS.map((label, i) => {
+                    const isActive = s.scheduleSlots?.some(slot => slot.days?.includes(DAY_KEYS[i]));
+                    return `<span class="schedule-day-badge ${isActive ? 'active' : 'inactive'}">${label}</span>`;
+                }).join("");
+                return `<div class="schedule-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="schedule-card-title">${s.label || desc}${statusBadge}</div>
+                            <div class="schedule-card-detail mt-1">${desc}</div>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            ${nextLocal ? `<span class="small text-muted"><i class="bi bi-clock-history me-1"></i>${nextLocal}</span>` : ''}
+                            <button class="btn btn-sm btn-outline-primary schedule-edit-btn" data-id="${s.id}" title="Editar"><i class="bi bi-pencil"></i></button>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-1 mt-2">${dayBadges}</div>
+                </div>`;
+            }).join("");
+            scheduleTable.querySelectorAll(".schedule-edit-btn").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const id = btn.dataset.id;
+                    const sched = schedules.find(s => s.id === id);
+                    if (!sched) return;
+                    openScheduleModal(sched);
+                });
+            });
+        })
+        .catch(err => {
+            console.error("Error cargando horarios:", err);
+            scheduleTable.textContent = "Error cargando horarios.";
+        });
     };
-
-    scheduleNewButton?.addEventListener("click", () => openScheduleModal(null));
-    scheduleRefreshButton?.addEventListener("click", loadSchedules);
-    schedulePreviewButton?.addEventListener("click", previewOccurrences);
-    scheduleSaveButton?.addEventListener("click", saveSchedule);
-    scheduleModalElement?.addEventListener("shown.bs.modal", () => scheduleCronInput?.focus());
-
-    loadSchedules();
 })();
 </script>
 
@@ -2762,78 +3042,6 @@
             </div>
             <h6 class="mb-1">Generando Excel</h6>
             <p class="small text-muted mb-0">Esto puede tomar unos segundos...</p>
-        </div>
-    </div>
-</div>
-
-<div class="modal fade" id="scheduleModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="scheduleModalTitle">Nueva planificacion</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="schedule-id" />
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label small text-muted">Nombre</label>
-                        <input id="schedule-label" type="text" class="form-control" placeholder="p.ej. Captura manana 08:30" />
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label small text-muted">Campus</label>
-                        <select id="schedule-campus" class="form-select">
-                            @{
-                                var scheduleCampusKeys = ViewData["CampusKeys"] as IReadOnlyList<string> ?? new List<string>();
-                            }
-                            @foreach (var campusKey in scheduleCampusKeys)
-                            {
-                                <option value="@campusKey">@campusKey</option>
-                            }
-                        </select>
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label small text-muted">Cron</label>
-                        <input id="schedule-cron" type="text" class="form-control" placeholder="0 8 * * 1-5" />
-                        <div class="form-text">Segundos opcional. Ejemplos: "0 8 * * 1-5" (lun-vie 08:00), "0 30 13 * * 1-4" (lun-jue 13:30).</div>
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label small text-muted">Zona horaria</label>
-                        <select id="schedule-timezone" class="form-select">
-                            <option value="America/Santiago">America/Santiago</option>
-                            <option value="America/La_Paz">America/La_Paz</option>
-                            <option value="America/Mexico_City">America/Mexico_City</option>
-                            <option value="America/Bogota">America/Bogota</option>
-                            <option value="America/Lima">America/Lima</option>
-                            <option value="America/Argentina/Buenos_Aires">America/Argentina/Buenos_Aires</option>
-                            <option value="UTC">UTC</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="form-check form-switch pt-4">
-                            <input id="schedule-enabled" type="checkbox" class="form-check-input" checked />
-                            <label class="form-check-label" for="schedule-enabled">Habilitada</label>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label small text-muted">Orden</label>
-                        <input id="schedule-sort" type="number" class="form-control" value="0" min="0" />
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="schedule-preview">
-                        <i class="bi bi-calendar2-week me-1"></i>Ver proximas corridas
-                    </button>
-                    <div id="schedule-preview-list" class="mt-3 small text-muted"></div>
-                </div>
-                <div id="schedule-feedback" class="small text-danger mt-3"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="schedule-save">
-                    <i class="bi bi-check-lg me-1"></i>Guardar
-                </button>
-            </div>
         </div>
     </div>
 </div>

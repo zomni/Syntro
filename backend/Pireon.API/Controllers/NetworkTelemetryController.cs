@@ -51,7 +51,10 @@ public class NetworkTelemetryController : ControllerBase
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.SuperAdmin}")]
     [HttpPost("scan")]
-    public async Task<IActionResult> Scan([FromBody] NetworkTelemetryLiveScanRequest? request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Scan(
+        [FromBody] NetworkTelemetryLiveScanRequest? request,
+        [FromQuery] Guid? organizationId = null,
+        CancellationToken cancellationToken = default)
     {
         if (!_liveScanService.IsEnabled())
         {
@@ -61,6 +64,15 @@ public class NetworkTelemetryController : ControllerBase
         var actor = User.Identity?.IsAuthenticated == true
             ? (User.Identity?.Name ?? "system")
             : "system";
+
+        var (campusKey, resolutionError) = await ResolveAgentCampusKeyAsync(organizationId, request?.CampusKey, cancellationToken);
+        if (campusKey is null)
+        {
+            return BadRequest(new { message = resolutionError });
+        }
+
+        request ??= new NetworkTelemetryLiveScanRequest();
+        request.CampusKey = campusKey;
 
         if (_agentBridgeService.UseAgentMode())
         {
@@ -73,9 +85,66 @@ public class NetworkTelemetryController : ControllerBase
     }
 
     [HttpGet("agent/status")]
-    public async Task<IActionResult> AgentStatus(CancellationToken cancellationToken = default)
+    public async Task<IActionResult> AgentStatus(
+        [FromQuery] Guid? organizationId = null,
+        CancellationToken cancellationToken = default)
     {
-        return Ok(await _agentBridgeService.GetStatusAsync(cancellationToken));
+        var campusKeys = await _access.ResolveCampusKeysAsync(organizationId, cancellationToken);
+
+        if (campusKeys.Count == 0)
+        {
+            return Ok(await _agentBridgeService.GetStatusAsync(null, cancellationToken));
+        }
+
+        if (campusKeys.Count == 1)
+        {
+            return Ok(await _agentBridgeService.GetStatusAsync(campusKeys[0], cancellationToken));
+        }
+
+        // Organizacion con varias sedes: estado agregado de sus agentes.
+        var statuses = new List<NetworkTelemetryAgentStatusViewModel>();
+        foreach (var campusKey in campusKeys)
+        {
+            statuses.Add(await _agentBridgeService.GetStatusAsync(campusKey, cancellationToken));
+        }
+
+        return Ok(AggregateAgentStatus(statuses));
+    }
+
+    private static NetworkTelemetryAgentStatusViewModel AggregateAgentStatus(IReadOnlyList<NetworkTelemetryAgentStatusViewModel> statuses)
+    {
+        string[] statePriority = ["running", "pending", "paused", "stopping", "queued", "completed", "failed", "idle"];
+        var connectedCount = statuses.Count(status => status.IsConnected);
+        var latest = statuses
+            .OrderByDescending(status => status.UpdatedAtUtc ?? DateTime.MinValue)
+            .FirstOrDefault();
+
+        return new NetworkTelemetryAgentStatusViewModel
+        {
+            State = statePriority
+                .Select(priority => statuses.FirstOrDefault(status => string.Equals(status.State, priority, StringComparison.OrdinalIgnoreCase))?.State)
+                .FirstOrDefault(state => !string.IsNullOrEmpty(state)) ?? "idle",
+            Message = $"{connectedCount} de {statuses.Count} agentes conectados.",
+            AgentId = latest?.AgentId ?? string.Empty,
+            SnapshotId = latest?.SnapshotId,
+            RequestedAtUtc = latest?.RequestedAtUtc,
+            StartedAtUtc = latest?.StartedAtUtc,
+            CompletedAtUtc = latest?.CompletedAtUtc,
+            UpdatedAtUtc = latest?.UpdatedAtUtc,
+            RequestedByUsername = latest?.RequestedByUsername ?? string.Empty,
+            TriggerType = latest?.TriggerType ?? string.Empty,
+            LastHeartbeatAtUtc = statuses
+                .Where(status => status.LastHeartbeatAtUtc.HasValue)
+                .OrderByDescending(status => status.LastHeartbeatAtUtc)
+                .FirstOrDefault()?.LastHeartbeatAtUtc,
+            IsConnected = connectedCount > 0,
+            TotalHosts = latest?.TotalHosts,
+            ProcessedHosts = latest?.ProcessedHosts,
+            CurrentIpAddress = latest?.CurrentIpAddress ?? string.Empty,
+            CurrentHostName = latest?.CurrentHostName ?? string.Empty,
+            CurrentSubnetCidr = latest?.CurrentSubnetCidr ?? string.Empty,
+            CurrentStage = latest?.CurrentStage ?? string.Empty
+        };
     }
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.SuperAdmin}")]
@@ -86,8 +155,37 @@ public class NetworkTelemetryController : ControllerBase
             ? (User.Identity?.Name ?? "system")
             : "system";
 
-        var status = await _agentBridgeService.SendControlAsync(actor, request?.Action ?? "pause", cancellationToken);
+        var (campusKey, resolutionError) = await ResolveAgentCampusKeyAsync(request?.OrganizationId, request?.CampusKey, cancellationToken);
+        if (campusKey is null)
+        {
+            return BadRequest(new { message = resolutionError });
+        }
+
+        var status = await _agentBridgeService.SendControlAsync(actor, request?.Action ?? "pause", campusKey, cancellationToken);
         return Ok(status);
+    }
+
+    private async Task<(string? CampusKey, string? Error)> ResolveAgentCampusKeyAsync(
+        Guid? organizationId,
+        string? requestedCampusKey,
+        CancellationToken cancellationToken)
+    {
+        var campusKeys = await _access.ResolveCampusKeysAsync(organizationId, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(requestedCampusKey))
+        {
+            var requested = requestedCampusKey.Trim();
+            return campusKeys.Contains(requested)
+                ? (requested, null)
+                : (null, "La sede indicada no pertenece a las organizaciones disponibles.");
+        }
+
+        return campusKeys.Count switch
+        {
+            0 => (null, "La organizacion no tiene sedes activas."),
+            1 => (campusKeys[0], null),
+            _ => (null, "La organizacion tiene multiples sedes; indica la sede para el agente.")
+        };
     }
 
     [AllowAnonymous]
@@ -344,4 +442,6 @@ public class NetworkTelemetryController : ControllerBase
 public class NetworkTelemetryAgentControlRequest
 {
     public string Action { get; set; } = string.Empty;
+    public Guid? OrganizationId { get; set; }
+    public string? CampusKey { get; set; }
 }

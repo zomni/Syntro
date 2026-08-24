@@ -383,6 +383,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.ScheduledTimeLocal).HasMaxLength(10);
             entity.Property(e => e.ScheduledDayLocal).HasMaxLength(15);
             entity.Property(e => e.NormalizedCron).HasMaxLength(100);
+            entity.Property(e => e.ScheduleLabel).HasMaxLength(200);
 
             entity.HasOne(e => e.Snapshot)
                 .WithMany()

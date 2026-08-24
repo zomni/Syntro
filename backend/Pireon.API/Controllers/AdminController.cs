@@ -662,7 +662,10 @@ public class AdminController : Controller
             .Select(site => site.CampusKey)
             .ToListAsync(cancellationToken);
 
-        var model = await BuildNetworkTelemetryViewModelAsync(snapshotId, campusKeys, cancellationToken);
+        // Sin organizacion elegida (superadmin en "Todas") el tablero se sirve vacio:
+        // la vista muestra los contenedores y exige seleccionar una organizacion.
+        var modelScopeCampusKeys = campusKeys ?? (IReadOnlyList<string>?)Array.Empty<string>();
+        var model = await BuildNetworkTelemetryViewModelAsync(snapshotId, modelScopeCampusKeys, cancellationToken);
         var telemetryJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase

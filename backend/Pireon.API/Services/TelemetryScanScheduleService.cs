@@ -10,6 +10,20 @@ public class TelemetryScanScheduleService
 {
     private const string DefaultTimeZone = "America/Santiago";
 
+    private static readonly Dictionary<string, string> DayToCron = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["lu"] = "1", ["ma"] = "2", ["mi"] = "3", ["ju"] = "4",
+        ["vi"] = "5", ["sa"] = "6", ["do"] = "0"
+    };
+
+    private static readonly Dictionary<string, string> CronToDay = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["1"] = "lu", ["2"] = "ma", ["3"] = "mi", ["4"] = "ju",
+        ["5"] = "vi", ["6"] = "sa", ["0"] = "do"
+    };
+
+    private static readonly string[] DayOrder = ["lu", "ma", "mi", "ju", "vi", "sa", "do"];
+
     private readonly AppDbContext _context;
 
     public TelemetryScanScheduleService(AppDbContext context)
@@ -122,6 +136,225 @@ public class TelemetryScanScheduleService
         return campusKeys is null || campusKeys.Contains(campusKey);
     }
 
+    public async Task<List<string>> DetectOverlapsAsync(
+        string cron,
+        Guid? excludeId,
+        string? campusKey,
+        IReadOnlyCollection<string>? campusKeys = null,
+        CancellationToken cancellationToken = default)
+    {
+        var newSlots = ParseSlotsFromCron(cron);
+        var newPairs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var slot in newSlots)
+        {
+            foreach (var day in slot.Days)
+            {
+                newPairs.Add($"{slot.Time}|{day}");
+            }
+        }
+
+        // El solape solo importa dentro del mismo campus: horarios de
+        // campus distintos pueden coincidir sin problema.
+        var overlappingQuery = _context.TelemetryScanSchedules
+            .AsNoTracking()
+            .Where(s => s.DeletedAtUtc == null && s.IsEnabled);
+
+        if (!string.IsNullOrWhiteSpace(campusKey))
+        {
+            overlappingQuery = overlappingQuery.Where(s => s.CampusKey == campusKey);
+        }
+
+        var existing = await overlappingQuery.ToListAsync(cancellationToken);
+
+        var overlaps = new List<string>();
+
+        foreach (var sched in existing)
+        {
+            if (excludeId.HasValue && sched.Id == excludeId.Value) continue;
+
+            var existingSlots = ParseSlotsFromCron(sched.Cron);
+            foreach (var slot in existingSlots)
+            {
+                foreach (var day in slot.Days)
+                {
+                    var key = $"{slot.Time}|{day}";
+                    if (newPairs.Contains(key))
+                    {
+                        overlaps.Add($"\"{sched.Label}\" ({slot.Time} {day})");
+                    }
+                }
+            }
+        }
+
+        return overlaps.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    public static string BuildCronFromSlots(List<ScheduleSlotDto> slots)
+    {
+        if (slots == null || slots.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var grouped = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var slot in slots)
+        {
+            if (string.IsNullOrWhiteSpace(slot.Time) || slot.Days == null || slot.Days.Count == 0)
+            {
+                continue;
+            }
+
+            var timeParts = slot.Time.Split(':');
+            if (timeParts.Length != 2 || !int.TryParse(timeParts[0], out var hour) || !int.TryParse(timeParts[1], out var minute))
+            {
+                continue;
+            }
+
+            var timeKey = $"{hour}:{minute}";
+
+            if (!grouped.ContainsKey(timeKey))
+            {
+                grouped[timeKey] = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            foreach (var day in slot.Days)
+            {
+                if (DayToCron.TryGetValue(day.Trim(), out var cronDay))
+                {
+                    grouped[timeKey].Add(cronDay);
+                }
+            }
+        }
+
+        var cronParts = new List<string>();
+
+        foreach (var kvp in grouped)
+        {
+            var timeParts = kvp.Key.Split(':');
+            var hour = int.Parse(timeParts[0]);
+            var minute = int.Parse(timeParts[1]);
+            var cronDays = string.Join(",", kvp.Value.OrderBy(d => d, StringComparer.Ordinal));
+            cronParts.Add($"0 {minute} {hour} * * {cronDays}");
+        }
+
+        return string.Join(";", cronParts);
+    }
+
+    public static List<ScheduleSlotDto> ParseSlotsFromCron(string cron)
+    {
+        var result = new List<ScheduleSlotDto>();
+        if (string.IsNullOrWhiteSpace(cron))
+        {
+            return result;
+        }
+
+        var expressions = cron.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var expr in expressions)
+        {
+            if (!TryParseCron(expr, out var parsed) || parsed is null)
+            {
+                continue;
+            }
+
+            var cronFields = expr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            string minuteField;
+            string hourField;
+            string dayOfWeek;
+
+            if (cronFields.Length == 6)
+            {
+                minuteField = cronFields[1];
+                hourField = cronFields[2];
+                dayOfWeek = cronFields[5];
+            }
+            else if (cronFields.Length == 5)
+            {
+                minuteField = cronFields[0];
+                hourField = cronFields[1];
+                dayOfWeek = cronFields[4];
+            }
+            else
+            {
+                continue;
+            }
+
+            var minutes = ExpandCronNumbers(minuteField);
+            var hours = ExpandCronNumbers(hourField);
+            var days = ExpandCronDays(dayOfWeek);
+
+            foreach (var m in minutes)
+            {
+                foreach (var h in hours)
+                {
+                    result.Add(new ScheduleSlotDto
+                    {
+                        Time = $"{h:D2}:{m:D2}",
+                        Days = new List<string>(days)
+                    });
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public static string GenerateLabelFromSlots(List<ScheduleSlotDto> slots)
+    {
+        if (slots == null || slots.Count == 0)
+        {
+            return "Sin horarios";
+        }
+
+        var timeDayMap = new Dictionary<string, List<string>>();
+        foreach (var slot in slots)
+        {
+            foreach (var d in slot.Days)
+            {
+                if (!timeDayMap.ContainsKey(d))
+                {
+                    timeDayMap[d] = new List<string>();
+                }
+                timeDayMap[d].Add(slot.Time);
+            }
+        }
+
+        var groups = new List<List<string>>();
+        var current = new List<string>();
+        foreach (var d in DayOrder)
+        {
+            if (timeDayMap.ContainsKey(d))
+            {
+                current.Add(d);
+            }
+            else
+            {
+                if (current.Count > 0)
+                {
+                    groups.Add(new List<string>(current));
+                    current = new List<string>();
+                }
+            }
+        }
+        if (current.Count > 0)
+        {
+            groups.Add(current);
+        }
+
+        var parts = groups.Select(g =>
+        {
+            var dayStr = g.Count >= 3
+                ? $"{g[0]}-{g[g.Count - 1]}"
+                : string.Join(", ", g);
+            var times = string.Join(", ", g.SelectMany(d => timeDayMap[d]).Distinct().OrderBy(t => t));
+            return $"{dayStr} {times}";
+        });
+
+        return string.Join(" | ", parts);
+    }
+
     public static bool TryParseCron(string? cron, out CronExpression? expression)
     {
         expression = null;
@@ -138,36 +371,93 @@ public class TelemetryScanScheduleService
         return CronExpression.TryParse(cron, CronFormat.Standard, out expression);
     }
 
+    public static bool IsValidCompoundCron(string? cron)
+    {
+        if (string.IsNullOrWhiteSpace(cron))
+        {
+            return false;
+        }
+
+        var parts = cron.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var part in parts)
+        {
+            if (!TryParseCron(part, out _))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public static DateTime? GetNextOccurrenceUtc(string cron, string timeZoneId, DateTime fromUtc)
     {
-        if (!TryParseCron(cron, out var expression) || expression is null)
-        {
-            return null;
-        }
-
         var timeZone = ResolveTimeZone(timeZoneId);
-        var nextUtc = expression.GetNextOccurrence(NormalizeUtc(fromUtc), timeZone);
-        if (nextUtc is null)
+        var normalizedFrom = NormalizeUtc(fromUtc);
+
+        var parts = cron.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        DateTime? earliest = null;
+
+        foreach (var part in parts)
         {
-            return null;
+            if (!TryParseCron(part, out var expression) || expression is null)
+            {
+                continue;
+            }
+
+            var nextUtc = expression.GetNextOccurrence(normalizedFrom, timeZone);
+            if (nextUtc.HasValue && (!earliest.HasValue || nextUtc.Value < earliest.Value))
+            {
+                earliest = nextUtc.Value;
+            }
         }
 
-        return nextUtc.Value;
+        return earliest;
     }
 
     public static IReadOnlyList<DateTime> GetNextOccurrencesUtc(string cron, string timeZoneId, DateTime fromUtc, int count)
     {
         var results = new List<DateTime>();
-        if (!TryParseCron(cron, out var expression) || expression is null || count <= 0)
+        if (count <= 0)
         {
             return results;
         }
 
         var timeZone = ResolveTimeZone(timeZoneId);
         var cursor = NormalizeUtc(fromUtc);
+        var parts = cron.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        var expressions = new List<CronExpression>();
+        foreach (var part in parts)
+        {
+            if (TryParseCron(part, out var expr) && expr is not null)
+            {
+                expressions.Add(expr);
+            }
+        }
+
+        if (expressions.Count == 0)
+        {
+            return results;
+        }
+
         for (var i = 0; i < count; i++)
         {
-            var nextUtc = expression.GetNextOccurrence(cursor, timeZone);
+            DateTime? nextUtc = null;
+            foreach (var expression in expressions)
+            {
+                var candidate = expression.GetNextOccurrence(cursor, timeZone);
+                if (candidate.HasValue && (!nextUtc.HasValue || candidate.Value < nextUtc.Value))
+                {
+                    nextUtc = candidate.Value;
+                }
+            }
+
             if (nextUtc is null)
             {
                 break;
@@ -237,13 +527,23 @@ public class TelemetryScanScheduleService
 
     private static void Apply(TelemetryScanSchedule schedule, TelemetryScanScheduleRequest request)
     {
-        var cron = (request.Cron ?? string.Empty).Trim();
-        if (!TryParseCron(cron, out _))
+        string cron;
+
+        if (request.Slots is { Count: > 0 })
         {
-            throw new InvalidOperationException($"La expresion cron no es valida: '{cron}'.");
+            cron = BuildCronFromSlots(request.Slots);
+        }
+        else
+        {
+            cron = (request.Cron ?? string.Empty).Trim();
         }
 
-        schedule.Label = string.IsNullOrWhiteSpace(request.Label) ? cron : request.Label.Trim();
+        if (!IsValidCompoundCron(cron))
+        {
+            throw new InvalidOperationException("No se pudo generar una expresion cron valida. Verifique los horarios seleccionados.");
+        }
+
+        schedule.Label = string.IsNullOrWhiteSpace(request.Label) ? GenerateLabelFromSlots(ParseSlotsFromCron(cron)) : request.Label.Trim();
         schedule.Cron = cron;
         schedule.TimeZone = ResolveScheduleTimeZone(request.TimeZone);
         schedule.CampusKey = (request.CampusKey ?? string.Empty).Trim();
@@ -254,7 +554,7 @@ public class TelemetryScanScheduleService
 
     private static TelemetryScanScheduleDto ToDto(TelemetryScanSchedule schedule, DateTime nowUtc)
     {
-        var isValid = TryParseCron(schedule.Cron, out _);
+        var isValid = IsValidCompoundCron(schedule.Cron);
         DateTime? nextOccurrenceUtc = null;
         DateTime? nextOccurrenceLocal = null;
 
@@ -266,6 +566,8 @@ public class TelemetryScanScheduleService
                 nextOccurrenceLocal = TimeZoneInfo.ConvertTimeFromUtc(nextOccurrenceUtc.Value, ResolveTimeZone(schedule.TimeZone));
             }
         }
+
+        var slots = ParseSlotsFromCron(schedule.Cron);
 
         return new TelemetryScanScheduleDto
         {
@@ -279,7 +581,85 @@ public class TelemetryScanScheduleService
             IsValid = isValid,
             ValidationError = isValid ? string.Empty : "Expresion cron invalida.",
             NextOccurrenceUtc = nextOccurrenceUtc,
-            NextOccurrenceLocal = nextOccurrenceLocal
+            NextOccurrenceLocal = nextOccurrenceLocal,
+            ScheduleSlots = slots
         };
+    }
+
+    private static List<int> ExpandCronNumbers(string field)
+    {
+        var result = new List<int>();
+        if (string.IsNullOrWhiteSpace(field) || field == "*")
+        {
+            return result;
+        }
+
+        var parts = field.Split(',');
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Contains('-'))
+            {
+                var range = trimmed.Split('-');
+                if (range.Length == 2
+                    && int.TryParse(range[0], out var start)
+                    && int.TryParse(range[1], out var end))
+                {
+                    for (var i = start; i <= end; i++)
+                    {
+                        result.Add(i);
+                    }
+                }
+            }
+            else if (int.TryParse(trimmed, out var val))
+            {
+                result.Add(val);
+            }
+        }
+
+        return result.Distinct().OrderBy(x => x).ToList();
+    }
+
+    private static List<string> ExpandCronDays(string dayField)
+    {
+        var result = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(dayField) || dayField == "*")
+        {
+            return new List<string> { "lu", "ma", "mi", "ju", "vi", "sa", "do" };
+        }
+
+        var parts = dayField.Split(',');
+        foreach (var part in parts)
+        {
+            var trimmed = part.Trim();
+            if (trimmed.Contains('-'))
+            {
+                var range = trimmed.Split('-');
+                if (range.Length == 2
+                    && int.TryParse(range[0], out var start)
+                    && int.TryParse(range[1], out var end))
+                {
+                    for (var i = start; ; i++)
+                    {
+                        var dayNum = i % 7;
+                        if (CronToDay.TryGetValue(dayNum.ToString(), out var dayName))
+                        {
+                            result.Add(dayName);
+                        }
+                        if (dayNum == end) break;
+                    }
+                }
+            }
+            else
+            {
+                if (CronToDay.TryGetValue(trimmed, out var dayName))
+                {
+                    result.Add(dayName);
+                }
+            }
+        }
+
+        return result.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 }
