@@ -690,8 +690,12 @@ public class AdminController : Controller
         await SetOrganizationSelectorViewDataAsync(organizationId, cancellationToken);
         var campusKeys = await ResolveScopeCampusKeysAsync(organizationId, cancellationToken);
 
+        // Sin organizacion elegida (superadmin en "Todas") la vista se sirve vacia:
+        // la vista muestra los contenedores y exige seleccionar una organizacion.
+        var modelScopeCampusKeys = campusKeys ?? (IReadOnlyList<string>?)Array.Empty<string>();
+
         var activeSnapshotId = snapshotId == null || snapshotId == Guid.Empty
-            ? await _networkTelemetryService.GetLatestSnapshotIdAsync(campusKeys, cancellationToken)
+            ? await _networkTelemetryService.GetLatestSnapshotIdAsync(modelScopeCampusKeys, cancellationToken)
             : snapshotId.Value;
 
         var telemetryJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
@@ -699,7 +703,7 @@ public class AdminController : Controller
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         };
 
-        var snapshots = await _networkTelemetryService.GetRecentSnapshotsAsync(50, campusKeys, cancellationToken);
+        var snapshots = await _networkTelemetryService.GetRecentSnapshotsAsync(50, modelScopeCampusKeys, cancellationToken);
         var summary = new NetworkTelemetryMatchingSummaryViewModel { SnapshotId = activeSnapshotId, Found = false };
         var initialPage = new NetworkTelemetryMatchingPageViewModel { SnapshotId = activeSnapshotId };
 
@@ -707,7 +711,7 @@ public class AdminController : Controller
         {
             try
             {
-                summary = await _networkTelemetryService.GetMatchingSummaryAsync(activeSnapshotId, campusKeys, cancellationToken);
+                summary = await _networkTelemetryService.GetMatchingSummaryAsync(activeSnapshotId, modelScopeCampusKeys, cancellationToken);
             }
             catch
             {
@@ -723,7 +727,7 @@ public class AdminController : Controller
                         Page = 1,
                         PageSize = 25
                     },
-                    campusKeys,
+                    modelScopeCampusKeys,
                     cancellationToken);
             }
             catch

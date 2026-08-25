@@ -417,7 +417,30 @@ public class NetworkTelemetryService
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        return snapshots.Select(MapSnapshot).ToList();
+        // Numero de captura (#N) asignado por el scheduler: mismo identificador
+        // que muestra la tabla de capturas programadas en Red y riesgo.
+        var snapshotIds = snapshots.Select(snapshot => snapshot.Id).ToList();
+        var runNumbers = snapshotIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : (await _context.ScheduledScanRuns
+                .AsNoTracking()
+                .Where(run => run.SnapshotId.HasValue && snapshotIds.Contains(run.SnapshotId.Value))
+                .OrderBy(run => run.RunNumber)
+                .Select(run => new { SnapshotKey = run.SnapshotId.Value, run.RunNumber })
+                .ToListAsync(cancellationToken))
+            .GroupBy(pair => pair.SnapshotKey)
+            .ToDictionary(group => group.Key, group => group.First().RunNumber);
+
+        return snapshots.Select(snapshot =>
+        {
+            var viewModel = MapSnapshot(snapshot);
+            if (runNumbers.TryGetValue(snapshot.Id, out var runNumber))
+            {
+                viewModel.RunNumber = runNumber;
+            }
+
+            return viewModel;
+        }).ToList();
     }
 
     public async Task<NetworkTelemetrySnapshotPageViewModel> GetSnapshotPageAsync(

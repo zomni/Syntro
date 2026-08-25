@@ -41,6 +41,7 @@ public class NetworkTelemetrySnapshotViewModel
 {
     public Guid Id { get; set; }
     public string CampusKey { get; set; } = string.Empty;
+    public int? RunNumber { get; set; }
     public string SourceName { get; set; } = string.Empty;
     public string SourceType { get; set; } = string.Empty;
     public string TriggerType { get; set; } = string.Empty;
