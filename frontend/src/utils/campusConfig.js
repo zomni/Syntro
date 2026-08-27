@@ -3,13 +3,13 @@
 // (sesión del backend con fallback a campuses.js); de aquí derivan los
 // nombres de archivos de datos, el índice de búsqueda y el catálogo de edificios.
 
-import { getSite, getPrimaryCampusKey } from "../config/siteConfig.js";
+import { getSite, getPrimaryCampusKey, getCurrentCampusKey, getActiveCampusKey } from "../config/siteConfig.js";
 
-export { getPrimaryCampusKey };
+export { getPrimaryCampusKey, getActiveCampusKey, getCurrentCampusKey };
 
-const getSchool = (campusKey = getPrimaryCampusKey()) => getSite(campusKey)?.school || "tmpl";
+const getSchool = (campusKey = getCurrentCampusKey()) => getSite(campusKey)?.school || "tmpl";
 
-export const getDataFileNames = (campusKey = getPrimaryCampusKey()) => {
+export const getDataFileNames = (campusKey = getCurrentCampusKey()) => {
   const school = getSchool(campusKey);
   const prefix = `${school}_${campusKey}`;
   return {
@@ -18,8 +18,8 @@ export const getDataFileNames = (campusKey = getPrimaryCampusKey()) => {
   };
 };
 
-export const getCatalogFileName = (campusKey = getPrimaryCampusKey()) =>
+export const getCatalogFileName = (campusKey = getCurrentCampusKey()) =>
   `data/${campusKey}_buildings_catalog.json`;
 
-export const getBackupFileName = (campusKey = getPrimaryCampusKey()) =>
+export const getBackupFileName = (campusKey = getCurrentCampusKey()) =>
   `data/${campusKey}_buildings_backend_backup.json`;

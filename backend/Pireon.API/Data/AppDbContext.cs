@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<SyncedRoom> SyncedRooms => Set<SyncedRoom>();
     public DbSet<SyncedEquipment> SyncedEquipments => Set<SyncedEquipment>();
     public DbSet<ImportedInventoryItem> ImportedInventoryItems => Set<ImportedInventoryItem>();
+    public DbSet<InventoryDocument> InventoryDocuments => Set<InventoryDocument>();
     public DbSet<InventoryAliasRule> InventoryAliasRules => Set<InventoryAliasRule>();
     public DbSet<AuthUser> AuthUsers => Set<AuthUser>();
     public DbSet<Organization> Organizations => Set<Organization>();
@@ -270,6 +271,24 @@ public class AppDbContext : DbContext
             entity.Property(e => e.AssignedRoomExternalId).HasMaxLength(120);
             entity.Property(e => e.AssignmentNotes).HasMaxLength(500);
             entity.Property(e => e.SourceFile).HasMaxLength(260);
+            entity.HasOne(e => e.Organization)
+                .WithMany()
+                .HasForeignKey(e => e.OrgId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<InventoryDocument>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.InventoryItemId);
+            entity.Property(e => e.OriginalFileName).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.StoredFileName).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.ContentType).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Source).HasMaxLength(100);
+            entity.HasOne(e => e.InventoryItem)
+                .WithMany()
+                .HasForeignKey(e => e.InventoryItemId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<InventoryAliasRule>(entity =>
@@ -410,6 +429,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<InventoryAliasRule>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<BackupHistory>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<ImportedInventoryItem>().HasQueryFilter(e => e.DeletedAtUtc == null);
+        modelBuilder.Entity<InventoryDocument>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<NetworkTelemetrySnapshot>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<NetworkTelemetryObservation>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<ScheduledScanRun>().HasQueryFilter(e => e.DeletedAtUtc == null);

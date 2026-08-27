@@ -17,7 +17,7 @@ import { addDataToMap, clearAllMapData, resetBuildingsCatalogCache } from "./add
 
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import { identifiers } from "./identifiers.js";
-import { getSite, hasCampus } from "../config/siteConfig.js";
+import { getSite, hasCampus, setActiveCampus } from "../config/siteConfig.js";
 import { resolveFloorButtonId } from "./floorButtons.js";
 
 const selectFloor = (floorButtonId) => {
@@ -119,6 +119,7 @@ const dispatchCampusChanged = (campus) => {
 
 export const goToFreeMap = () => {
   location = "";
+  setActiveCampus("");
   removeSearchContainerElements();
   removeFloorButtons();
   clearAllMapData();
@@ -147,6 +148,7 @@ export const goTo = (campus, options = {}) => {
   const preserveView = !!options.preserveView;
   var campus_info = getSite(campus);
   location = campus;
+  setActiveCampus(campus);
   removeSearchContainerElements();
   if (Array.isArray(campus_info?.bounds)) {
     applyPireonBounds(campus_info, preserveView);

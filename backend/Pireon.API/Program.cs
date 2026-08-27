@@ -68,7 +68,7 @@ builder.Services
             cookieSecurePolicyValue,
             builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always);
         options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromMinutes(sessionMinutes);
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>

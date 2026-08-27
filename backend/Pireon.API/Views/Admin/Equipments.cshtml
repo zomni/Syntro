@@ -4,6 +4,7 @@
     ViewData["Title"] = "Inventario";
     Layout = "~/Views/Shared/_Layout.cshtml";
     var isAdmin = User.IsInRole(Pireon.API.Models.AppRoles.Admin);
+    var isSuperAdmin = User.IsInRole(Pireon.API.Models.AppRoles.SuperAdmin);
     var requestScheme = string.IsNullOrWhiteSpace(Context?.Request?.Scheme) ? "http" : Context.Request.Scheme;
     var requestHost = Context?.Request?.Host.Host;
     var configuredFrontendUrl = Configuration["FrontendAppUrl"];
@@ -78,6 +79,9 @@
 
             return int.TryParse(effectiveFloors, out var parsedFloor) ? parsedFloor : 0;
         });
+    var buildingNameLookup = Model.Buildings.ToDictionary(
+        building => building.ExternalId,
+        building => building.EffectiveDisplayName);
     var selectedOrganizationId = Context?.Request?.Query["organizationId"].ToString();
     var reviewInconsistenciesUrl = Url.Action("Inventory", new
     {
@@ -174,22 +178,48 @@
     string PageUrl(int targetPage) => BuildInventoryUrl(targetPage);
     string InconsistencyTypeUrl(string value) => BuildInventoryUrl(1, null, null, value);
     string RemoveColumnFilterUrl(int index) => BuildInventoryUrl(1, null, null, null, null, index);
+
+    string CategoryLabel(string? raw) => raw?.ToLowerInvariant() switch
+    {
+        "pc" => "PC",
+        "printer" => "Impresora",
+        "scanner" => "Escáner",
+        "other" => "Otros",
+        _ => raw ?? ""
+    };
+    string StatusLabel(string? raw) => raw?.ToLowerInvariant() switch
+    {
+        "active" => "Activo",
+        "maintenance" => "Mantenimiento",
+        "inactive" => "Inactivo",
+        "stolen" => "Robado",
+        "gap" => "Brecha",
+        "retired" => "Baja",
+        _ => raw ?? ""
+    };
+
+    var buildingCentroids = Model.Buildings
+        .Where(b => b.CentroidLatitude.HasValue && b.CentroidLongitude.HasValue
+                  && (b.CentroidLatitude.Value != 0 || b.CentroidLongitude.Value != 0))
+        .ToDictionary(b => b.ExternalId, b => (b.CentroidLatitude!.Value, b.CentroidLongitude!.Value));
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div class="page-header px-4 py-3 rounded-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
+    <div class="page-header px-4 py-3 rounded-3 d-flex align-items-center gap-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
         <h2 class="fw-bold mb-0 fs-4" style="color: var(--pi-deep);">Inventario importado</h2>
+        @if (isSuperAdmin)
+        {
+            ViewData["OrganizationSelectorCompact"] = true;
+            @await Html.PartialAsync("_OrganizationSelector")
+        }
     </div>
-    <div class="d-flex gap-2">
+    <div class="d-flex gap-2 align-items-center">
         @if (isAdmin)
         {
-            <a href="/admin/inventory/create" class="btn btn-primary">
+            <a href="/admin/inventory/create" class="btn btn-sm btn-primary">
                 <i class="bi bi-plus-lg me-1"></i> Agregar equipo
             </a>
         }
-        <a href="/api/inventory-import/status" class="btn btn-outline-secondary" target="_blank">
-            <i class="bi bi-activity me-1"></i> Estado importacion
-        </a>
     </div>
 </div>
 
@@ -414,7 +444,7 @@
                     @if (isInconsistencyView)
                     {
                         <a href="@fullInventoryUrl"
-                           class="btn btn-outline-secondary"
+                            class="btn btn-sm btn-outline-secondary"
                            title="Ver todo el inventario"
                            aria-label="Ver todo el inventario">
                             <i class="bi bi-arrow-counterclockwise"></i>
@@ -423,7 +453,7 @@
                     else if (Model.InconsistentItems > 0)
                     {
                         <a href="@reviewInconsistenciesUrl"
-                           class="btn btn-outline-danger"
+                           class="btn btn-sm btn-outline-danger"
                            title="Revisar incongruencias"
                            aria-label="Revisar incongruencias">
                             <i class="bi bi-search"></i>
@@ -431,7 +461,7 @@
                     }
                     else
                     {
-                        <span class="btn btn-outline-secondary disabled" title="Sin incongruencias detectadas" aria-hidden="true">
+                        <span class="btn btn-sm btn-outline-secondary disabled" title="Sin incongruencias detectadas" aria-hidden="true">
                             <i class="bi bi-check2-circle"></i>
                         </span>
                     }
@@ -443,163 +473,164 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <form method="get" action="/admin/inventory" class="inventory-filter-panel">
-            <input type="hidden" name="page" value="1" />
-            <input type="hidden" name="sortBy" value="@Model.SortBy" />
-            <input type="hidden" name="sortDirection" value="@Model.SortDirection" />
-            <input type="hidden" name="inconsistencyType" value="@Model.InconsistencyType" />
-            @foreach (var columnFilter in Model.ColumnFilters)
-            {
-                <input type="hidden" name="filterField" value="@columnFilter.Field" />
-                <input type="hidden" name="filterValue" value="@columnFilter.Value" />
-            }
-
+        <div class="d-flex align-items-center gap-1 mb-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#inventoryFilterPanel"
+                    aria-expanded="@(hasActiveFilters ? "true" : "false")">
+                <i class="bi bi-funnel me-1"></i> Filtros
+                @if (hasActiveFilters)
+                {
+                    <span class="badge bg-primary ms-1">@activeFilters.Count</span>
+                }
+            </button>
             @if (hasActiveFilters)
             {
-                <div class="inventory-filter-active-bar mb-3">
-                    <div class="small text-muted mb-2">Filtros activos (@activeFilters.Count)</div>
-                    <div class="d-flex flex-wrap gap-2">
-                        @foreach (var columnFilter in Model.ColumnFilters.Select((filter, index) => new { filter, index }))
-                        {
-                            <div class="inventory-filter-chip">
-                                <span class="chip-label">@columnFilter.filter.Label</span>
-                                <span class="chip-value">@columnFilter.filter.Value</span>
-                                <a href="@RemoveColumnFilterUrl(columnFilter.index)"
-                                   class="chip-remove"
-                                   title="Quitar filtro"
-                                   aria-label="Quitar filtro">
-                                    <i class="bi bi-x-lg"></i>
-                                </a>
-                            </div>
-                        }
-
-                        @foreach (var filter in activeFilters.Where(filter => !Model.ColumnFilters.Any(columnFilter => $"{columnFilter.Label}: {columnFilter.Value}" == filter)))
-                        {
-                            <div class="inventory-filter-chip passive">
-                                <span class="chip-value">@filter</span>
-                            </div>
-                        }
-                    </div>
-                </div>
+                <a href="/admin/inventory" class="btn btn-sm btn-outline-danger" title="Limpiar filtros" aria-label="Limpiar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
             }
+        </div>
 
-            <div class="row g-3">
-                <div class="col-xl-3 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Organizacion</div>
-                        @{
-                            ViewData["OrganizationSelectorCompact"] = false;
-                        }
-                        @await Html.PartialAsync("_OrganizationSelector")
+        @if (hasActiveFilters)
+        {
+            <div class="d-flex flex-wrap gap-1 mb-2">
+                @foreach (var columnFilter in Model.ColumnFilters.Select((filter, index) => new { filter, index }))
+                {
+                    <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
+                        @columnFilter.filter.Label: @columnFilter.filter.Value
+                        <a href="@RemoveColumnFilterUrl(columnFilter.index)" class="text-danger ms-1" title="Quitar filtro" aria-label="Quitar filtro" style="font-size:0.65rem;">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    </span>
+                }
+                @foreach (var filter in activeFilters.Where(filter => !Model.ColumnFilters.Any(columnFilter => $"{columnFilter.Label}: {columnFilter.Value}" == filter)))
+                {
+                    <span class="badge bg-light text-muted border">@filter</span>
+                }
+            </div>
+        }
+
+        <div class="collapse" id="inventoryFilterPanel">
+            <form method="get" action="/admin/inventory" class="inventory-filter-panel pt-2 border-top">
+                <input type="hidden" name="page" value="1" />
+                <input type="hidden" name="sortBy" value="@Model.SortBy" />
+                <input type="hidden" name="sortDirection" value="@Model.SortDirection" />
+                <input type="hidden" name="inconsistencyType" value="@Model.InconsistencyType" />
+                @foreach (var columnFilter in Model.ColumnFilters)
+                {
+                    <input type="hidden" name="filterField" value="@columnFilter.Field" />
+                    <input type="hidden" name="filterValue" value="@columnFilter.Value" />
+                }
+
+                <div class="row g-3">
+                    <div class="col-xl-3 col-lg-6">
+                        <div class="inventory-filter-fixed position-relative js-autocomplete">
+                            <div class="filter-title">Busqueda general</div>
+                            <input type="text"
+                                   name="search"
+                                   value="@Model.Search"
+                                   data-autocomplete-endpoint="/dashboard/suggestions/inventory"
+                                   data-autocomplete-min="2"
+                                   class="form-control"
+                                   placeholder="S/N, descripcion, usuario, IP..." />
+                            <div class="list-group position-absolute w-100 shadow-sm js-autocomplete-list" style="z-index: 1050; display: none;"></div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-xl-3 col-lg-6">
-                    <div class="inventory-filter-fixed position-relative js-autocomplete">
-                        <div class="filter-title">Busqueda general</div>
-                        <input type="text"
-                               name="search"
-                               value="@Model.Search"
-                               data-autocomplete-endpoint="/dashboard/suggestions/inventory"
-                               data-autocomplete-min="2"
-                               class="form-control"
-                               placeholder="S/N, descripcion, usuario, IP..." />
-                        <div class="list-group position-absolute w-100 shadow-sm js-autocomplete-list" style="z-index: 1050; display: none;"></div>
-                    </div>
-                </div>
-                <div class="col-xl-2 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Categoria</div>
-                        <select name="category" class="form-select">
-                            <option value="">Todas</option>
-                            @foreach (var option in Model.Categories)
-                            {
-                                <option value="@option" selected="@(Model.Category == option)">@option</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="col-xl-2 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Estado</div>
-                        <select name="status" class="form-select">
-                            <option value="">Todos</option>
-                            @foreach (var option in Model.Statuses)
-                            {
-                                <option value="@option" selected="@(Model.Status == option)">@option</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="col-xl-2 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Asignacion</div>
-                        <select name="assignment" class="form-select">
-                            <option value="pending" selected="@(Model.AssignmentFilter == "pending")">Pendientes</option>
-                            <option value="assigned" selected="@(Model.AssignmentFilter == "assigned")">Asignados</option>
-                            <option value="suggested" selected="@(Model.AssignmentFilter == "suggested")">Con sugerencia</option>
-                            <option value="inconsistent" selected="@(Model.AssignmentFilter == "inconsistent" || (Model.AssignmentFilter == "all" && isInconsistencyView))">Con incongruencias</option>
-                            <option value="all" selected="@(Model.AssignmentFilter == "all" && !isInconsistencyView)">Todos</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Edificio fijo</div>
-                        <select name="buildingExternalId" class="form-select">
-                            <option value="">Todos</option>
-                            @foreach (var building in Model.Buildings)
-                            {
-                                <option value="@building.ExternalId" selected="@(Model.BuildingExternalId == building.ExternalId)">
-                                    @building.EffectiveDisplayName
-                                </option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="col-xl-4 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Agregar filtro por columna</div>
-                        <div class="d-flex gap-2">
-                            <select name="newFilterField" class="form-select">
-                                <option value="">Columna...</option>
-                                @foreach (var option in Model.AvailableColumnFilters)
+                    <div class="col-xl-2 col-lg-6">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Categoria</div>
+                            <select name="category" class="form-select">
+                                <option value="">Todas</option>
+                                @foreach (var option in Model.Categories)
                                 {
-                                    <option value="@option.Value">@option.Label</option>
+                                    <option value="@option" selected="@(Model.Category == option)">@CategoryLabel(option)</option>
                                 }
                             </select>
-                            <input type="text" name="newFilterValue" class="form-control" placeholder="Valor..." />
-                            <button type="submit" class="btn btn-outline-primary text-nowrap">
-                                <i class="bi bi-plus-lg"></i>
-                            </button>
+                        </div>
+                    </div>
+                    <div class="col-xl-2 col-lg-6">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Estado</div>
+                            <select name="status" class="form-select">
+                                <option value="">Todos</option>
+                                @foreach (var option in Model.Statuses)
+                                {
+                                    <option value="@option" selected="@(Model.Status == option)">@StatusLabel(option)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-xl-2 col-lg-6">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Asignacion</div>
+                            <select name="assignment" class="form-select">
+                                <option value="pending" selected="@(Model.AssignmentFilter == "pending")">Pendientes</option>
+                                <option value="assigned" selected="@(Model.AssignmentFilter == "assigned")">Asignados</option>
+                                <option value="suggested" selected="@(Model.AssignmentFilter == "suggested")">Con sugerencia</option>
+                                <option value="inconsistent" selected="@(Model.AssignmentFilter == "inconsistent" || (Model.AssignmentFilter == "all" && isInconsistencyView))">Con incongruencias</option>
+                                <option value="all" selected="@(Model.AssignmentFilter == "all" && !isInconsistencyView)">Todos</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-xl-3 col-lg-6">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Edificio fijo</div>
+                            <select name="buildingExternalId" class="form-select">
+                                <option value="">Todos</option>
+                                @foreach (var building in Model.Buildings)
+                                {
+                                    <option value="@building.ExternalId" selected="@(Model.BuildingExternalId == building.ExternalId)">
+                                        @building.EffectiveDisplayName
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-xl-4 col-lg-6">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Agregar filtro por columna</div>
+                            <div class="d-flex gap-2">
+                                <select name="newFilterField" class="form-select">
+                                    <option value="">Columna...</option>
+                                    @foreach (var option in Model.AvailableColumnFilters)
+                                    {
+                                        <option value="@option.Value">@option.Label</option>
+                                    }
+                                </select>
+                                <input type="text" name="newFilterValue" class="form-control" placeholder="Valor..." />
+                                <button type="submit" class="btn btn-sm btn-outline-primary text-nowrap">
+                                    <i class="bi bi-plus-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-xl-2 col-lg-3">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Por pagina</div>
+                            <select name="pageSize" class="form-select js-page-size-select">
+                                @foreach (var size in pageSizeOptions)
+                                {
+                                    <option value="@size" selected="@(Model.PageSize == size)">@size</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-xl-6 col-lg-9">
+                        <div class="inventory-filter-fixed">
+                            <div class="filter-title">Acciones</div>
+                            <div class="d-flex gap-2">
+                                <button type="submit" class="btn btn-sm btn-primary flex-grow-1">
+                                    <i class="bi bi-check2 me-1"></i> Aplicar
+                                </button>
+                                <a href="/admin/inventory" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
+                                    <i class="bi bi-x-circle"></i>
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-xl-2 col-lg-3">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Por pagina</div>
-                        <select name="pageSize" class="form-select js-page-size-select">
-                            @foreach (var size in pageSizeOptions)
-                            {
-                                <option value="@size" selected="@(Model.PageSize == size)">@size</option>
-                            }
-                        </select>
-                    </div>
-                </div>
-                <div class="col-xl-6 col-lg-9">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Acciones</div>
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-outline-primary flex-grow-1">
-                                <i class="bi bi-funnel me-1"></i> Filtrar
-                            </button>
-                            <a href="/admin/inventory" class="btn btn-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
-                                <i class="bi bi-x-circle"></i>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -647,21 +678,32 @@
                                 <div>#@item.RowNumber</div>
                             </td>
                             <td>
-                                <div class="fw-semibold">S/N: @(string.IsNullOrWhiteSpace(item.SerialNumber) ? "Sin S/N" : item.SerialNumber)</div>
-                                <div class="small text-muted">@item.Description</div>
-                                <div class="small text-muted">Item @item.ItemNumber</div>
-                                <div class="small text-muted">@item.SourceFile</div>
+                                <div class="fw-semibold">@(string.IsNullOrWhiteSpace(item.SerialNumber) ? "-" : item.SerialNumber)</div>
                             </td>
                             <td class="small">
-                                <div>@item.UnitOrDepartment</div>
-                                <div class="text-muted">@item.OrganizationalUnit</div>
+                                @{
+                                    var unitShort = (item.UnitOrDepartment ?? "").Split(new[] { '\n', ',' }, 2)[0].Trim();
+                                }
+                                <div class="text-truncate" style="max-width:220px;" title="@unitShort">@unitShort</div>
                             </td>
                             <td class="small">
                                 <div>@item.ResponsibleUser</div>
                                 <div class="text-muted">@item.Email</div>
                             </td>
                             <td class="small font-monospace">@item.IpAddress</td>
-                            <td><span class="badge bg-secondary">@item.InferredCategory</span></td>
+                            <td>
+                                @{
+                                    var categoryLabel = item.InferredCategory?.ToLowerInvariant() switch
+                                    {
+                                        "pc" => "PC",
+                                        "printer" => "IMPRESORA",
+                                        "scanner" => "ESCANER",
+                                        "other" => "OTROS",
+                                        _ => item.InferredCategory?.ToUpperInvariant() ?? ""
+                                    };
+                                }
+                                <span class="badge bg-secondary">@categoryLabel</span>
+                            </td>
                             <td>
                                 <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="Ver detalle de clasificacion"
                                     data-bs-toggle="modal" data-bs-target="#classificationDetailModal"
@@ -677,6 +719,26 @@
                             </td>
                             <td>
                                 @{
+                                    var statusLabel = item.InferredStatus?.ToLowerInvariant() switch
+                                    {
+                                        "active" => "ACTIVO",
+                                        "maintenance" => "MANTENIMIENTO",
+                                        "inactive" => "INACTIVO",
+                                        "stolen" => "ROBADO",
+                                        "gap" => "BRECHA",
+                                        "retired" => "BAJA",
+                                        _ => item.InferredStatus?.ToUpperInvariant() ?? ""
+                                    };
+                                    var statusExplanation = item.InferredStatus?.ToLowerInvariant() switch
+                                    {
+                                        "active" => "Equipo en operacion normal",
+                                        "maintenance" => "Equipo en proceso de mantencion o reparacion",
+                                        "inactive" => "Equipo sin uso actual",
+                                        "stolen" => "Equipo reportado como robado",
+                                        "gap" => "Brecha de inventario detectada",
+                                        "retired" => "Equipo dado de baja",
+                                        _ => ""
+                                    };
                                     var badgeClass = item.InferredStatus switch
                                     {
                                         "active" => "bg-success",
@@ -684,7 +746,10 @@
                                         _ => "bg-warning text-dark"
                                     };
                                 }
-                                <span class="badge @badgeClass">@item.InferredStatus</span>
+                                <span class="badge @badgeClass"
+                                      @(statusExplanation != "" ? $"data-bs-toggle=tooltip data-bs-placement=top title={statusExplanation}" : "")>
+                                    @statusLabel
+                                </span>
                             </td>
                             <td class="small">
                                 @if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
@@ -727,10 +792,11 @@
                                 {
                                     var detailUrl = Url.Action("InventoryInconsistency", new { id = item.Id, returnUrl = currentInventoryUrl })
                                         ?? $"/admin/inventory/inconsistency/{item.Id}";
-                                    <a href="@detailUrl" class="btn btn-sm btn-outline-danger mb-2">
+                                    <a href="@detailUrl" class="btn btn-sm btn-outline-danger mb-2"
+                                       data-bs-toggle="tooltip" data-bs-placement="top"
+                                       title="@inconsistencySummary">
                                         <i class="bi bi-exclamation-triangle-fill me-1"></i>Revisar
                                     </a>
-                                    <div class="text-muted">@inconsistencySummary</div>
                                 }
                                 else
                                 {
@@ -749,12 +815,19 @@
                                                 ? item.ItemNumber
                                                 : $"inventory-{item.Id}");
                                         var inventoryMapUrl = $"{mapBaseUrl}/?id={Uri.EscapeDataString(item.AssignedBuildingExternalId)}&zoom=20&floor={resolvedFloor}&view=devices&deviceKey={Uri.EscapeDataString(deviceKey)}";
+                                        var hasCentroid = buildingCentroids.TryGetValue(item.AssignedBuildingExternalId, out var centroid);
+                                        var buildingName = buildingNameLookup.GetValueOrDefault(item.AssignedBuildingExternalId, "");
 
                                         <a href="@inventoryMapUrl"
                                            class="btn btn-sm btn-outline-info"
                                            target="pireon-map"
                                            onclick="window.open(this.href, 'pireon-map'); return false;"
-                                           title="Ir al edificio en el mapa">
+                                           title="Ir al edificio en el mapa"
+                                            data-map-preview="true"
+                                            data-lat="@(hasCentroid ? centroid.Item1.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")"
+                                            data-lng="@(hasCentroid ? centroid.Item2.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")"
+                                            data-building-name="@buildingName"
+                                            data-building-id="@item.AssignedBuildingExternalId">
                                             <i class="bi bi-map"></i>
                                         </a>
                                     }
@@ -778,7 +851,7 @@
                                               class="d-inline"
                                               onsubmit="return confirm('Estas seguro de eliminar este equipo?');">
                                             @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Eliminar equipo">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar equipo">
                                                 <i class="bi bi-trash"></i>
                                             </button>
                                         </form>
@@ -1009,6 +1082,10 @@ window.addEventListener("DOMContentLoaded", () => {
   };
 
   document.querySelectorAll(".js-autocomplete").forEach(bindSuggestions);
+
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((element) => {
+    new bootstrap.Tooltip(element);
+  });
 });
 </script>
 
@@ -1073,7 +1150,393 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 </script>
 
+<script>
+(function () {
+    var TILE = 256;
+    var SIZE = 256;                 // tamaño visible del tooltip (px) - compacto
+    var PAD = 18;                   // margen alrededor de la forma dentro del canvas
+    var MIN_ZOOM = 14;
+    var MAX_ZOOM = 19;
+    var DEFAULT_ZOOM = 17;
+    var TILE_SERVERS = ['a', 'b', 'c'];
+    var tileImgCache = {};
+    var siblingsPromise = null;
+    var renderToken = 0;
+    var lastRender = null;
+    var showDelay = null;
+    var hideDelay = null;
+    var currentBtn = null;
+    var tooltip = null;
+    var geometryCache = {};
+    var currentZoom = DEFAULT_ZOOM;
 
+    function lonToTileX(lng, z) { return (lng + 180) / 360 * Math.pow(2, z); }
+    function latToTileY(lat, z) {
+        var rad = lat * Math.PI / 180;
+        return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z);
+    }
+    function lngToPx(lng, z) { return lonToTileX(lng, z) * TILE; }
+    function latToPx(lat, z) { return latToTileY(lat, z) * TILE; }
+
+    function buildTooltip() {
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;z-index:9999;background:#fff;border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,0.3);overflow:hidden;opacity:0;transition:opacity .18s ease;display:none;pointer-events:auto;';
+        var viewport = document.createElement('div');
+        viewport.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;position:relative;overflow:hidden;background:linear-gradient(180deg,#eef2f5,#dde6eb);';
+        var tiles = document.createElement('div');
+        tiles.setAttribute('data-role', 'tiles');
+        tiles.style.cssText = 'position:absolute;top:0;left:0;';
+        viewport.appendChild(tiles);
+        var canvas = document.createElement('canvas');
+        canvas.setAttribute('data-role', 'canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        canvas.style.cssText = 'position:absolute;top:0;left:0;width:' + SIZE + 'px;height:' + SIZE + 'px;pointer-events:none;z-index:2;';
+        viewport.appendChild(canvas);
+        el.appendChild(viewport);
+        var label = document.createElement('div');
+        label.setAttribute('data-role', 'label');
+        label.className = 'small fw-semibold p-1 text-center text-truncate';
+        label.style.cssText = 'color:#0f172a;max-width:' + SIZE + 'px;position:relative;z-index:3;';
+        el.appendChild(label);
+        document.body.appendChild(el);
+        return el;
+    }
+
+    function tileUrl(col, row, z, server) {
+        return 'https://' + server + '.tile.openstreetmap.org/' + z + '/' + col + '/' + row + '.png';
+    }
+
+    function placeTile(layer, col, row, z) {
+        var hash = z + '/' + col + '/' + row;
+        var srv = TILE_SERVERS[((col % 3) + 3) % 3];
+        var src = tileUrl(col, row, z, srv);
+        var img = tileImgCache[hash];
+        if (!img) {
+            img = new Image();
+            img.loading = 'eager';
+            img.draggable = false;
+            img._retried = false;
+            img._altSrc = tileUrl(col, row, z, TILE_SERVERS[(TILE_SERVERS.indexOf(srv) + 1) % 3]);
+            img.onerror = function () {
+                if (!img._retried) {
+                    img._retried = true;
+                    img.src = img._altSrc;
+                } else {
+                    img.style.visibility = 'hidden';
+                    delete tileImgCache[hash];
+                }
+            };
+            tileImgCache[hash] = img;
+        }
+        img.style.cssText = 'position:absolute;left:' + (col * TILE) + 'px;top:' + (row * TILE) + 'px;width:' + TILE + 'px;height:' + TILE + 'px;display:block;user-select:none;';
+        img.style.visibility = 'visible';
+        img.src = src;
+        layer.appendChild(img);
+    }
+
+    function drawMarker(ctx, sx, sy) {
+        ctx.beginPath();
+        ctx.arc(sx, sy - 8, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#e11d48';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx - 5, sy - 3);
+        ctx.lineTo(sx, sy + 5);
+        ctx.lineTo(sx + 5, sy - 3);
+        ctx.fillStyle = '#e11d48';
+        ctx.fill();
+    }
+
+    function drawPolygonOnCanvas(ctx, geometry, centerPxX, centerPxY) {
+        if (!geometry || !geometry.coordinates) return;
+        var rings = geometry.type === 'Polygon' ? geometry.coordinates
+            : (geometry.type === 'MultiPolygon'
+                ? geometry.coordinates.reduce(function (all, polygon) { return all.concat(polygon); }, [])
+                : []);
+        if (!Array.isArray(rings) || rings.length === 0) return;
+
+        var drawRings = [];
+        rings.forEach(function (ring) {
+            if (!Array.isArray(ring) || ring.length < 3) return;
+            var pts = ring.map(function (c) {
+                return [
+                    SIZE / 2 + (lngToPx(c[0], currentZoom) - centerPxX),
+                    SIZE / 2 + (latToPx(c[1], currentZoom) - centerPxY)
+                ];
+            });
+            drawRings.push(pts);
+        });
+        if (drawRings.length === 0) return;
+
+        ctx.beginPath();
+        drawRings.forEach(function (pts) {
+            pts.forEach(function (p, i) {
+                if (i === 0) ctx.moveTo(p[0], p[1]);
+                else ctx.lineTo(p[0], p[1]);
+            });
+            ctx.closePath();
+        });
+        ctx.fillStyle = 'rgba(51, 136, 255, 0.18)';
+        ctx.fill('evenodd');
+        ctx.strokeStyle = '#3388ff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+
+    function geometryBBox(geometry) {
+        var rings = geometry.type === 'Polygon' ? geometry.coordinates
+            : (geometry.type === 'MultiPolygon' ? geometry.coordinates.flat() : []);
+        var minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        (rings || []).forEach(function (ring) {
+            ring.forEach(function (c) {
+                var lng = c[0], lat = c[1];
+                if (lng < minLng) minLng = lng;
+                if (lng > maxLng) maxLng = lng;
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+            });
+        });
+        return { minLng: minLng, maxLng: maxLng, minLat: minLat, maxLat: maxLat };
+    }
+
+    function computeFitZoom(bbox) {
+        var avgLat = (bbox.minLat + bbox.maxLat) / 2;
+        var rad = avgLat * Math.PI / 180;
+        var cos = Math.max(0.1, Math.cos(rad));
+        var spanLng = (bbox.maxLng - bbox.minLng) / 360 * 256;
+        var spanLat = (bbox.maxLat - bbox.minLat) / 360 * 256 / cos;
+        var target = SIZE - 2 * PAD;
+        var z = Math.floor(Math.log2(target / Math.max(Math.max(spanLng, spanLat), 0.0001)));
+        if (z < MIN_ZOOM) z = MIN_ZOOM;
+        if (z > MAX_ZOOM) z = MAX_ZOOM;
+        return z;
+    }
+
+    function fetchGeometry(buildingId) {
+        if (!buildingId) return Promise.resolve(null);
+        if (geometryCache[buildingId]) return Promise.resolve(geometryCache[buildingId]);
+        var url = '/api/synced-buildings/' + encodeURIComponent(buildingId) + '/geometry';
+        return fetch(url, { credentials: 'include', cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                geometryCache[buildingId] = data || null;
+                return data;
+            })
+            .catch(function () { return null; });
+    }
+
+    function getSiblings() {
+        if (siblingsPromise) return siblingsPromise;
+        siblingsPromise = fetch('/api/synced-buildings', { credentials: 'include', cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .catch(function () { return []; });
+        return siblingsPromise;
+    }
+
+    function drawNeighborContext(ctx, R) {
+        if (!R || R.token !== renderToken) return;
+        if (!R.siblings || R.siblings.length === 0) return;
+        var near = [];
+        R.siblings.forEach(function (b) {
+            if (!b || !b.externalId || b.externalId === R.targetId) return;
+            var lat = Number(b.centroidLatitude), lng = Number(b.centroidLongitude);
+            if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return;
+            var sx = SIZE / 2 + (lngToPx(lng, R.zoom) - R.cpx);
+            var sy = SIZE / 2 + (latToPx(lat, R.zoom) - R.cpy);
+            if (sx < -12 || sx > SIZE + 12 || sy < -12 || sy > SIZE + 12) return;
+            near.push({ b: b, sx: sx, sy: sy });
+        });
+        if (near.length === 0) return;
+        near.forEach(function (n) {
+            ctx.beginPath();
+            ctx.arc(n.sx, n.sy, 3, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(30, 60, 90, 0.34)';
+            ctx.fill();
+        });
+        near.slice(0, 9).forEach(function (n) {
+            var name = String(n.b.displayName || n.b.shortName || n.b.externalId || '');
+            if (name.length > 17) name = name.slice(0, 16) + '…';
+            ctx.font = '7.5px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = 'rgba(20, 45, 70, 0.5)';
+            ctx.fillText(name, n.sx, n.sy - 7);
+        });
+    }
+
+    function renderPreview(btn, geometry, siblings) {
+        var lat = parseFloat(btn.dataset.lat);
+        var lng = parseFloat(btn.dataset.lng);
+        var targetId = btn.dataset.buildingId || '';
+
+        if (!tooltip) tooltip = buildTooltip();
+        var tiles = tooltip.querySelector('[data-role="tiles"]');
+        var canvas = tooltip.querySelector('[data-role="canvas"]');
+        var ctx = canvas.getContext('2d');
+        tiles.innerHTML = '';
+
+        var cz, clng, clat, hasFit = false;
+        if (geometry && geometry.coordinates) {
+            var bbox = geometryBBox(geometry);
+            if (isFinite(bbox.minLng) && isFinite(bbox.minLat) && bbox.minLng <= bbox.maxLng && bbox.minLat <= bbox.maxLat) {
+                cz = computeFitZoom(bbox);
+                clng = (bbox.minLng + bbox.maxLng) / 2;
+                clat = (bbox.minLat + bbox.maxLat) / 2;
+                hasFit = true;
+            }
+        }
+        if (!hasFit) {
+            if (!isFinite(lat) || !isFinite(lng)) { lat = 0; lng = 0; }
+            cz = DEFAULT_ZOOM;
+            clng = lng;
+            clat = lat;
+        }
+        currentZoom = cz;
+
+        var cpx = lngToPx(clng, cz);
+        var cpy = latToPx(clat, cz);
+        tiles.style.transform = 'translate(' + (SIZE / 2 - cpx) + 'px,' + (SIZE / 2 - cpy) + 'px)';
+
+        var c0 = Math.floor((cpx - SIZE / 2) / TILE);
+        var c1 = Math.floor((cpx + SIZE / 2 - 1) / TILE);
+        var r0 = Math.floor((cpy - SIZE / 2) / TILE);
+        var r1 = Math.floor((cpy + SIZE / 2 - 1) / TILE);
+        for (var r = r0; r <= r1; r++) {
+            for (var c = c0; c <= c1; c++) {
+                placeTile(tiles, c, r, cz);
+            }
+        }
+
+        ctx.clearRect(0, 0, SIZE, SIZE);
+        drawNorthArrow(ctx);
+        drawPolygonOnCanvas(ctx, geometry, cpx, cpy);
+        drawMarker(ctx, SIZE / 2, SIZE / 2);
+
+        var R = { zoom: cz, cpx: cpx, cpy: cpy, targetId: targetId, token: ++renderToken, siblings: siblings || [] };
+        lastRender = R;
+        if (!siblings) {
+            getSiblings().then(function (list) {
+                var R2 = { zoom: R.zoom, cpx: R.cpx, cpy: R.cpy, targetId: R.targetId, token: R.token, siblings: list };
+                lastRender = R2;
+                drawNeighborContext(ctx, R2);
+            });
+        } else {
+            drawNeighborContext(ctx, R);
+        }
+    }
+
+    function drawNorthArrow(ctx) {
+        var nx = SIZE - 14, ny = 16;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(nx - 5, ny + 5);
+        ctx.lineTo(nx, ny - 6);
+        ctx.lineTo(nx + 5, ny + 5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(20, 40, 60, 0.5)';
+        ctx.fill();
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(20, 40, 60, 0.5)';
+        ctx.fillText('N', nx, ny + 8);
+        ctx.restore();
+    }
+
+    function positionTooltip(btn) {
+        var tw = tooltip.offsetWidth;
+        var th = tooltip.offsetHeight;
+        var btnRect = btn.getBoundingClientRect();
+        var left = btnRect.left + btnRect.width / 2 - tw / 2;
+        var top = btnRect.top - th - 10;
+        if (top < 8) { top = btnRect.bottom + 10; }
+        if (top + th > window.innerHeight - 8) { top = window.innerHeight - th - 8; }
+        if (top < 8) { top = 8; }
+        if (left < 8) left = 8;
+        if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
+
+    function showPreview(btn) {
+        var lat = parseFloat(btn.dataset.lat);
+        var lng = parseFloat(btn.dataset.lng);
+        var hasPoint = isFinite(lat) && isFinite(lng);
+        var name = btn.dataset.buildingName || '';
+
+        if (!tooltip) tooltip = buildTooltip();
+        tooltip.querySelector('[data-role="label"]').textContent = name;
+
+        if (hasPoint) {
+            renderPreview(btn, null);
+        } else {
+            var canvas = tooltip.querySelector('[data-role="canvas"]');
+            var ctx = canvas.getContext('2d');
+            tooltip.querySelector('[data-role="tiles"]').innerHTML = '';
+            ctx.clearRect(0, 0, SIZE, SIZE);
+            drawNorthArrow(ctx);
+        }
+
+        tooltip.style.left = '0px';
+        tooltip.style.top = '0px';
+        tooltip.style.display = 'block';
+        tooltip.style.opacity = '0';
+        positionTooltip(btn);
+        requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
+
+        fetchGeometry(btn.dataset.buildingId || '').then(function (geometry) {
+            if (!geometry) return;
+            renderPreview(btn, geometry);
+            requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
+        });
+    }
+
+    function hidePreview() {
+        if (tooltip) {
+            tooltip.style.opacity = '0';
+            setTimeout(function () { if (tooltip) tooltip.style.display = 'none'; }, 180);
+        }
+    }
+
+    document.addEventListener('mouseenter', function (e) {
+        var btn = e.target.closest('[data-map-preview]');
+        if (!btn) return;
+        if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
+        if (currentBtn === btn) return;
+        if (showDelay) clearTimeout(showDelay);
+        currentBtn = btn;
+        showDelay = setTimeout(function () { showPreview(btn); }, 280);
+    }, true);
+
+    document.addEventListener('mouseleave', function (e) {
+        var btn = e.target.closest('[data-map-preview]');
+        if (!btn) return;
+        if (showDelay) { clearTimeout(showDelay); showDelay = null; }
+        hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 350);
+    }, true);
+
+    document.addEventListener('mouseenter', function (e) {
+        if (!tooltip || !e.target.closest) return;
+        if (e.target.closest('[data-map-preview]')) return;
+        if (e.target === tooltip || tooltip.contains(e.target)) {
+            if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
+        }
+    }, true);
+
+    document.addEventListener('mouseleave', function (e) {
+        if (!tooltip || !e.target.closest) return;
+        if (e.target === tooltip || tooltip.contains(e.target)) {
+            if (!e.relatedTarget || (!tooltip.contains(e.relatedTarget) && !e.relatedTarget.closest('[data-map-preview]'))) {
+                hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 250);
+            }
+        }
+    }, true);
+})();
+</script>
 
 
 

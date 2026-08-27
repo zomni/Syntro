@@ -3,7 +3,7 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
-import { getPrimaryCampusKey } from "../utils/campusConfig.js";
+import { getCurrentCampusKey, getCatalogFileName } from "../utils/campusConfig.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
 import { refreshCurrentMapData } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
@@ -522,7 +522,7 @@ const handleExportStaticBackup = async () => {
   panel.message.textContent = "Guardando respaldo estatico en src/data...";
 
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/frontend-static-backup/save?campus=${getPrimaryCampusKey()}`, {
+    const response = await fetch(`${BACKEND_API_URL}/api/frontend-static-backup/save?campus=${getCurrentCampusKey()}`, {
       method: "POST",
       credentials: "include",
       cache: "no-store",
@@ -680,12 +680,12 @@ const startEquipmentSyncMonitor = () => {
 
 const loadBuildingsCatalog = async () => {
   try {
-    const response = await fetch(`data/pireon_buildings_catalog.json?v=${Date.now()}`, {
+    const response = await fetch(`${getCatalogFileName()}?v=${Date.now()}`, {
       cache: "no-store",
     });
 
     if (!response.ok) {
-      throw new Error("No se pudo cargar pireon_buildings_catalog.json");
+      throw new Error("No se pudo cargar catalogo de edificios");
     }
 
     const catalog = await response.json();

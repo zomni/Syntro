@@ -42,4 +42,6 @@ public class ImportedInventoryItem : AuditableEntity
     public string DeliveryFormPdfFileName { get; set; } = string.Empty;
     public string SourceFile { get; set; } = string.Empty;
     public DateTime ImportedAtUtc { get; set; } = DateTime.UtcNow;
+    public Guid? OrgId { get; set; }
+    public Organization? Organization { get; set; }
 }

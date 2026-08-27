@@ -1591,11 +1591,124 @@ public class AdminController : Controller
 
         var pdfPath = GetInventoryFormPdfPath(item.DeliveryFormPdfFileName);
         if (!System.IO.File.Exists(pdfPath))
-            return NotFound("El formulario PDF asociado ya no esta disponible.");
+        {
+            var legacyPath = Path.Combine(
+                GetInventoryDocumentsDirectory(),
+                Path.GetFileName(item.DeliveryFormPdfFileName));
+            if (!System.IO.File.Exists(legacyPath))
+                return NotFound("El formulario PDF asociado ya no esta disponible.");
+            pdfPath = legacyPath;
+        }
 
         var downloadFileName = BuildInventoryFormPdfDownloadName(item);
         Response.Headers["Content-Disposition"] = $"inline; filename=\"{downloadFileName}\"";
         return File(System.IO.File.ReadAllBytes(pdfPath), "application/pdf");
+    }
+
+    [HttpGet("/admin/inventory/{itemId:guid}/documents/{documentId:guid}")]
+    public async Task<IActionResult> InventoryItemDocument(Guid itemId, Guid documentId)
+    {
+        var document = await _context.InventoryDocuments.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == documentId && x.InventoryItemId == itemId);
+        if (document is null)
+            return NotFound();
+
+        var databasePath = GetDatabaseFilePath();
+        var root = Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "inventory-documents");
+        var filePath = Path.Combine(root, Path.GetFileName(document.StoredFileName));
+        if (!System.IO.File.Exists(filePath))
+            return NotFound("El documento asociado ya no esta disponible.");
+
+        Response.Headers["Content-Disposition"] = $"inline; filename=\"{Path.GetFileName(document.OriginalFileName)}\"";
+        return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType, document.OriginalFileName);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.SuperAdmin}")]
+    [HttpPost("/admin/inventory/{id:guid}/documents")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<IActionResult> UploadInventoryDocument(Guid id, IFormFile? documentFile, CancellationToken cancellationToken)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(new object?[] { id }, cancellationToken);
+        if (item is null)
+            return NotFound();
+
+        if (documentFile is null || documentFile.Length == 0)
+        {
+            TempData["ErrorMessage"] = "Selecciona un archivo para subir.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+
+        if (!documentFile.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["ErrorMessage"] = "Solo se permiten archivos PDF.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+
+        var databasePath = GetDatabaseFilePath();
+        var documentsDir = Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "inventory-documents");
+        Directory.CreateDirectory(documentsDir);
+
+        var storedFileName = $"{item.Id}-{Guid.NewGuid()}-{Path.GetFileName(documentFile.FileName)}";
+        var filePath = Path.Combine(documentsDir, storedFileName);
+
+        await using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await documentFile.CopyToAsync(stream, cancellationToken);
+        }
+
+        var document = new InventoryDocument
+        {
+            InventoryItemId = id,
+            OriginalFileName = documentFile.FileName,
+            StoredFileName = storedFileName,
+            ContentType = documentFile.ContentType,
+            SizeBytes = documentFile.Length,
+            Source = "upload",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        _context.InventoryDocuments.Add(document);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["SuccessMessage"] = $"Documento \"{documentFile.FileName}\" subido correctamente.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.SuperAdmin}")]
+    [HttpPost("/admin/documents/{documentId:guid}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInventoryDocument(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _context.InventoryDocuments.FindAsync(new object?[] { documentId }, cancellationToken);
+        if (document is null)
+            return NotFound();
+
+        var itemId = document.InventoryItemId;
+
+        var databasePath = GetDatabaseFilePath();
+        var filePath = Path.Combine(
+            Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory,
+            "inventory-documents",
+            Path.GetFileName(document.StoredFileName));
+
+        if (System.IO.File.Exists(filePath))
+        {
+            System.IO.File.Delete(filePath);
+        }
+
+        _context.InventoryDocuments.Remove(document);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["SuccessMessage"] = "Documento eliminado.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id = itemId });
+    }
+
+    private string GetInventoryDocumentsDirectory()
+    {
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        return Path.Combine(databaseDirectory, "inventory-documents");
     }
 
 
@@ -2008,6 +2121,11 @@ public class AdminController : Controller
         var availableStatuses = await GetInventoryStatusOptionsAsync();
 
         var query = _context.ImportedInventoryItems.AsNoTracking().AsQueryable();
+
+        if (organizationId.HasValue)
+        {
+            query = query.Where(item => item.OrgId == organizationId);
+        }
 
         if (scopedBuildingIds is not null)
         {
@@ -4025,7 +4143,12 @@ public class AdminController : Controller
                 .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
                 .ToListAsync(),
             Categories = await GetInventoryCategoryOptionsAsync(),
-            Statuses = await GetInventoryStatusOptionsAsync()
+            Statuses = await GetInventoryStatusOptionsAsync(),
+            Documents = await _context.InventoryDocuments
+                .AsNoTracking()
+                .Where(document => document.InventoryItemId == item.Id)
+                .OrderByDescending(document => document.CreatedAtUtc)
+                .ToListAsync()
         };
     }
 

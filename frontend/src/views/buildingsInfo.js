@@ -1,15 +1,25 @@
-// Sin SVG de edificios por ahora.
-// Los edificios se renderizan desde el GeoJSON derivado de la configuración del campus
-// (SPEC 03): archivos `${school}_${campus}_${floor}.json`.
+import { getCurrentCampusKey } from "../utils/campusConfig.js";
 
-import { getPrimaryCampusKey } from "../utils/campusConfig.js";
+export const getCampusBuildings = () => ({
+  [getCurrentCampusKey()]: {},
+});
 
-const campusKey = getPrimaryCampusKey();
+export const getLatLngBuildings = () => ({
+  [getCurrentCampusKey()]: {},
+});
 
-export const campusBuildings = {
-  [campusKey]: {},
-};
+export const campusBuildings = new Proxy({}, {
+    get: function (_, key) {
+        var campusKey = getCurrentCampusKey();
+        if (key === campusKey) return {};
+        return undefined;
+    }
+});
 
-export const latlngBuildings = {
-  [campusKey]: {},
-};
+export const latlngBuildings = new Proxy({}, {
+    get: function (_, key) {
+        var campusKey = getCurrentCampusKey();
+        if (key === campusKey) return {};
+        return undefined;
+    }
+});

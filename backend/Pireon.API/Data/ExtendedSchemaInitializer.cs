@@ -182,6 +182,40 @@ public static class ExtendedSchemaInitializer
             await EnsureColumnAsync(context, "ImportedInventoryItems", "AssignmentNotes", "TEXT NOT NULL DEFAULT ''");
             await EnsureColumnAsync(context, "ImportedInventoryItems", "AssignmentUpdatedAtUtc", "TEXT NULL");
             await EnsureColumnAsync(context, "ImportedInventoryItems", "DeliveryFormPdfFileName", "TEXT NOT NULL DEFAULT ''");
+            await EnsureColumnAsync(context, "ImportedInventoryItems", "OrgId", "TEXT NULL");
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS InventoryDocuments (
+                    Id TEXT NOT NULL CONSTRAINT PK_InventoryDocuments PRIMARY KEY,
+                    InventoryItemId TEXT NOT NULL,
+                    OriginalFileName TEXT NOT NULL,
+                    StoredFileName TEXT NOT NULL,
+                    ContentType TEXT NOT NULL DEFAULT 'application/octet-stream',
+                    SizeBytes INTEGER NOT NULL DEFAULT 0,
+                    Source TEXT NOT NULL DEFAULT '',
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    DeletedAtUtc TEXT NULL,
+                    CreatedBy TEXT NOT NULL DEFAULT '',
+                    UpdatedBy TEXT NOT NULL DEFAULT '',
+                    DeletedBy TEXT NOT NULL DEFAULT '',
+                    Version INTEGER NOT NULL DEFAULT 0,
+                    IsActive INTEGER NOT NULL DEFAULT 1,
+                    CONSTRAINT FK_InventoryDocuments_ImportedInventoryItems_InventoryItemId
+                        FOREIGN KEY (InventoryItemId) REFERENCES ImportedInventoryItems(Id) ON DELETE CASCADE
+                );
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS IX_InventoryDocuments_InventoryItemId
+                ON InventoryDocuments (InventoryItemId);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                UPDATE ImportedInventoryItems
+                SET OrgId = (SELECT Id FROM Organizations WHERE Slug = 'sotero' AND DeletedAtUtc IS NULL LIMIT 1)
+                WHERE OrgId IS NULL;
+                """);
             await EnsureColumnAsync(context, "AuthUsers", "MfaEnabled", "INTEGER NOT NULL DEFAULT 0");
             await EnsureColumnAsync(context, "AuthUsers", "MfaSecretProtected", "TEXT NOT NULL DEFAULT ''");
             await EnsureColumnAsync(context, "AuthUsers", "MfaEnrolledAtUtc", "TEXT NULL");

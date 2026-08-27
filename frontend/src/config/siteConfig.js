@@ -81,10 +81,10 @@ export const loadSites = () => {
         const session = await response.json();
         const remoteSites = Array.isArray(session?.sites) ? session.sites : [];
         if (remoteSites.length === 0) {
-          if (session?.isAuthenticated === false) {
+          if (session?.isAuthenticated === false && sitesSource === "remote") {
             sites = {};
-            sitesSource = "static";
           }
+          sitesSource = "static";
           return;
         }
 
@@ -117,6 +117,16 @@ export const getSite = (campusKey) => sites[campusKey];
 export const hasCampus = (campusKey) => campusKey in sites;
 export const getPrimaryCampusKey = () => Object.keys(sites)[0] || "";
 export const getSitesSource = () => sitesSource;
+
+let activeCampus = "";
+
+export const setActiveCampus = (campus) => {
+  activeCampus = typeof campus === "string" ? campus : "";
+};
+
+export const getActiveCampusKey = () => activeCampus;
+
+export const getCurrentCampusKey = () => activeCampus || getPrimaryCampusKey() || "";
 export const getOrganizationName = () => organizationName;
 export const getOrganizationColor = () => organizationColor;
 

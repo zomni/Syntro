@@ -97,6 +97,7 @@ public class EditInventoryItemViewModel
     public IReadOnlyList<SyncedRoom> Rooms { get; set; } = [];
     public IReadOnlyList<string> Categories { get; set; } = [];
     public IReadOnlyList<string> Statuses { get; set; } = [];
+    public IReadOnlyList<InventoryDocument> Documents { get; set; } = [];
 }
 
 public class InventoryItemFormModel

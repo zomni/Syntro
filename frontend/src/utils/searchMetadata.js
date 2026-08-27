@@ -1,16 +1,16 @@
 import { BACKEND_API_URL } from "../views/map.js";
 
-import { getDataFileNames, getPrimaryCampusKey } from "./campusConfig.js";
+import { getDataFileNames, getCurrentCampusKey } from "./campusConfig.js";
 
 import { loadBuildingBackupBundle, resetBuildingBackupCache } from "./buildingBackupStorage.js?v=20260608b";
 
 const getSearchPath = (campusKey) =>
-  `data/${getDataFileNames(campusKey).search}?v=${Date.now()}`;
+  `${getDataFileNames(campusKey).search}?v=${Date.now()}`;
 
-let searchMetadataCache = null;
-let backendBuildingOverridesCache = null;
-let manualBuildingsCache = null;
-let buildingGeometryOverridesCache = null;
+let searchMetadataCache = new Map();
+let backendBuildingOverridesCache = new Map();
+let manualBuildingsCache = new Map();
+let buildingGeometryOverridesCache = new Map();
 
 const isBuildingId = (id) => Boolean(String(id || "").trim());
 const DEFAULT_FLOOR = 0;
@@ -78,13 +78,14 @@ const extractBuildingMetadata = (feature) => {
   };
 };
 
-const loadBackendBuildingOverrides = async () => {
-  if (backendBuildingOverridesCache) {
-    return backendBuildingOverridesCache;
+const loadBackendBuildingOverrides = async (campus = getCurrentCampusKey()) => {
+  const cached = backendBuildingOverridesCache.get(campus);
+  if (cached) {
+    return cached;
   }
 
   try {
-    const backup = await loadBuildingBackupBundle(getPrimaryCampusKey());
+    const backup = await loadBuildingBackupBundle(campus);
     const items = backup.syncedBuildings;
     const overrides = new Map();
 
@@ -92,22 +93,23 @@ const loadBackendBuildingOverrides = async () => {
       overrides.set(item.externalId, item);
     }
 
-    backendBuildingOverridesCache = overrides;
-    return backendBuildingOverridesCache;
+    backendBuildingOverridesCache.set(campus, overrides);
+    return backendBuildingOverridesCache.get(campus);
   } catch (error) {
     console.error("Error cargando overrides de edificios desde backend:", error);
-    backendBuildingOverridesCache = new Map();
-    return backendBuildingOverridesCache;
+    backendBuildingOverridesCache.set(campus, new Map());
+    return backendBuildingOverridesCache.get(campus);
   }
 };
 
-export const loadBuildingGeometryOverrides = async () => {
-  if (buildingGeometryOverridesCache) {
-    return buildingGeometryOverridesCache;
+export const loadBuildingGeometryOverrides = async (campus = getCurrentCampusKey()) => {
+  const cached = buildingGeometryOverridesCache.get(campus);
+  if (cached) {
+    return cached;
   }
 
   try {
-    const backup = await loadBuildingBackupBundle(getPrimaryCampusKey());
+    const backup = await loadBuildingBackupBundle(campus);
     const items = backup.geometryOverrides;
     const overrides = new Map();
 
@@ -125,12 +127,12 @@ export const loadBuildingGeometryOverrides = async () => {
       }
     }
 
-    buildingGeometryOverridesCache = overrides;
-    return buildingGeometryOverridesCache;
+    buildingGeometryOverridesCache.set(campus, overrides);
+    return buildingGeometryOverridesCache.get(campus);
   } catch (error) {
     console.error("Error cargando overrides de geometria:", error);
-    buildingGeometryOverridesCache = new Map();
-    return buildingGeometryOverridesCache;
+    buildingGeometryOverridesCache.set(campus, new Map());
+    return buildingGeometryOverridesCache.get(campus);
   }
 };
 
@@ -147,20 +149,21 @@ const parseFloorsJson = (floorsJson) => {
   }
 };
 
-export const loadManualBuildings = async () => {
-  if (manualBuildingsCache) {
-    return manualBuildingsCache;
+export const loadManualBuildings = async (campus = getCurrentCampusKey()) => {
+  const cached = manualBuildingsCache.get(campus);
+  if (cached) {
+    return cached;
   }
 
   try {
-    const backup = await loadBuildingBackupBundle(getPrimaryCampusKey());
+    const backup = await loadBuildingBackupBundle(campus);
     const items = backup.manualBuildings;
-    manualBuildingsCache = Array.isArray(items) ? items : [];
-    return manualBuildingsCache;
+    manualBuildingsCache.set(campus, Array.isArray(items) ? items : []);
+    return manualBuildingsCache.get(campus);
   } catch (error) {
     console.error("Error cargando edificios manuales:", error);
-    manualBuildingsCache = [];
-    return manualBuildingsCache;
+    manualBuildingsCache.set(campus, []);
+    return manualBuildingsCache.get(campus);
   }
 };
 
@@ -241,13 +244,14 @@ const applyBackendOverrideToFeature = (feature, backendOverride) => {
   };
 };
 
-export const loadSearchMetadata = async () => {
-  if (searchMetadataCache) {
-    return searchMetadataCache;
+export const loadSearchMetadata = async (campus = getCurrentCampusKey()) => {
+  const cached = searchMetadataCache.get(campus);
+  if (cached) {
+    return cached;
   }
 
   try {
-    const response = await fetch(getSearchPath(getPrimaryCampusKey()), {
+    const response = await fetch(getSearchPath(campus), {
       cache: "no-store",
     });
 
@@ -265,19 +269,19 @@ export const loadSearchMetadata = async () => {
       metadataById.set(metadata.id, metadata);
     }
 
-    searchMetadataCache = metadataById;
-    return metadataById;
+    searchMetadataCache.set(campus, metadataById);
+    return searchMetadataCache.get(campus);
   } catch (error) {
     console.error("Error cargando metadatos desde el índice de búsqueda:", error);
-    searchMetadataCache = new Map();
-    return searchMetadataCache;
+    searchMetadataCache.set(campus, new Map());
+    return searchMetadataCache.get(campus);
   }
 };
 
-export const mergeCatalogWithSearch = async (catalog) => {
-  const metadataById = await loadSearchMetadata();
-  const backendOverridesById = await loadBackendBuildingOverrides();
-  const manualBuildings = await loadManualBuildings();
+export const mergeCatalogWithSearch = async (catalog, campus = getCurrentCampusKey()) => {
+  const metadataById = await loadSearchMetadata(campus);
+  const backendOverridesById = await loadBackendBuildingOverrides(campus);
+  const manualBuildings = await loadManualBuildings(campus);
   const buildings = Array.isArray(catalog?.buildings) ? catalog.buildings : [];
   const mergedBuildings = buildings.map((building) => {
     const metadata = metadataById.get(building.id);
@@ -355,7 +359,7 @@ export const mergeCatalogWithSearch = async (catalog) => {
         .filter(Boolean)
         .join(" "),
       searchPopupContent: manualBuilding.notes || "",
-      campus: manualBuilding.campus || getPrimaryCampusKey(),
+      campus: manualBuilding.campus || campus,
     });
   }
 
@@ -365,10 +369,10 @@ export const mergeCatalogWithSearch = async (catalog) => {
   };
 };
 
-export const mergeGeoJsonWithSearch = async (geoJson) => {
-  const metadataById = await loadSearchMetadata();
-  const backendOverridesById = await loadBackendBuildingOverrides();
-  const geometryOverridesById = await loadBuildingGeometryOverrides();
+export const mergeGeoJsonWithSearch = async (geoJson, campus = getCurrentCampusKey()) => {
+  const metadataById = await loadSearchMetadata(campus);
+  const backendOverridesById = await loadBackendBuildingOverrides(campus);
+  const geometryOverridesById = await loadBuildingGeometryOverrides(campus);
   const features = Array.isArray(geoJson?.features) ? geoJson.features : [];
 
   return {
@@ -412,10 +416,10 @@ export const mergeGeoJsonWithSearch = async (geoJson) => {
 };
 
 export const resetSearchMetadataCaches = () => {
-  searchMetadataCache = null;
-  backendBuildingOverridesCache = null;
-  manualBuildingsCache = null;
-  buildingGeometryOverridesCache = null;
+  searchMetadataCache = new Map();
+  backendBuildingOverridesCache = new Map();
+  manualBuildingsCache = new Map();
+  buildingGeometryOverridesCache = new Map();
   resetBuildingBackupCache();
 };
 

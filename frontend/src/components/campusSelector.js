@@ -253,7 +253,7 @@ let previousSitesSource = getSitesSource();
 const refreshSelectorFromSession = () => {
   const source = getSitesSource();
   populateSelector();
-  if (source === "remote") {
+  if (source === "remote" || (source === "static" && Object.keys(getSites()).length > 0)) {
     rememberCampus();
   } else if (previousSitesSource === "remote") {
     goToFreeMap();

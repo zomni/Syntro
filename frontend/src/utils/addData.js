@@ -19,7 +19,7 @@ import { createMarkers } from "../components/markers.js"; // Create markers for 
 import { latlngBuildings, campusBuildings } from "../views/buildingsInfo.js"; // Buildings info
 
 import { createSvgElement } from "../utils/tools.js"; // Create SVG empty element
-import { getCatalogFileName } from "./campusConfig.js";
+import { getCatalogFileName, getCurrentCampusKey } from "./campusConfig.js";
 import { computeAllowedBuildingIdsForFloor } from "./buildingCatalog.js";
 import {
   loadManualBuildings,
@@ -30,16 +30,16 @@ import {
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
 
-let buildingsCatalogCache = null;
+let buildingsCatalogCache = new Map();
 let renderSequence = 0;
 
-const loadBuildingsCatalog = async () => {
-  if (buildingsCatalogCache) {
-    return buildingsCatalogCache;
+const loadBuildingsCatalog = async (campus = getCurrentCampusKey()) => {
+  if (buildingsCatalogCache.has(campus)) {
+    return buildingsCatalogCache.get(campus);
   }
 
   try {
-    const response = await fetch(`${getCatalogFileName()}?v=${Date.now()}`, {
+    const response = await fetch(`${getCatalogFileName(campus)}?v=${Date.now()}`, {
       cache: "no-store",
     });
 
@@ -48,8 +48,8 @@ const loadBuildingsCatalog = async () => {
     }
 
     const data = await response.json();
-    const mergedData = await mergeCatalogWithSearch(data);
-    buildingsCatalogCache = mergedData;
+    const mergedData = await mergeCatalogWithSearch(data, campus);
+    buildingsCatalogCache.set(campus, mergedData);
     return mergedData;
   } catch (error) {
     console.error("Error cargando catálogo de edificios:", error);
@@ -58,7 +58,8 @@ const loadBuildingsCatalog = async () => {
 };
 
 const getAllowedBuildingIdsForFloor = async (floorNumber) => {
-  const catalog = await loadBuildingsCatalog();
+  const campus = getCurrentCampusKey();
+  const catalog = await loadBuildingsCatalog(campus);
   const buildings = Array.isArray(catalog.buildings) ? catalog.buildings : [];
   return computeAllowedBuildingIdsForFloor(buildings, floorNumber);
 };
@@ -197,7 +198,7 @@ const addBaseFootprintsForMissingBuildings = async (
 
   try {
     const baseJson = await loadFloorGeoJson(school, location, 0);
-    const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson);
+    const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location);
     const fallbackFeatures = (enrichedBaseJson.features || [])
       .filter((feature) => missingIds.has(feature?.properties?.id))
       .map((feature) => cloneFeatureForFloor(feature, floorNumber));
@@ -321,7 +322,7 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       return;
     }
 
-    const enrichedJson = floorJson ? await mergeGeoJsonWithSearch(floorJson) : { features: [] };
+    const enrichedJson = floorJson ? await mergeGeoJsonWithSearch(floorJson, location) : { features: [] };
     const baseFeatures = Array.isArray(enrichedJson.features) ? enrichedJson.features : [];
 
     if (expectedRenderSequence !== renderSequence) {
@@ -394,7 +395,7 @@ export const clearAllMapData = () => {
 };
 
 export const resetBuildingsCatalogCache = () => {
-  buildingsCatalogCache = null;
+  buildingsCatalogCache = new Map();
 };
 
 

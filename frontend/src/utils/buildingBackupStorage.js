@@ -1,13 +1,13 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "./identifiers.js";
-import { getPrimaryCampusKey } from "./campusConfig.js";
+import { getCurrentCampusKey } from "./campusConfig.js";
 
 const STORAGE_PREFIX = identifiers.storage.buildingBackup;
-const STATIC_BACKUP_URL = "data/pireon_buildings_backend_backup.json?v=20260608b";
+const STATIC_BACKUP_URL = "data/sotero_buildings_backend_backup.json?v=20260608b";
 
 let buildingBackupPromise = null;
 
-const defaultCampus = () => getPrimaryCampusKey();
+const defaultCampus = () => getCurrentCampusKey();
 
 const normalizeCampus = (campus) => String(campus || defaultCampus()).trim() || defaultCampus();
 

@@ -5,12 +5,25 @@
 import { goTo } from "@app/goToCampus";
 import { map } from "../views/map.js";
 import { openBuildingPopupLayer, setCurrentOpenFeatureId } from "@app/featureDisplay";
-import { getPrimaryCampusKey } from "./campusConfig.js";
+import { getPrimaryCampusKey, getCurrentCampusKey } from "./campusConfig.js";
+import { hasCampus } from "../config/siteConfig.js";
+import { getCookie } from "./locationCookie.js";
 
 const url = new URL(window.location.href);
 const MAX_ATTEMPTS = 48;
 const RETRY_DELAY_MS = 250;
-const DEFAULT_CAMPUS = getPrimaryCampusKey();
+
+const getDeepLinkCampus = () => {
+  const remembered = getCookie("location");
+  if (remembered && hasCampus(remembered)) {
+    return remembered;
+  }
+  const current = getCurrentCampusKey();
+  if (current && hasCampus(current)) {
+    return current;
+  }
+  return getPrimaryCampusKey();
+};
 
 const clearDeepLinkFromUrl = () => {
   if (!window.history?.replaceState) {
@@ -141,7 +154,7 @@ const loadFeatureFromUrl = () => {
   }
 
   setCurrentOpenFeatureId(featureId);
-  goTo(DEFAULT_CAMPUS);
+  goTo(getDeepLinkCampus());
 
   waitForFloorButtons((floorButtons) => {
     const fallbackFloorButton = getFloorButtonForValue(0) || floorButtons[0] || null;
