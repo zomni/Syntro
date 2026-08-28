@@ -1159,7 +1159,6 @@ window.addEventListener("DOMContentLoaded", () => {
     var MAX_ZOOM = 19;
     var DEFAULT_ZOOM = 17;
     var TILE_SERVERS = ['a', 'b', 'c'];
-    var tileImgCache = {};
     var siblingsPromise = null;
     var renderToken = 0;
     var lastRender = null;
@@ -1182,16 +1181,12 @@ window.addEventListener("DOMContentLoaded", () => {
         var el = document.createElement('div');
         el.style.cssText = 'position:fixed;z-index:9999;background:#fff;border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,0.3);overflow:hidden;opacity:0;transition:opacity .18s ease;display:none;pointer-events:auto;';
         var viewport = document.createElement('div');
-        viewport.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;position:relative;overflow:hidden;background:linear-gradient(180deg,#eef2f5,#dde6eb);';
-        var tiles = document.createElement('div');
-        tiles.setAttribute('data-role', 'tiles');
-        tiles.style.cssText = 'position:absolute;top:0;left:0;';
-        viewport.appendChild(tiles);
+        viewport.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;position:relative;overflow:hidden;background:#eef2f5;';
         var canvas = document.createElement('canvas');
         canvas.setAttribute('data-role', 'canvas');
         canvas.width = SIZE;
         canvas.height = SIZE;
-        canvas.style.cssText = 'position:absolute;top:0;left:0;width:' + SIZE + 'px;height:' + SIZE + 'px;pointer-events:none;z-index:2;';
+        canvas.style.cssText = 'position:absolute;top:0;left:0;width:' + SIZE + 'px;height:' + SIZE + 'px;pointer-events:none;';
         viewport.appendChild(canvas);
         el.appendChild(viewport);
         var label = document.createElement('div');
@@ -1207,32 +1202,82 @@ window.addEventListener("DOMContentLoaded", () => {
         return 'https://' + server + '.tile.openstreetmap.org/' + z + '/' + col + '/' + row + '.png';
     }
 
-    function placeTile(layer, col, row, z) {
+    var pendingTiles = {};
+    var renderState = null;
+
+    function loadTile(col, row, z) {
         var hash = z + '/' + col + '/' + row;
-        var srv = TILE_SERVERS[((col % 3) + 3) % 3];
-        var src = tileUrl(col, row, z, srv);
-        var img = tileImgCache[hash];
-        if (!img) {
-            img = new Image();
-            img.loading = 'eager';
-            img.draggable = false;
-            img._retried = false;
-            img._altSrc = tileUrl(col, row, z, TILE_SERVERS[(TILE_SERVERS.indexOf(srv) + 1) % 3]);
-            img.onerror = function () {
-                if (!img._retried) {
-                    img._retried = true;
-                    img.src = img._altSrc;
-                } else {
-                    img.style.visibility = 'hidden';
-                    delete tileImgCache[hash];
-                }
-            };
-            tileImgCache[hash] = img;
+        var rec = pendingTiles[hash];
+        if (rec) return rec;
+        var img = new Image();
+        img.loading = 'eager';
+        rec = { img: img, loaded: false, failed: false, failCount: 0, col: col, row: row, z: z };
+        img.onload = function () {
+            rec.loaded = true;
+            rec.failed = false;
+            redrawPreview();
+        };
+        img.onerror = function () {
+            rec.failCount = (rec.failCount || 0) + 1;
+            if (rec.failCount < TILE_SERVERS.length) {
+                img.src = tileUrl(col, row, z, TILE_SERVERS[rec.failCount]);
+            } else {
+                rec.failed = true;
+                redrawPreview();
+            }
+        };
+        img.src = tileUrl(col, row, z, TILE_SERVERS[0]);
+        pendingTiles[hash] = rec;
+        return rec;
+    }
+
+    function redrawPreview() {
+        if (renderState) drawAll();
+    }
+
+    function drawAll() {
+        var R = renderState;
+        if (!R) return;
+        var canvas = tooltip.querySelector('[data-role="canvas"]');
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, SIZE, SIZE);
+
+        ctx.fillStyle = '#eef2f5';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+
+        var loadedAny = false;
+        for (var hash in R.tiles) {
+            var rec = R.tiles[hash];
+            if (rec && rec.loaded) {
+                loadedAny = true;
+                ctx.drawImage(rec.img, rec.col * TILE + SIZE / 2 - R.cpx, rec.row * TILE + SIZE / 2 - R.cpy);
+            }
         }
-        img.style.cssText = 'position:absolute;left:' + (col * TILE) + 'px;top:' + (row * TILE) + 'px;width:' + TILE + 'px;height:' + TILE + 'px;display:block;user-select:none;';
-        img.style.visibility = 'visible';
-        img.src = src;
-        layer.appendChild(img);
+
+        if (!loadedAny) {
+            ctx.strokeStyle = 'rgba(100,130,160,0.18)';
+            ctx.lineWidth = 1;
+            for (var x = 0; x <= SIZE; x += 32) {
+                ctx.beginPath();
+                ctx.moveTo(x + 0.5, 0);
+                ctx.lineTo(x + 0.5, SIZE);
+                ctx.stroke();
+            }
+            for (var y = 0; y <= SIZE; y += 32) {
+                ctx.beginPath();
+                ctx.moveTo(0, y + 0.5);
+                ctx.lineTo(SIZE, y + 0.5);
+                ctx.stroke();
+            }
+        }
+
+        drawNorthArrow(ctx);
+        drawPolygonOnCanvas(ctx, R.geometry, R.cpx, R.cpy);
+        drawMarker(ctx, SIZE / 2, SIZE / 2);
+
+        var nctx = { zoom: R.zoom, cpx: R.cpx, cpy: R.cpy, targetId: R.targetId, token: R.token, siblings: R.siblings || [] };
+        drawNeighborContext(ctx, nctx);
+        lastRender = nctx;
     }
 
     function drawMarker(ctx, sx, sy) {
@@ -1374,10 +1419,6 @@ window.addEventListener("DOMContentLoaded", () => {
         var targetId = btn.dataset.buildingId || '';
 
         if (!tooltip) tooltip = buildTooltip();
-        var tiles = tooltip.querySelector('[data-role="tiles"]');
-        var canvas = tooltip.querySelector('[data-role="canvas"]');
-        var ctx = canvas.getContext('2d');
-        tiles.innerHTML = '';
 
         var cz, clng, clat, hasFit = false;
         if (geometry && geometry.coordinates) {
@@ -1399,33 +1440,34 @@ window.addEventListener("DOMContentLoaded", () => {
 
         var cpx = lngToPx(clng, cz);
         var cpy = latToPx(clat, cz);
-        tiles.style.transform = 'translate(' + (SIZE / 2 - cpx) + 'px,' + (SIZE / 2 - cpy) + 'px)';
 
         var c0 = Math.floor((cpx - SIZE / 2) / TILE);
         var c1 = Math.floor((cpx + SIZE / 2 - 1) / TILE);
         var r0 = Math.floor((cpy - SIZE / 2) / TILE);
         var r1 = Math.floor((cpy + SIZE / 2 - 1) / TILE);
+
+        var tileSet = {};
         for (var r = r0; r <= r1; r++) {
             for (var c = c0; c <= c1; c++) {
-                placeTile(tiles, c, r, cz);
+                var hash = cz + '/' + c + '/' + r;
+                tileSet[hash] = loadTile(c, r, cz);
             }
         }
 
-        ctx.clearRect(0, 0, SIZE, SIZE);
-        drawNorthArrow(ctx);
-        drawPolygonOnCanvas(ctx, geometry, cpx, cpy);
-        drawMarker(ctx, SIZE / 2, SIZE / 2);
+        var token = ++renderToken;
+        renderState = {
+            zoom: cz, cpx: cpx, cpy: cpy, targetId: targetId,
+            geometry: geometry || null, tiles: tileSet,
+            token: token, siblings: siblings || null
+        };
+        drawAll();
 
-        var R = { zoom: cz, cpx: cpx, cpy: cpy, targetId: targetId, token: ++renderToken, siblings: siblings || [] };
-        lastRender = R;
         if (!siblings) {
             getSiblings().then(function (list) {
-                var R2 = { zoom: R.zoom, cpx: R.cpx, cpy: R.cpy, targetId: R.targetId, token: R.token, siblings: list };
-                lastRender = R2;
-                drawNeighborContext(ctx, R2);
+                if (!renderState || renderState.token !== token) return;
+                renderState.siblings = list;
+                drawAll();
             });
-        } else {
-            drawNeighborContext(ctx, R);
         }
     }
 
@@ -1471,16 +1513,6 @@ window.addEventListener("DOMContentLoaded", () => {
         if (!tooltip) tooltip = buildTooltip();
         tooltip.querySelector('[data-role="label"]').textContent = name;
 
-        if (hasPoint) {
-            renderPreview(btn, null);
-        } else {
-            var canvas = tooltip.querySelector('[data-role="canvas"]');
-            var ctx = canvas.getContext('2d');
-            tooltip.querySelector('[data-role="tiles"]').innerHTML = '';
-            ctx.clearRect(0, 0, SIZE, SIZE);
-            drawNorthArrow(ctx);
-        }
-
         tooltip.style.left = '0px';
         tooltip.style.top = '0px';
         tooltip.style.display = 'block';
@@ -1488,8 +1520,16 @@ window.addEventListener("DOMContentLoaded", () => {
         positionTooltip(btn);
         requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
 
+        if (!hasPoint) {
+            renderState = {
+                zoom: DEFAULT_ZOOM, cpx: 0, cpy: 0, targetId: '',
+                geometry: null, tiles: {}, token: ++renderToken, siblings: []
+            };
+            drawAll();
+            return;
+        }
+
         fetchGeometry(btn.dataset.buildingId || '').then(function (geometry) {
-            if (!geometry) return;
             renderPreview(btn, geometry);
             requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
         });
@@ -1502,8 +1542,13 @@ window.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function elementOf(node) {
+        return node && node.nodeType === 1 ? node : null;
+    }
+
     document.addEventListener('mouseenter', function (e) {
-        var btn = e.target.closest('[data-map-preview]');
+        var t = elementOf(e.target);
+        var btn = t ? t.closest('[data-map-preview]') : null;
         if (!btn) return;
         if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
         if (currentBtn === btn) return;
@@ -1513,24 +1558,30 @@ window.addEventListener("DOMContentLoaded", () => {
     }, true);
 
     document.addEventListener('mouseleave', function (e) {
-        var btn = e.target.closest('[data-map-preview]');
+        var t = elementOf(e.target);
+        var btn = t ? t.closest('[data-map-preview]') : null;
         if (!btn) return;
         if (showDelay) { clearTimeout(showDelay); showDelay = null; }
         hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 350);
     }, true);
 
     document.addEventListener('mouseenter', function (e) {
-        if (!tooltip || !e.target.closest) return;
-        if (e.target.closest('[data-map-preview]')) return;
-        if (e.target === tooltip || tooltip.contains(e.target)) {
+        if (!tooltip) return;
+        var t = elementOf(e.target);
+        if (!t) return;
+        if (t.closest('[data-map-preview]')) return;
+        if (t === tooltip || tooltip.contains(t)) {
             if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
         }
     }, true);
 
     document.addEventListener('mouseleave', function (e) {
-        if (!tooltip || !e.target.closest) return;
-        if (e.target === tooltip || tooltip.contains(e.target)) {
-            if (!e.relatedTarget || (!tooltip.contains(e.relatedTarget) && !e.relatedTarget.closest('[data-map-preview]'))) {
+        if (!tooltip) return;
+        var t = elementOf(e.target);
+        if (!t) return;
+        if (t === tooltip || tooltip.contains(t)) {
+            var rt = elementOf(e.relatedTarget);
+            if (!rt || (!tooltip.contains(rt) && !rt.closest('[data-map-preview]'))) {
                 hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 250);
             }
         }
