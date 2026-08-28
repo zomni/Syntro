@@ -178,6 +178,8 @@ public class AdminLocationRowViewModel
     public int AssignedInventoryCount { get; set; }
     public int SuggestedInventoryCount { get; set; }
     public string Coordinates { get; set; } = string.Empty;
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
 }
 
 public class AdminActivityViewModel

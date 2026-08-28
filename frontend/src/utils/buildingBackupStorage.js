@@ -1,9 +1,8 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "./identifiers.js";
-import { getCurrentCampusKey } from "./campusConfig.js";
+import { getCurrentCampusKey, getBackupFileName } from "./campusConfig.js";
 
 const STORAGE_PREFIX = identifiers.storage.buildingBackup;
-const STATIC_BACKUP_URL = "data/sotero_buildings_backend_backup.json?v=20260608b";
 
 let buildingBackupPromise = null;
 
@@ -72,7 +71,7 @@ export const loadBuildingStaticBackup = async (campus) => {
   const normalizedCampus = normalizeCampus(campus);
 
   try {
-    const response = await fetch(STATIC_BACKUP_URL, {
+    const response = await fetch(`${getBackupFileName(normalizedCampus)}?v=${Date.now()}`, {
       cache: "no-store",
     });
 

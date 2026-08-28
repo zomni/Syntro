@@ -1823,7 +1823,9 @@ public class AdminController : Controller
                 SuggestedInventoryCount = suggestedInventoryByBuilding.GetValueOrDefault(b.ExternalId, 0),
                 Coordinates = b.CentroidLatitude.HasValue && b.CentroidLongitude.HasValue
                     ? $"{b.CentroidLatitude.Value:F4}, {b.CentroidLongitude.Value:F4}"
-                    : "-"
+                    : "-",
+                Latitude = b.CentroidLatitude,
+                Longitude = b.CentroidLongitude
             })
             .ToList();
 

@@ -64,7 +64,7 @@ public class FrontendStaticBackupController : ControllerBase
         var buildingsPayload = await BuildBuildingsPayloadAsync(normalizedCampus, exportedAt, cancellationToken);
 
         var routesPath = Path.Combine(dataDirectory, "walking_routes_backup.json");
-        var buildingsPath = Path.Combine(dataDirectory, "pireon_buildings_backend_backup.json");
+        var buildingsPath = Path.Combine(dataDirectory, $"{normalizedCampus}_buildings_backend_backup.json");
 
         await WriteJsonAsync(routesPath, routesPayload, cancellationToken);
         await WriteJsonAsync(buildingsPath, buildingsPayload, cancellationToken);

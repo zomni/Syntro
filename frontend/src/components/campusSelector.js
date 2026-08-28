@@ -4,7 +4,7 @@
 
 import { getCookie } from "../utils/locationCookie.js";
 import { goTo, goToFreeMap, getActiveCampus, setDefaultFloor } from "@app/goToCampus";
-import { getSites, hasCampus, loadSites, getOrganizationName, getOrganizationColor, getSiteOrganizationName, getSiteOrganizationColor, getSitesSource } from "../config/siteConfig.js";
+import { getSites, hasCampus, loadSites, getOrganizationName, getOrganizationColor, getSiteOrganizationName, getSiteOrganizationColor } from "../config/siteConfig.js";
 import { identifiers } from "../utils/identifiers.js";
 
 var SelectDiv,
@@ -232,39 +232,35 @@ function closeAllSelect(elmnt) {
 
 document.addEventListener("click", closeAllSelect);
 
-const rememberCampus = () => {
-  const campusKeys = Object.keys(getSites());
-  const defaultCampus = campusKeys[0] || "";
+const applyRememberedCampus = () => {
   const rememberedCampus = getCookie("location");
-  const campus = rememberedCampus && hasCampus(rememberedCampus) ? rememberedCampus : defaultCampus;
-  if (!campus) {
+  if (rememberedCampus && hasCampus(rememberedCampus)) {
+    activateCampus(rememberedCampus, true);
     return;
   }
 
-  if (getActiveCampus() === campus) {
-    return;
-  }
-
-  activateCampus(campus, true);
-};
-
-let previousSitesSource = getSitesSource();
-
-const refreshSelectorFromSession = () => {
-  const source = getSitesSource();
-  populateSelector();
-  if (source === "remote" || (source === "static" && Object.keys(getSites()).length > 0)) {
-    rememberCampus();
-  } else if (previousSitesSource === "remote") {
+  if (getActiveCampus()) {
     goToFreeMap();
   }
-  previousSitesSource = source;
 };
 
-window.addEventListener(identifiers.events.sitesLoaded, () => {
+const refreshSelectorFromSession = () => {
   populateSelector();
-  rememberCampus();
-});
+  applyRememberedCampus();
+};
+
+const applySitesContext = () => {
+  populateSelector();
+
+  if (Object.keys(getSites()).length === 0) {
+    goToFreeMap();
+    return;
+  }
+
+  applyRememberedCampus();
+};
+
+window.addEventListener(identifiers.events.sitesLoaded, applySitesContext);
 
 window.addEventListener(identifiers.events.sessionChanged, refreshSelectorFromSession);
 
@@ -275,5 +271,5 @@ window.addEventListener(identifiers.events.campusChanged, (event) => {
 });
 
 populateSelector();
-rememberCampus();
+applyRememberedCampus();
 loadSites();

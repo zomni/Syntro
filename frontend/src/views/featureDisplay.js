@@ -5,7 +5,7 @@
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
 import { getCurrentCampusKey, getCatalogFileName } from "../utils/campusConfig.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
-import { refreshCurrentMapData } from "@app/goToCampus";
+import { refreshCurrentMapData, goToFreeMap } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
@@ -341,6 +341,12 @@ const resetBuildingEquipmentSummaryCache = () => {
     }
   });
   buildingEquipmentBubbleEntries.clear();
+};
+
+export const clearMapEquipmentState = () => {
+  resetBuildingEquipmentSummaryCache();
+  closeCurrentPopup();
+  clearSelectedLayer();
 };
 
 const loadBuildingEquipmentSummary = async () => {
@@ -2205,7 +2211,16 @@ if (document.readyState === "loading") {
 
 window.addEventListener("pireon-session-changed", (event) => {
   updateBackendSessionCache(event.detail || {});
+
+  if (!event?.detail?.isAuthenticated) {
+    goToFreeMap();
+  }
+
   refreshCurrentPopup();
+});
+
+window.addEventListener("pireon-campus-changed", () => {
+  clearMapEquipmentState();
 });
 
 window.addEventListener("pireon-map-data-refreshed", () => {

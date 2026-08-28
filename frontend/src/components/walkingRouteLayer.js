@@ -76,6 +76,12 @@ export const renderWalkingRoutesLayer = async () => {
     return;
   }
 
+  const campus = activeCampus();
+  if (!campus) {
+    updateButtonState();
+    return;
+  }
+
   try {
     const network = await loadRoutes();
     const nodesById = new Map((network.nodes || []).map((node) => [node.externalId, node]));
@@ -141,6 +147,26 @@ export const initWalkingRouteLayer = () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
       void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
+    }
+  });
+
+  window.addEventListener(identifiers.events.sitesLoaded, () => {
+    resetWalkingRoutesLayerCache();
+    if (routesVisible) {
+      void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
+    }
+  });
+
+  window.addEventListener(identifiers.events.sessionChanged, () => {
+    resetWalkingRoutesLayerCache();
+    if (routesVisible) {
+      void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
     }
   });
 

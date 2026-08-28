@@ -66,7 +66,7 @@
     if (!string.IsNullOrWhiteSpace(userAgent)) { activeFilters.Add($"Agente: {userAgent}"); }
     if (!string.IsNullOrWhiteSpace(dateFrom)) { activeFilters.Add($"Desde: {dateFrom}"); }
     if (!string.IsNullOrWhiteSpace(dateTo)) { activeFilters.Add($"Hasta: {dateTo}"); }
-    if (pageSize != 30) { activeFilters.Add($"Por pagina: {pageSize}"); }
+    if (pageSize != 50) { activeFilters.Add($"Por pagina: {pageSize}"); }
 
     List<KeyValuePair<string, string?>> BuildActivityQuery(int? pageOverride = null, int? pageSizeOverride = null)
     {
@@ -264,23 +264,37 @@
 
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-body">
-        <form method="get" class="inventory-filter-panel">
-            <input type="hidden" name="page" value="1" />
-
+        <div class="d-flex align-items-center gap-1 mb-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#inventoryFilterPanel"
+                    aria-expanded="@(activeFilters.Count > 0 ? "true" : "false")">
+                <i class="bi bi-funnel me-1"></i> Filtros
+                @if (activeFilters.Count > 0)
+                {
+                    <span class="badge bg-primary ms-1">@activeFilters.Count</span>
+                }
+            </button>
             @if (activeFilters.Count > 0)
             {
-                <div class="inventory-filter-active-bar mb-3">
-                    <div class="small text-muted mb-2">Filtros activos (@activeFilters.Count)</div>
-                    <div class="d-flex flex-wrap gap-2">
-                        @foreach (var filter in activeFilters)
-                        {
-                            <div class="inventory-filter-chip">
-                                <span class="fw-semibold">@filter</span>
-                            </div>
-                        }
-                    </div>
-                </div>
+                <a href="/admin/activity" class="btn btn-sm btn-outline-danger" title="Limpiar filtros" aria-label="Limpiar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
             }
+        </div>
+
+        @if (activeFilters.Count > 0)
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var filter in activeFilters)
+                {
+                    <span class="badge bg-light text-muted border">@filter</span>
+                }
+            </div>
+        }
+
+        <div class="collapse" id="inventoryFilterPanel">
+        <form method="get" action="/admin/activity" class="inventory-filter-panel pt-2 border-top">
+            <input type="hidden" name="page" value="1" />
 
             <div class="row g-3">
                 <div class="col-xl-3 col-lg-6">
@@ -375,10 +389,10 @@
                     <div class="inventory-filter-fixed">
                         <div class="filter-title">Acciones</div>
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-outline-primary flex-grow-1">
-                                <i class="bi bi-funnel me-1"></i> Filtrar
+                            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                                <i class="bi bi-check2 me-1"></i> Aplicar
                             </button>
-                            <a href="/admin/activity" class="btn btn-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
+                            <a href="/admin/activity" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
                                 <i class="bi bi-x-circle"></i>
                             </a>
                         </div>
@@ -386,6 +400,7 @@
                 </div>
             </div>
         </form>
+        </div>
 
     </div>
 </div>

@@ -6,19 +6,25 @@ import {
 } from "../utils/campusConfig.js";
 
 describe("campusConfig", () => {
-  test("derives the primary campus key from campuses.js", () => {
-    expect(getPrimaryCampusKey()).toBe("sotero");
+  test("returns no primary campus without an authenticated session", () => {
+    expect(getPrimaryCampusKey()).toBe("");
   });
 
-  test("derives data file names from school + campus key", () => {
-    const names = getDataFileNames();
+  test("derives data file names from school + explicit campus key", () => {
+    const names = getDataFileNames("sotero");
     expect(names.search).toBe("data/cs_sotero_search.json");
     expect(names.floor("0")).toBe("data/cs_sotero_0.json");
     expect(names.floor("b1")).toBe("data/cs_sotero_b1.json");
   });
 
-  test("derives catalog and backup file names from campus key", () => {
-    expect(getCatalogFileName()).toBe("data/sotero_buildings_catalog.json");
-    expect(getBackupFileName()).toBe("data/sotero_buildings_backend_backup.json");
+  test("derives no data file names without a campus", () => {
+    const names = getDataFileNames("");
+    expect(names.search).toBe("data/tmpl__search.json");
+    expect(names.floor("0")).toBe("data/tmpl__0.json");
+  });
+
+  test("derives catalog and backup file names from explicit campus key", () => {
+    expect(getCatalogFileName("sotero")).toBe("data/sotero_buildings_catalog.json");
+    expect(getBackupFileName("sotero")).toBe("data/sotero_buildings_backend_backup.json");
   });
 });

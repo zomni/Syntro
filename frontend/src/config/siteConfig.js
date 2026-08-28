@@ -64,6 +64,7 @@ let sitesSource = "static";
 let organizationName = "";
 let organizationColor = "";
 let sitesLoadedPromise = null;
+let isBackendAuthenticated = null;
 
 export const loadSites = () => {
   if (!sitesLoadedPromise) {
@@ -79,10 +80,16 @@ export const loadSites = () => {
         }
 
         const session = await response.json();
+        isBackendAuthenticated = session?.isAuthenticated === true;
         const remoteSites = Array.isArray(session?.sites) ? session.sites : [];
         if (remoteSites.length === 0) {
-          if (session?.isAuthenticated === false && sitesSource === "remote") {
+          if (session?.isAuthenticated === false) {
             sites = {};
+            organizationName = "";
+            organizationColor = "";
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent(identifiers.events.sitesLoaded));
+            }
           }
           sitesSource = "static";
           return;
@@ -115,7 +122,13 @@ export const loadSites = () => {
 export const getSites = () => sites;
 export const getSite = (campusKey) => sites[campusKey];
 export const hasCampus = (campusKey) => campusKey in sites;
-export const getPrimaryCampusKey = () => Object.keys(sites)[0] || "";
+export const isAuthenticated = () => isBackendAuthenticated === true;
+export const getPrimaryCampusKey = () => {
+  if (isBackendAuthenticated !== true) {
+    return "";
+  }
+  return Object.keys(sites)[0] || "";
+};
 export const getSitesSource = () => sitesSource;
 
 let activeCampus = "";
@@ -126,7 +139,12 @@ export const setActiveCampus = (campus) => {
 
 export const getActiveCampusKey = () => activeCampus;
 
-export const getCurrentCampusKey = () => activeCampus || getPrimaryCampusKey() || "";
+export const getCurrentCampusKey = () => {
+  if (isBackendAuthenticated !== true) {
+    return "";
+  }
+  return getActiveCampusKey() || getPrimaryCampusKey() || "";
+};
 export const getOrganizationName = () => organizationName;
 export const getOrganizationColor = () => organizationColor;
 
@@ -158,6 +176,7 @@ export const updateSiteViewport = (campusKey, viewport) => {
 
 export const resetSitesCache = (keepStatic = true) => {
   sitesLoadedPromise = null;
+  isBackendAuthenticated = null;
   sites = keepStatic ? normalizeStaticSites() : {};
   sitesSource = "static";
   organizationName = "";

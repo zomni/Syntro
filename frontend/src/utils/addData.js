@@ -12,6 +12,7 @@ import {
   onEachFeature,
   currentOpenFeatureId,
   openBuildingPopupLayer,
+  clearMapEquipmentState,
 } from "@app/featureDisplay"; // GeoJSON options + popup state
 
 import { createMarkers } from "../components/markers.js"; // Create markers for the map
@@ -390,6 +391,7 @@ export const addDataToMap = (school, floorNumber, location) => {
 
 export const clearAllMapData = () => {
   layerGroup.clearLayers();
+  clearMapEquipmentState();
   updateEmptyCampusNotice(false);
   hideMapLoading();
 };

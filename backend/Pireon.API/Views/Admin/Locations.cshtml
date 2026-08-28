@@ -1,4 +1,4 @@
-@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+﻿@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @model Pireon.API.ViewModels.AdminLocationsViewModel
 @{
     ViewData["Title"] = "Ubicaciones";
@@ -41,6 +41,7 @@
     }
     var hasActiveFilters = activeFilters.Count > 0;
     var isAdmin = User.IsInRole(Pireon.API.Models.AppRoles.Admin);
+    var isSuperAdmin = User.IsInRole(Pireon.API.Models.AppRoles.SuperAdmin);
     var selectedOrganizationId = Context?.Request?.Query["organizationId"].ToString();
     string NextSortDirection(string column) => Model.SortBy == column && Model.SortDirection == "asc" ? "desc" : "asc";
     string SortArrow(string column) => Model.SortBy != column ? "bi bi-dash-lg" : (Model.SortDirection == "asc" ? "bi bi-chevron-down" : "bi bi-chevron-up");
@@ -99,8 +100,13 @@
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <div class="page-header px-4 py-3 rounded-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
+    <div class="page-header px-4 py-3 rounded-3 d-flex align-items-center gap-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
         <h2 class="fw-bold mb-0 fs-4" style="color: var(--pi-deep);">Ubicaciones</h2>
+        @if (isSuperAdmin)
+        {
+            ViewData["OrganizationSelectorCompact"] = true;
+            @await Html.PartialAsync("_OrganizationSelector")
+        }
     </div>
     <a href="/api/synced-buildings" class="btn btn-outline-secondary" target="_blank">
         <i class="bi bi-box-arrow-up-right me-1"></i> Ver API
@@ -344,8 +350,50 @@
 
 <div class="card border-0 shadow-sm mb-4"> 
     <div class="card-body">
-        <form method="get" class="inventory-filter-panel">
+        <div class="d-flex align-items-center gap-1 mb-2">
+            <button class="btn btn-sm btn-outline-secondary" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#inventoryFilterPanel"
+                    aria-expanded="@(hasActiveFilters ? "true" : "false")">
+                <i class="bi bi-funnel me-1"></i> Filtros
+                @if (hasActiveFilters)
+                {
+                    <span class="badge bg-primary ms-1">@activeFilters.Count</span>
+                }
+            </button>
+            @if (hasActiveFilters)
+            {
+                <a href="/admin/locations" class="btn btn-sm btn-outline-danger" title="Limpiar filtros" aria-label="Limpiar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            }
+        </div>
+
+        @if (hasActiveFilters)
+        {
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var columnFilter in Model.ColumnFilters.Select((filter, index) => new { filter, index }))
+                {
+                    <span class="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
+                        @columnFilter.filter.Label: @columnFilter.filter.Value
+                        <a href="@RemoveColumnFilterUrl(columnFilter.index)" class="text-danger ms-1" title="Quitar filtro" aria-label="Quitar filtro" style="font-size:0.65rem;">
+                            <i class="bi bi-x-lg"></i>
+                        </a>
+                    </span>
+                }
+                @foreach (var filter in activeFilters.Where(filter => !Model.ColumnFilters.Any(columnFilter => $"{columnFilter.Label}: {columnFilter.Value}" == filter)))
+                {
+                    <span class="badge bg-light text-muted border">@filter</span>
+                }
+            </div>
+        }
+
+        <div class="collapse" id="inventoryFilterPanel">
+        <form method="get" action="/admin/locations" class="inventory-filter-panel pt-2 border-top">
             <input type="hidden" name="page" value="1" />
+            @if (!string.IsNullOrEmpty(selectedOrganizationId))
+            {
+                <input type="hidden" name="organizationId" value="@selectedOrganizationId" />
+            }
             <input type="hidden" name="sortBy" value="@Model.SortBy" />
             <input type="hidden" name="sortDirection" value="@Model.SortDirection" />
             @foreach (var columnFilter in Model.ColumnFilters)
@@ -354,45 +402,7 @@
                 <input type="hidden" name="filterValue" value="@columnFilter.Value" />
             }
 
-            @if (hasActiveFilters)
-            {
-                <div class="inventory-filter-active-bar mb-3">
-                    <div class="small text-muted mb-2">Filtros activos (@activeFilters.Count)</div>
-                    <div class="d-flex flex-wrap gap-2">
-                        @foreach (var columnFilter in Model.ColumnFilters.Select((filter, index) => new { filter, index }))
-                        {
-                            <div class="inventory-filter-chip">
-                                <span class="chip-label">@columnFilter.filter.Label</span>
-                                <span class="chip-value">@columnFilter.filter.Value</span>
-                                <a href="@RemoveColumnFilterUrl(columnFilter.index)"
-                                   class="chip-remove"
-                                   title="Quitar filtro"
-                                   aria-label="Quitar filtro">
-                                    <i class="bi bi-x-lg"></i>
-                                </a>
-                            </div>
-                        }
-
-                        @foreach (var filter in activeFilters.Where(filter => !Model.ColumnFilters.Any(columnFilter => $"{columnFilter.Label}: {columnFilter.Value}" == filter)))
-                        {
-                            <div class="inventory-filter-chip passive">
-                                <span class="chip-value">@filter</span>
-                            </div>
-                        }
-                    </div>
-                </div>
-            }
-
             <div class="row g-3">
-                <div class="col-xl-3 col-lg-6">
-                    <div class="inventory-filter-fixed">
-                        <div class="filter-title">Organizacion</div>
-                        @{
-                            ViewData["OrganizationSelectorCompact"] = false;
-                        }
-                        @await Html.PartialAsync("_OrganizationSelector")
-                    </div>
-                </div>
                 <div class="col-xl-3 col-lg-6 position-relative js-autocomplete">
                     <div class="inventory-filter-fixed">
                         <div class="filter-title">Busqueda general</div>
@@ -466,10 +476,10 @@
                     <div class="inventory-filter-fixed">
                         <div class="filter-title">Acciones</div>
                         <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-outline-primary flex-grow-1">
-                                <i class="bi bi-funnel me-1"></i> Filtrar
+                            <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                                <i class="bi bi-check2 me-1"></i> Aplicar
                             </button>
-                            <a href="/admin/locations" class="btn btn-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
+                            <a href="/admin/locations" class="btn btn-sm btn-outline-secondary" title="Limpiar filtros" aria-label="Limpiar filtros">
                                 <i class="bi bi-x-circle"></i>
                             </a>
                         </div>
@@ -477,6 +487,7 @@
                 </div>
             </div>
         </form>
+        </div>
     </div>
 </div>
 
@@ -536,7 +547,12 @@
                                    class="btn btn-sm btn-outline-info"
                                    target="pireon-map"
                                    onclick="window.open(this.href, 'pireon-map'); return false;"
-                                   title="Ir al edificio en el mapa">
+                                   title="Ir al edificio en el mapa"
+                                   data-map-preview="true"
+                                   data-lat="@(loc.Latitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")"
+                                   data-lng="@(loc.Longitude?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "")"
+                                   data-building-name="@loc.DisplayName"
+                                   data-building-id="@loc.ExternalId">
                                     <i class="bi bi-map"></i>
                                 </a>
                                 @if (isAdmin)
@@ -774,6 +790,444 @@ window.addEventListener("DOMContentLoaded", () => {
 
   document.querySelectorAll(".js-autocomplete").forEach(bindSuggestions);
 });
+</script>
+<script>
+(function () {
+    var TILE = 256;
+    var SIZE = 256;                 // tamaño visible del tooltip (px) - compacto
+    var PAD = 18;                   // margen alrededor de la forma dentro del canvas
+    var MIN_ZOOM = 14;
+    var MAX_ZOOM = 19;
+    var DEFAULT_ZOOM = 17;
+    var TILE_SERVERS = ['a', 'b', 'c'];
+    var siblingsPromise = null;
+    var renderToken = 0;
+    var lastRender = null;
+    var showDelay = null;
+    var hideDelay = null;
+    var currentBtn = null;
+    var tooltip = null;
+    var geometryCache = {};
+    var currentZoom = DEFAULT_ZOOM;
+
+    function lonToTileX(lng, z) { return (lng + 180) / 360 * Math.pow(2, z); }
+    function latToTileY(lat, z) {
+        var rad = lat * Math.PI / 180;
+        return (1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z);
+    }
+    function lngToPx(lng, z) { return lonToTileX(lng, z) * TILE; }
+    function latToPx(lat, z) { return latToTileY(lat, z) * TILE; }
+
+    function buildTooltip() {
+        var el = document.createElement('div');
+        el.style.cssText = 'position:fixed;z-index:9999;background:#fff;border-radius:10px;box-shadow:0 6px 28px rgba(0,0,0,0.3);overflow:hidden;opacity:0;transition:opacity .18s ease;display:none;pointer-events:auto;';
+        var viewport = document.createElement('div');
+        viewport.style.cssText = 'width:' + SIZE + 'px;height:' + SIZE + 'px;position:relative;overflow:hidden;background:#eef2f5;';
+        var canvas = document.createElement('canvas');
+        canvas.setAttribute('data-role', 'canvas');
+        canvas.width = SIZE;
+        canvas.height = SIZE;
+        canvas.style.cssText = 'position:absolute;top:0;left:0;width:' + SIZE + 'px;height:' + SIZE + 'px;pointer-events:none;';
+        viewport.appendChild(canvas);
+        el.appendChild(viewport);
+        var label = document.createElement('div');
+        label.setAttribute('data-role', 'label');
+        label.className = 'small fw-semibold p-1 text-center text-truncate';
+        label.style.cssText = 'color:#0f172a;max-width:' + SIZE + 'px;position:relative;z-index:3;';
+        el.appendChild(label);
+        document.body.appendChild(el);
+        return el;
+    }
+
+    function tileUrl(col, row, z, server) {
+        return 'https://' + server + '.tile.openstreetmap.org/' + z + '/' + col + '/' + row + '.png';
+    }
+
+    var pendingTiles = {};
+    var renderState = null;
+
+    function loadTile(col, row, z) {
+        var hash = z + '/' + col + '/' + row;
+        var rec = pendingTiles[hash];
+        if (rec) return rec;
+        var img = new Image();
+        img.loading = 'eager';
+        rec = { img: img, loaded: false, failed: false, failCount: 0, col: col, row: row, z: z };
+        img.onload = function () {
+            rec.loaded = true;
+            rec.failed = false;
+            redrawPreview();
+        };
+        img.onerror = function () {
+            rec.failCount = (rec.failCount || 0) + 1;
+            if (rec.failCount < TILE_SERVERS.length) {
+                img.src = tileUrl(col, row, z, TILE_SERVERS[rec.failCount]);
+            } else {
+                rec.failed = true;
+                redrawPreview();
+            }
+        };
+        img.src = tileUrl(col, row, z, TILE_SERVERS[0]);
+        pendingTiles[hash] = rec;
+        return rec;
+    }
+
+    function redrawPreview() {
+        if (renderState) drawAll();
+    }
+
+    function drawAll() {
+        var R = renderState;
+        if (!R) return;
+        var canvas = tooltip.querySelector('[data-role="canvas"]');
+        var ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, SIZE, SIZE);
+
+        ctx.fillStyle = '#eef2f5';
+        ctx.fillRect(0, 0, SIZE, SIZE);
+
+        var loadedAny = false;
+        for (var hash in R.tiles) {
+            var rec = R.tiles[hash];
+            if (rec && rec.loaded) {
+                loadedAny = true;
+                ctx.drawImage(rec.img, rec.col * TILE + SIZE / 2 - R.cpx, rec.row * TILE + SIZE / 2 - R.cpy);
+            }
+        }
+
+        if (!loadedAny) {
+            ctx.strokeStyle = 'rgba(100,130,160,0.18)';
+            ctx.lineWidth = 1;
+            for (var x = 0; x <= SIZE; x += 32) {
+                ctx.beginPath();
+                ctx.moveTo(x + 0.5, 0);
+                ctx.lineTo(x + 0.5, SIZE);
+                ctx.stroke();
+            }
+            for (var y = 0; y <= SIZE; y += 32) {
+                ctx.beginPath();
+                ctx.moveTo(0, y + 0.5);
+                ctx.lineTo(SIZE, y + 0.5);
+                ctx.stroke();
+            }
+        }
+
+        drawNorthArrow(ctx);
+        drawPolygonOnCanvas(ctx, R.geometry, R.cpx, R.cpy);
+        drawMarker(ctx, SIZE / 2, SIZE / 2);
+
+        var nctx = { zoom: R.zoom, cpx: R.cpx, cpy: R.cpy, targetId: R.targetId, token: R.token, siblings: R.siblings || [] };
+        drawNeighborContext(ctx, nctx);
+        lastRender = nctx;
+    }
+
+    function drawMarker(ctx, sx, sy) {
+        ctx.beginPath();
+        ctx.arc(sx, sy - 8, 7, 0, Math.PI * 2);
+        ctx.fillStyle = '#e11d48';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(sx - 5, sy - 3);
+        ctx.lineTo(sx, sy + 5);
+        ctx.lineTo(sx + 5, sy - 3);
+        ctx.fillStyle = '#e11d48';
+        ctx.fill();
+    }
+
+    function drawPolygonOnCanvas(ctx, geometry, centerPxX, centerPxY) {
+        if (!geometry || !geometry.coordinates) return;
+        var rings = geometry.type === 'Polygon' ? geometry.coordinates
+            : (geometry.type === 'MultiPolygon'
+                ? geometry.coordinates.reduce(function (all, polygon) { return all.concat(polygon); }, [])
+                : []);
+        if (!Array.isArray(rings) || rings.length === 0) return;
+
+        var drawRings = [];
+        rings.forEach(function (ring) {
+            if (!Array.isArray(ring) || ring.length < 3) return;
+            var pts = ring.map(function (c) {
+                return [
+                    SIZE / 2 + (lngToPx(c[0], currentZoom) - centerPxX),
+                    SIZE / 2 + (latToPx(c[1], currentZoom) - centerPxY)
+                ];
+            });
+            drawRings.push(pts);
+        });
+        if (drawRings.length === 0) return;
+
+        ctx.beginPath();
+        drawRings.forEach(function (pts) {
+            pts.forEach(function (p, i) {
+                if (i === 0) ctx.moveTo(p[0], p[1]);
+                else ctx.lineTo(p[0], p[1]);
+            });
+            ctx.closePath();
+        });
+        ctx.fillStyle = 'rgba(51, 136, 255, 0.18)';
+        ctx.fill('evenodd');
+        ctx.strokeStyle = '#3388ff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+    }
+
+    function geometryBBox(geometry) {
+        var rings = geometry.type === 'Polygon' ? geometry.coordinates
+            : (geometry.type === 'MultiPolygon' ? geometry.coordinates.flat() : []);
+        var minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+        (rings || []).forEach(function (ring) {
+            ring.forEach(function (c) {
+                var lng = c[0], lat = c[1];
+                if (lng < minLng) minLng = lng;
+                if (lng > maxLng) maxLng = lng;
+                if (lat < minLat) minLat = lat;
+                if (lat > maxLat) maxLat = lat;
+            });
+        });
+        return { minLng: minLng, maxLng: maxLng, minLat: minLat, maxLat: maxLat };
+    }
+
+    function computeFitZoom(bbox) {
+        var avgLat = (bbox.minLat + bbox.maxLat) / 2;
+        var rad = avgLat * Math.PI / 180;
+        var cos = Math.max(0.1, Math.cos(rad));
+        var spanLng = (bbox.maxLng - bbox.minLng) / 360 * 256;
+        var spanLat = (bbox.maxLat - bbox.minLat) / 360 * 256 / cos;
+        var target = SIZE - 2 * PAD;
+        var z = Math.floor(Math.log2(target / Math.max(Math.max(spanLng, spanLat), 0.0001)));
+        if (z < MIN_ZOOM) z = MIN_ZOOM;
+        if (z > MAX_ZOOM) z = MAX_ZOOM;
+        return z;
+    }
+
+    function fetchGeometry(buildingId) {
+        if (!buildingId) return Promise.resolve(null);
+        if (geometryCache[buildingId]) return Promise.resolve(geometryCache[buildingId]);
+        var url = '/api/synced-buildings/' + encodeURIComponent(buildingId) + '/geometry';
+        return fetch(url, { credentials: 'include', cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (data) {
+                geometryCache[buildingId] = data || null;
+                return data;
+            })
+            .catch(function () { return null; });
+    }
+
+    function getSiblings() {
+        if (siblingsPromise) return siblingsPromise;
+        siblingsPromise = fetch('/api/synced-buildings', { credentials: 'include', cache: 'no-store' })
+            .then(function (r) { return r.ok ? r.json() : []; })
+            .catch(function () { return []; });
+        return siblingsPromise;
+    }
+
+    function drawNeighborContext(ctx, R) {
+        if (!R || R.token !== renderToken) return;
+        if (!R.siblings || R.siblings.length === 0) return;
+        var near = [];
+        R.siblings.forEach(function (b) {
+            if (!b || !b.externalId || b.externalId === R.targetId) return;
+            var lat = Number(b.centroidLatitude), lng = Number(b.centroidLongitude);
+            if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return;
+            var sx = SIZE / 2 + (lngToPx(lng, R.zoom) - R.cpx);
+            var sy = SIZE / 2 + (latToPx(lat, R.zoom) - R.cpy);
+            if (sx < -12 || sx > SIZE + 12 || sy < -12 || sy > SIZE + 12) return;
+            near.push({ b: b, sx: sx, sy: sy });
+        });
+        if (near.length === 0) return;
+        near.forEach(function (n) {
+            ctx.beginPath();
+            ctx.arc(n.sx, n.sy, 3, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(30, 60, 90, 0.34)';
+            ctx.fill();
+        });
+        near.slice(0, 9).forEach(function (n) {
+            var name = String(n.b.displayName || n.b.shortName || n.b.externalId || '');
+            if (name.length > 17) name = name.slice(0, 16) + '…';
+            ctx.font = '7.5px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.fillStyle = 'rgba(20, 45, 70, 0.5)';
+            ctx.fillText(name, n.sx, n.sy - 7);
+        });
+    }
+
+    function renderPreview(btn, geometry, siblings) {
+        var lat = parseFloat(btn.dataset.lat);
+        var lng = parseFloat(btn.dataset.lng);
+        var targetId = btn.dataset.buildingId || '';
+
+        if (!tooltip) tooltip = buildTooltip();
+
+        var cz, clng, clat, hasFit = false;
+        if (geometry && geometry.coordinates) {
+            var bbox = geometryBBox(geometry);
+            if (isFinite(bbox.minLng) && isFinite(bbox.minLat) && bbox.minLng <= bbox.maxLng && bbox.minLat <= bbox.maxLat) {
+                cz = computeFitZoom(bbox);
+                clng = (bbox.minLng + bbox.maxLng) / 2;
+                clat = (bbox.minLat + bbox.maxLat) / 2;
+                hasFit = true;
+            }
+        }
+        if (!hasFit) {
+            if (!isFinite(lat) || !isFinite(lng)) { lat = 0; lng = 0; }
+            cz = DEFAULT_ZOOM;
+            clng = lng;
+            clat = lat;
+        }
+        currentZoom = cz;
+
+        var cpx = lngToPx(clng, cz);
+        var cpy = latToPx(clat, cz);
+
+        var c0 = Math.floor((cpx - SIZE / 2) / TILE);
+        var c1 = Math.floor((cpx + SIZE / 2 - 1) / TILE);
+        var r0 = Math.floor((cpy - SIZE / 2) / TILE);
+        var r1 = Math.floor((cpy + SIZE / 2 - 1) / TILE);
+
+        var tileSet = {};
+        for (var r = r0; r <= r1; r++) {
+            for (var c = c0; c <= c1; c++) {
+                var hash = cz + '/' + c + '/' + r;
+                tileSet[hash] = loadTile(c, r, cz);
+            }
+        }
+
+        var token = ++renderToken;
+        renderState = {
+            zoom: cz, cpx: cpx, cpy: cpy, targetId: targetId,
+            geometry: geometry || null, tiles: tileSet,
+            token: token, siblings: siblings || null
+        };
+        drawAll();
+
+        if (!siblings) {
+            getSiblings().then(function (list) {
+                if (!renderState || renderState.token !== token) return;
+                renderState.siblings = list;
+                drawAll();
+            });
+        }
+    }
+
+    function drawNorthArrow(ctx) {
+        var nx = SIZE - 14, ny = 16;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(nx - 5, ny + 5);
+        ctx.lineTo(nx, ny - 6);
+        ctx.lineTo(nx + 5, ny + 5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(20, 40, 60, 0.5)';
+        ctx.fill();
+        ctx.font = 'bold 9px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(20, 40, 60, 0.5)';
+        ctx.fillText('N', nx, ny + 8);
+        ctx.restore();
+    }
+
+    function positionTooltip(btn) {
+        var tw = tooltip.offsetWidth;
+        var th = tooltip.offsetHeight;
+        var btnRect = btn.getBoundingClientRect();
+        var left = btnRect.left + btnRect.width / 2 - tw / 2;
+        var top = btnRect.top - th - 10;
+        if (top < 8) { top = btnRect.bottom + 10; }
+        if (top + th > window.innerHeight - 8) { top = window.innerHeight - th - 8; }
+        if (top < 8) { top = 8; }
+        if (left < 8) left = 8;
+        if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+        tooltip.style.left = left + 'px';
+        tooltip.style.top = top + 'px';
+    }
+
+    function showPreview(btn) {
+        var lat = parseFloat(btn.dataset.lat);
+        var lng = parseFloat(btn.dataset.lng);
+        var hasPoint = isFinite(lat) && isFinite(lng);
+        var name = btn.dataset.buildingName || '';
+
+        if (!tooltip) tooltip = buildTooltip();
+        tooltip.querySelector('[data-role="label"]').textContent = name;
+
+        tooltip.style.left = '0px';
+        tooltip.style.top = '0px';
+        tooltip.style.display = 'block';
+        tooltip.style.opacity = '0';
+        positionTooltip(btn);
+        requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
+
+        if (!hasPoint) {
+            renderState = {
+                zoom: DEFAULT_ZOOM, cpx: 0, cpy: 0, targetId: '',
+                geometry: null, tiles: {}, token: ++renderToken, siblings: []
+            };
+            drawAll();
+            return;
+        }
+
+        fetchGeometry(btn.dataset.buildingId || '').then(function (geometry) {
+            renderPreview(btn, geometry);
+            requestAnimationFrame(function () { tooltip.style.opacity = '1'; });
+        });
+    }
+
+    function hidePreview() {
+        if (tooltip) {
+            tooltip.style.opacity = '0';
+            setTimeout(function () { if (tooltip) tooltip.style.display = 'none'; }, 180);
+        }
+    }
+
+    function elementOf(node) {
+        return node && node.nodeType === 1 ? node : null;
+    }
+
+    document.addEventListener('mouseenter', function (e) {
+        var t = elementOf(e.target);
+        var btn = t ? t.closest('[data-map-preview]') : null;
+        if (!btn) return;
+        if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
+        if (currentBtn === btn) return;
+        if (showDelay) clearTimeout(showDelay);
+        currentBtn = btn;
+        showDelay = setTimeout(function () { showPreview(btn); }, 280);
+    }, true);
+
+    document.addEventListener('mouseleave', function (e) {
+        var t = elementOf(e.target);
+        var btn = t ? t.closest('[data-map-preview]') : null;
+        if (!btn) return;
+        if (showDelay) { clearTimeout(showDelay); showDelay = null; }
+        hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 350);
+    }, true);
+
+    document.addEventListener('mouseenter', function (e) {
+        if (!tooltip) return;
+        var t = elementOf(e.target);
+        if (!t) return;
+        if (t.closest('[data-map-preview]')) return;
+        if (t === tooltip || tooltip.contains(t)) {
+            if (hideDelay) { clearTimeout(hideDelay); hideDelay = null; }
+        }
+    }, true);
+
+    document.addEventListener('mouseleave', function (e) {
+        if (!tooltip) return;
+        var t = elementOf(e.target);
+        if (!t) return;
+        if (t === tooltip || tooltip.contains(t)) {
+            var rt = elementOf(e.relatedTarget);
+            if (!rt || (!tooltip.contains(rt) && !rt.closest('[data-map-preview]'))) {
+                hideDelay = setTimeout(function () { currentBtn = null; hidePreview(); }, 250);
+            }
+        }
+    }, true);
+})();
 </script>
 
 
