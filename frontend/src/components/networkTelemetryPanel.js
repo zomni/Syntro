@@ -212,8 +212,11 @@ const initTelemetryPanel = () => {
       void togglePanel();
     });
 
-    const routeToggle = document.getElementById("walking-route-toggle") || document.getElementById("route-planner-toggle");
-    if (routeToggle) {
+    const routePanel = document.getElementById("route-planner-panel");
+    const routeToggle = document.getElementById("route-planner-toggle");
+    if (routePanel) {
+      routePanel.insertAdjacentElement("afterend", toggle);
+    } else if (routeToggle) {
       routeToggle.insertAdjacentElement("afterend", toggle);
     } else {
       topActions.appendChild(toggle);

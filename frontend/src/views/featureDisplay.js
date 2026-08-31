@@ -3,9 +3,9 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
-import { getCurrentCampusKey, getCatalogFileName } from "../utils/campusConfig.js";
+import { getCurrentCampusKey, getCatalogFileName, getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
-import { refreshCurrentMapData, goToFreeMap } from "@app/goToCampus";
+import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
@@ -304,6 +304,7 @@ const updateBackendSessionCache = (session) => {
   backendSessionCache = session || { isAuthenticated: false, isAdmin: false };
   backendSessionCacheAt = Date.now();
   backendSessionIsAdmin = !!backendSessionCache.isAdmin;
+  window.syntroBackendSession = backendSessionCache;
   updateExportBackupButtonVisibility();
 };
 
@@ -350,6 +351,11 @@ export const clearMapEquipmentState = () => {
 };
 
 const loadBuildingEquipmentSummary = async () => {
+  const session = await loadBackendSession();
+  if (!session?.isAuthenticated) {
+    return new Map();
+  }
+
   if (buildingEquipmentSummaryCache) {
     return buildingEquipmentSummaryCache;
   }
@@ -370,6 +376,7 @@ const loadBuildingEquipmentSummary = async () => {
             map.set(item.buildingExternalId, {
               total: Number(item.total) || 0,
               byType: item.byType || {},
+              byFloor: item.byFloor || {},
             });
           }
         }
@@ -422,33 +429,13 @@ const getFrontendCacheVersion = () => {
 };
 
 const getBackendStatusPanelMarkup = () => `
-  <div class="backend-status-header">
-    <div class="backend-status-title-row">
-      <span id="backend-status-indicator" class="backend-status-indicator"></span>
-      <div>
-        <div id="backend-status-text" class="backend-status-subtitle backend-status-inline">Consultando estado...</div>
-      </div>
-    </div>
-    <div class="backend-status-actions">
-      <button id="backend-refresh-button" type="button" class="backend-refresh-button" data-backend-refresh hidden>
-        Actualizar mapa
-      </button>
-      <button id="backend-export-backup-button" type="button" class="backend-refresh-button backend-export-backup-button" data-backend-export hidden>
-        Guardar respaldo
-      </button>
-    </div>
-  </div>
-  <div class="backend-status-body">
-    <div class="backend-status-line">
-      <span class="backend-status-label">Cache</span>
-      <span id="backend-version">Sin datos</span>
-    </div>
-    <div class="backend-status-line">
-      <span class="backend-status-label">BDD</span>
-      <span id="backend-last-change">Sin registros</span>
-    </div>
-    <div id="backend-sync-message" class="backend-status-message">No hay actualizaciones pendientes.</div>
-  </div>
+  <span id="backend-status-indicator" class="backend-status-indicator" aria-label="Estado de la API"></span>
+  <span id="backend-status-text" hidden></span>
+  <span id="backend-version" hidden></span>
+  <span id="backend-last-change" hidden></span>
+  <span id="backend-sync-message" hidden></span>
+  <button id="backend-refresh-button" type="button" hidden></button>
+  <button id="backend-export-backup-button" type="button" hidden></button>
 `;
 
 const ensureBackendStatusPanel = () => {
@@ -467,8 +454,7 @@ const ensureBackendStatusPanel = () => {
   if (!root) return null;
 
   const hasCompleteMarkup =
-    root.querySelector(".backend-status-header") &&
-    root.querySelector(".backend-status-body") &&
+    root.querySelector(".backend-status-indicator[data-backend-minimal]") &&
     root.querySelector("#backend-status-text") &&
     root.querySelector("#backend-version") &&
     root.querySelector("#backend-last-change") &&
@@ -476,6 +462,7 @@ const ensureBackendStatusPanel = () => {
 
   if (!hasCompleteMarkup) {
     root.innerHTML = getBackendStatusPanelMarkup();
+    root.querySelector(".backend-status-indicator")?.setAttribute("data-backend-minimal", "true");
   }
 
   const panel = {
@@ -1068,20 +1055,34 @@ const normalizeDeviceType = (value) => {
 };
 
 const getDeviceTypeLabel = (type) => {
+  if (type === "all") return "TODOS";
   const label = INVENTORY_CATEGORY_LABELS[type];
   return label || type;
 };
 
 const getDeviceTypeCount = (byType, type) => Number(byType?.[type]) || 0;
 
-const getSummaryCountForType = (summary, type = globalEquipmentTypeFilter) => {
+const getSummaryCountForType = (summary, type = globalEquipmentTypeFilter, floor = null) => {
   if (!summary) return 0;
+  const floorSummary = floor === null ? summary : summary.byFloor?.[String(floor)];
+  // Keep counts visible for responses from an older API without byFloor data.
+  if (floor !== null && !floorSummary && !summary.byFloor) return getSummaryCountForType(summary, type, null);
+  if (floor !== null && !floorSummary) return 0;
+  const scopedSummary = floorSummary || summary;
   const normalizedType = normalizeDeviceType(type || "all");
   if (!normalizedType || normalizedType === "all") {
-    return Number(summary.total) || 0;
+    return Number(scopedSummary.total) || 0;
   }
 
-  return getDeviceTypeCount(summary.byType, normalizedType);
+  return getDeviceTypeCount(scopedSummary.byType, normalizedType);
+};
+
+const getSelectedMapFloor = () => {
+  const selected = document.querySelector(
+    "#floorButtons-container .selectedFloorButton, #map-floor-filter-buttons .selectedFloorButton"
+  );
+  const floor = Number(selected?.textContent);
+  return Number.isFinite(floor) ? floor : 0;
 };
 
 const getAvailableDeviceTypes = (devices) => {
@@ -1118,8 +1119,9 @@ const createEquipmentBubbleIcon = (count) =>
   });
 
 const updateBuildingEquipmentBubbles = () => {
+  const selectedFloor = getSelectedMapFloor();
   buildingEquipmentBubbleEntries.forEach((entry) => {
-    const count = getSummaryCountForType(entry.summary);
+    const count = getSummaryCountForType(entry.summary, globalEquipmentTypeFilter, selectedFloor);
 
     if (count <= 0) {
       if (entry.marker && map.hasLayer(entry.marker)) {
@@ -1137,9 +1139,22 @@ const updateBuildingEquipmentBubbles = () => {
   });
 };
 
+const syncFloorButtonsToFilter = () => {
+  const floorHost = document.getElementById("map-floor-filter-buttons");
+  if (!floorHost) return;
+
+  document.querySelectorAll("#floorButtons-container [id^='b']").forEach((button) => {
+    if (button.id !== "bLoc") floorHost.appendChild(button);
+  });
+};
+
 const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const topActions = document.getElementById("top-actions");
-  if (!topActions || document.getElementById("map-equipment-type-filter")) return;
+  if (!topActions) return;
+  if (document.getElementById("map-equipment-type-filter")) {
+    syncFloorButtonsToFilter();
+    return;
+  }
 
   const types = ["all", ...getAvailableSummaryTypes(summaryMap)];
 
@@ -1180,6 +1195,12 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   typeLabel.appendChild(select);
   wrapper.appendChild(typeLabel);
 
+  const floorFilter = document.createElement("div");
+  floorFilter.className = "map-floor-filter";
+  floorFilter.innerHTML = '<small>Piso</small><div id="map-floor-filter-buttons" class="map-floor-filter-buttons"></div>';
+  wrapper.appendChild(floorFilter);
+  syncFloorButtonsToFilter();
+
   const labelToggle = document.createElement("button");
   labelToggle.id = "building-label-toggle";
   labelToggle.className = "dashboard-link building-label-toggle is-muted";
@@ -1200,7 +1221,10 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   bindWalkingRouteToggleButton(routeVisibilityToggle);
 
   const routeToggle = document.getElementById("route-planner-toggle");
-  if (routeToggle) {
+  const navigationGroup = document.getElementById("navigation-panel-group");
+  if (navigationGroup) {
+    topActions.insertBefore(wrapper, navigationGroup);
+  } else if (routeToggle) {
     topActions.insertBefore(wrapper, routeToggle);
   } else {
     topActions.appendChild(wrapper);
@@ -1246,7 +1270,9 @@ const filterDevicesByFloor = (devices, roomsInFloor, allRooms, floor) => {
       return true;
     }
 
-    return Number(deviceFloor) === Number(floor);
+    const normalizedDeviceFloor = Number(deviceFloor);
+    return normalizedDeviceFloor === Number(floor) ||
+      (Number(floor) === 1 && normalizedDeviceFloor === 0);
   });
 };
 
@@ -1574,13 +1600,14 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   return html;
 };
 
-const buildViewSelectorHtml = (featureId, currentView) => {
+const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) => {
   const views = [
     { key: "summary", label: "Resumen" },
     { key: "rooms", label: "Salas" },
-    { key: "devices", label: "Equipos" },
     { key: "history", label: "Historial" },
   ];
+
+  if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
 
   let html = `
     <div style="margin-top:10px;">
@@ -1798,7 +1825,7 @@ const getFeaturePopupHtml = async (feature) => {
   const featureId = feature?.properties?.id || "Sin ID";
   const currentFloor = feature?.properties?.floor ?? 0;
   const floorLabel = currentFloor;
-  const currentView = popupViewState[featureId] || "summary";
+  let currentView = popupViewState[featureId] || "summary";
   const deviceQuery = popupDeviceQueryState[featureId] || "";
   const devicePageSize = popupDevicePageSizeState[featureId] || 5;
   const deviceSearchOpen = popupDeviceSearchOpenState[featureId] || false;
@@ -1806,30 +1833,35 @@ const getFeaturePopupHtml = async (feature) => {
   const deviceScope = popupDeviceScopeState[featureId] || "";
   const selectedRoomId = popupRoomState[featureId] || null;
 
-  const link = `${HOST_URL}/?id=${featureId}&zoom=20`;
-  const copyButtonHtml = `<button class="floorButton" onclick='
-    navigator.clipboard.writeText("${link}")
-      .then(()=>{this.innerHTML="Copiado ✓"})
-      .catch(()=>{alert("No se pudo copiar el enlace: ${link}");});
-    ' style="${getActionButtonStyle()}">Copiar enlace</button>`;
-
   if (!building) {
     return `
       <div style="${popupShellStyle}">
         <b>${escapeHtml(feature?.properties?.name || "Edificio sin nombre")}</b><br/>
-        ID: ${escapeHtml(featureId)}<br/>
-        Piso: ${escapeHtml(floorLabel)}<br/><br/>
-        ${copyButtonHtml}
+        ${buildFloorSelectorHtml(null, currentFloor)}
       </div>
     `;
   }
 
-  const [buildingDetail, allRooms, backendInventoryItems, buildingActivityItems, backendSession] = await Promise.all([
+  const backendSession = await loadBackendSession();
+  const featureName = getFeatureDisplayName(feature, building);
+  const canViewEquipment = Boolean(backendSession?.isAuthenticated);
+
+  if (!canViewEquipment) {
+    currentView = "summary";
+    popupViewState[featureId] = "summary";
+    return `
+      <div style="${popupShellStyle}">
+        <b style="font-size:16px;">${escapeHtml(featureName)}</b>
+        ${buildFloorSelectorHtml(building, currentFloor)}
+      </div>
+    `;
+  }
+
+  const [buildingDetail, allRooms, backendInventoryItems, buildingActivityItems] = await Promise.all([
     loadBuildingDetail(building),
     loadRoomsForBuilding(building),
     loadBackendInventoryForBuilding(building),
     loadBuildingActivity(building),
-    loadBackendSession(),
   ]);
 
   loadedEquipmentRevision = pendingEquipmentRevision || loadedEquipmentRevision;
@@ -1840,7 +1872,6 @@ const getFeaturePopupHtml = async (feature) => {
   const roomsInFloor = filterRoomsByFloor(allRooms, currentFloor);
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
 
-  const featureName = getFeatureDisplayName(feature, building);
   const type = building?.type || "unknown";
   const shortName = building?.shortName || "";
   const responsibleArea = building?.responsibleArea || "";
@@ -1862,12 +1893,14 @@ const getFeaturePopupHtml = async (feature) => {
   if (floors) detailsHtml += `<br/>Pisos: ${escapeHtml(floors)}`;
 
   detailsHtml += `<br/>Salas edificio: ${escapeHtml(allRooms.length)}`;
-  detailsHtml += `<br/>Equipos edificio: ${escapeHtml(allDevices.length)}`;
   detailsHtml += `<br/>Salas piso ${escapeHtml(floorLabel)}: ${escapeHtml(roomsInFloor.length)}`;
-  detailsHtml += `<br/>Equipos piso ${escapeHtml(floorLabel)}: ${escapeHtml(devicesInFloor.length)}`;
+  if (canViewEquipment) {
+    detailsHtml += `<br/>Equipos edificio: ${escapeHtml(allDevices.length)}`;
+    detailsHtml += `<br/>Equipos piso ${escapeHtml(floorLabel)}: ${escapeHtml(devicesInFloor.length)}`;
+  }
 
   detailsHtml += buildFloorSelectorHtml(building, currentFloor);
-  detailsHtml += buildViewSelectorHtml(featureId, currentView);
+  detailsHtml += buildViewSelectorHtml(featureId, currentView, canViewEquipment);
 
   if (currentView === "summary") {
     detailsHtml += `
@@ -1901,7 +1934,7 @@ const getFeaturePopupHtml = async (feature) => {
     detailsHtml += `</div>`;
   }
 
-  if (currentView === "devices") {
+  if (currentView === "devices" && canViewEquipment) {
     const devicesForView = deviceScope === "building" ? allDevices : devicesInFloor;
     const devicesScopeLabel = deviceScope === "building" ? "edificio completo" : `piso ${floorLabel}`;
 
@@ -1929,7 +1962,6 @@ const getFeaturePopupHtml = async (feature) => {
 
   detailsHtml += `
     <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
-      ${copyButtonHtml}
       ${adminActionsHtml}
     </div>
   `;
@@ -2031,8 +2063,9 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
   ensureMapEquipmentTypeFilter(summaryMap);
 
   const summary = summaryMap.get(featureId);
-  const total = getSummaryCountForType(summary);
-  if ((Number(summary?.total) || 0) <= 0) return;
+  const selectedFloor = getSelectedMapFloor();
+  const total = getSummaryCountForType(summary, globalEquipmentTypeFilter, selectedFloor);
+  if (total <= 0) return;
 
   const center = layer.getBounds().getCenter();
   const marker = L.marker(center, {
@@ -2213,7 +2246,11 @@ window.addEventListener("syntro-session-changed", (event) => {
   updateBackendSessionCache(event.detail || {});
 
   if (!event?.detail?.isAuthenticated) {
-    goToFreeMap();
+    clearMapEquipmentState();
+    goTo(getPrimaryCampusKey());
+  } else {
+    clearMapEquipmentState();
+    refreshCurrentMapData();
   }
 
   refreshCurrentPopup();

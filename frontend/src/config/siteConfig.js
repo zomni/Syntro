@@ -30,10 +30,49 @@ const normalizeStaticSites = () => {
   return sites;
 };
 
-let sites = normalizeStaticSites();
+let sites;
 let sitesSource = "static";
 let sitesLoadedPromise = null;
 let isBackendAuthenticated = null;
+const viewportStorageKey = "syntro-site-viewport-overrides";
+
+const readViewportOverrides = () => {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.localStorage.getItem(viewportStorageKey);
+    const parsed = stored ? JSON.parse(stored) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeViewportOverride = (campusKey, minZoom, maxZoom) => {
+  if (typeof window === "undefined") return;
+  try {
+    const overrides = readViewportOverrides();
+    overrides[campusKey] = { minZoom, maxZoom };
+    window.localStorage.setItem(viewportStorageKey, JSON.stringify(overrides));
+  } catch {
+    // La persistencia local no debe impedir usar el mapa.
+  }
+};
+
+const applyViewportOverrides = (siteMap) => {
+  const overrides = readViewportOverrides();
+  Object.entries(overrides).forEach(([campusKey, viewport]) => {
+    const site = siteMap[campusKey];
+    const minZoom = Number(viewport?.minZoom);
+    const maxZoom = Number(viewport?.maxZoom);
+    if (site && Number.isInteger(minZoom) && Number.isInteger(maxZoom)) {
+      site.minZoom = minZoom;
+      site.maxZoom = maxZoom;
+    }
+  });
+  return siteMap;
+};
+
+sites = applyViewportOverrides(normalizeStaticSites());
 
 export const loadSites = () => {
   if (!sitesLoadedPromise) {
@@ -50,7 +89,7 @@ export const loadSites = () => {
 
         const session = await response.json();
         isBackendAuthenticated = session?.isAuthenticated === true;
-        sites = normalizeStaticSites();
+        sites = applyViewportOverrides(normalizeStaticSites());
         sitesSource = "static";
         if (typeof window !== "undefined") {
           window.dispatchEvent(new CustomEvent(identifiers.events.sitesLoaded));
@@ -69,9 +108,6 @@ export const getSite = (campusKey) => sites[campusKey];
 export const hasCampus = (campusKey) => campusKey in sites;
 export const isAuthenticated = () => isBackendAuthenticated === true;
 export const getPrimaryCampusKey = () => {
-  if (isBackendAuthenticated !== true) {
-    return "";
-  }
   return Object.keys(sites)[0] || "";
 };
 export const getSitesSource = () => sitesSource;
@@ -85,9 +121,6 @@ export const setActiveCampus = (campus) => {
 export const getActiveCampusKey = () => activeCampus;
 
 export const getCurrentCampusKey = () => {
-  if (isBackendAuthenticated !== true) {
-    return "";
-  }
   return getActiveCampusKey() || getPrimaryCampusKey() || "";
 };
 
@@ -105,13 +138,14 @@ export const updateSiteViewport = (campusKey, viewport) => {
 
   site.minZoom = minZoom;
   site.maxZoom = maxZoom;
+  writeViewportOverride(campusKey, minZoom, maxZoom);
   return true;
 };
 
 export const resetSitesCache = (keepStatic = true) => {
   sitesLoadedPromise = null;
   isBackendAuthenticated = null;
-  sites = keepStatic ? normalizeStaticSites() : {};
+  sites = keepStatic ? applyViewportOverrides(normalizeStaticSites()) : {};
   sitesSource = "static";
 };
 

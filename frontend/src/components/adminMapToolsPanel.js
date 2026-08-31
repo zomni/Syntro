@@ -3,6 +3,7 @@ import { identifiers } from "../utils/identifiers.js";
 const panelId = "admin-map-tools-panel";
 const buttonsId = "admin-map-tools-buttons";
 const statusId = "admin-map-tools-status";
+const toggleId = "admin-map-tools-toggle";
 const activeModes = new Map([
   ["manual-building", "manual-building-editor-toggle"],
   ["geometry-shape", "building-shape-editor-button"],
@@ -24,10 +25,23 @@ export const ensureAdminMapToolsPanel = () => {
   panel.id = panelId;
   panel.className = "admin-map-tools-panel";
   panel.innerHTML = `
-    <div class="admin-map-tools-title">Herramientas admin</div>
-    <div id="${buttonsId}" class="admin-map-tools-buttons"></div>
-    <div id="${statusId}" class="admin-map-tools-status"></div>
+    <button id="${toggleId}" type="button" class="admin-map-tools-title" aria-expanded="false">
+      <span>Herramientas admin</span><span class="admin-map-tools-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div id="${buttonsId}" class="admin-map-tools-buttons" hidden></div>
+    <div id="${statusId}" class="admin-map-tools-status" hidden></div>
   `;
+
+  panel.querySelector(`#${toggleId}`)?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const toggle = event.currentTarget;
+    const expanded = toggle.getAttribute("aria-expanded") === "true";
+    toggle.setAttribute("aria-expanded", String(!expanded));
+    const buttons = panel.querySelector(`#${buttonsId}`);
+    if (buttons) buttons.hidden = expanded;
+    panel.classList.toggle("is-expanded", !expanded);
+  });
 
   document.body.appendChild(panel);
   scheduleAdminMapToolsPanelPosition();
@@ -74,7 +88,9 @@ export const getAdminMapToolsButtons = () => {
 
 export const setAdminMapToolsStatus = (message) => {
   const status = document.getElementById(statusId);
-  if (status) status.textContent = message || "";
+  if (!status) return;
+  status.textContent = message || "";
+  status.hidden = !String(message || "").trim();
 };
 
 export const setAdminMapToolActiveMode = (mode) => {

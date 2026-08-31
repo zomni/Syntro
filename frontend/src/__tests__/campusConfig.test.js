@@ -6,8 +6,8 @@ import {
 } from "../utils/campusConfig.js";
 
 describe("campusConfig", () => {
-  test("returns no primary campus without an authenticated session", () => {
-    expect(getPrimaryCampusKey()).toBe("");
+  test("keeps the primary campus available without an authenticated session", () => {
+    expect(getPrimaryCampusKey()).toBe("sotero");
   });
 
   test("derives data file names from school + explicit campus key", () => {

@@ -1,6 +1,7 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "../utils/identifiers.js";
-import { goToFreeMap } from "@app/goToCampus";
+import { goTo } from "@app/goToCampus";
+import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 
 const rootId = "session-mode-badge";
 const inventoryLinkId = "session-inventory-link";
@@ -29,7 +30,7 @@ const logout = async () => {
       cache: "no-store",
     });
   } finally {
-    goToFreeMap();
+    goTo(getPrimaryCampusKey());
     window.dispatchEvent(new CustomEvent(identifiers.events.sessionChanged, { detail: { isAuthenticated: false } }));
     window.location.reload();
   }
@@ -68,6 +69,7 @@ const getSessionKey = (session) =>
   ].join("|");
 
 const renderBadge = (badge, session) => {
+  const statusPanel = document.getElementById("map-status-panel");
   badge.className = `session-mode-badge ${session?.isAdmin ? "is-admin" : "is-viewer"}`;
   badge.dataset.authenticated = session?.isAuthenticated ? "true" : "false";
 
@@ -86,6 +88,11 @@ const renderBadge = (badge, session) => {
         : ""
     }
   `;
+
+  if (statusPanel) {
+    statusPanel.classList.add("embedded-backend-status");
+    badge.prepend(statusPanel);
+  }
 
   badge.querySelector(".session-mode-logout")?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -107,7 +114,9 @@ const ensureBadge = () => {
   badge.addEventListener("mousedown", (event) => event.stopPropagation());
   badge.addEventListener("dblclick", (event) => event.stopPropagation());
 
-  statusPanel.insertAdjacentElement("afterend", badge);
+  statusPanel.classList.add("embedded-backend-status");
+  badge.appendChild(statusPanel);
+  document.body.appendChild(badge);
   return badge;
 };
 

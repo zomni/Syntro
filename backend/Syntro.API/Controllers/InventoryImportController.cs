@@ -230,13 +230,15 @@ public class InventoryImportController : ControllerBase
             .GroupBy(item => new
             {
                 item.AssignedBuildingExternalId,
-                Category = item.InferredCategory == "" ? "other" : item.InferredCategory
+                Category = item.InferredCategory == "" ? "other" : item.InferredCategory,
+                item.AssignedFloor
             })
             .Select(group => new
             {
                 buildingExternalId = group.Key.AssignedBuildingExternalId,
                 category = group.Key.Category,
-                count = group.Count()
+                count = group.Count(),
+                AssignedFloor = group.Key.AssignedFloor
             })
             .ToListAsync(cancellationToken);
 
@@ -248,7 +250,34 @@ public class InventoryImportController : ControllerBase
                 total = group.Sum(row => row.count),
                 byType = group
                     .GroupBy(row => row.category)
-                    .ToDictionary(typeGroup => typeGroup.Key, typeGroup => typeGroup.Sum(row => row.count))
+                    .ToDictionary(typeGroup => typeGroup.Key, typeGroup => typeGroup.Sum(row => row.count)),
+                byFloor = group
+                    .SelectMany(row => (row.AssignedFloor ?? 0) == 0
+                        ? new[] { 0, 1 }.Select(floor => new
+                        {
+                            floor,
+                            row.category,
+                            row.count
+                        })
+                        : new[]
+                        {
+                            new
+                            {
+                                floor = row.AssignedFloor ?? 0,
+                                row.category,
+                                row.count
+                            }
+                        })
+                    .GroupBy(row => row.floor)
+                    .ToDictionary(
+                        floorGroup => floorGroup.Key.ToString(),
+                        floorGroup => new
+                        {
+                            total = floorGroup.Sum(row => row.count),
+                            byType = floorGroup
+                                .GroupBy(row => row.category)
+                                .ToDictionary(typeGroup => typeGroup.Key, typeGroup => typeGroup.Sum(row => row.count))
+                        })
             })
             .OrderBy(summary => summary.buildingExternalId)
             .ToList();

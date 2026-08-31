@@ -106,6 +106,29 @@
     pointer-events: auto;
 }
 
+/* Keep the search bar beside the session card instead of over the map actions. */
+#searchContainer {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    z-index: 1201;
+    margin: 0;
+    transform: translateX(-50%);
+}
+
+#searchContainer.autocomplete-searchContainer {
+    width: min(390px, calc(100vw - 24px));
+    height: 44px;
+    border-radius: 999px;
+    box-shadow: 0 10px 24px rgba(var(--pi-ink-rgb), 0.18);
+    overflow: hidden;
+}
+
+#searchContainer.autocomplete-searchContainer .autocomplete-searchBox {
+    width: calc(100% - 100px);
+    height: 42px;
+}
+
 #top-actions {
     position: relative;
     display: flex;
@@ -206,7 +229,7 @@
 
 .session-mode-badge {
     position: fixed;
-    top: 168px;
+    top: 12px;
     left: 12px;
     z-index: 1200;
     display: inline-flex;
@@ -364,10 +387,26 @@
 }
 
 .admin-map-tools-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 2px 0 8px;
+    border: 0;
+    background: transparent;
     margin-bottom: 8px;
     color: var(--pi-primary-deep);
     font: inherit;
     text-align: left;
+    cursor: pointer;
+}
+
+.admin-map-tools-chevron {
+    transition: transform 0.15s ease;
+}
+
+.admin-map-tools-panel.is-expanded .admin-map-tools-chevron {
+    transform: rotate(180deg);
 }
 
 .admin-map-tools-buttons {
@@ -375,6 +414,60 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+}
+
+#navigation-panel-group {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.admin-map-tools-buttons[hidden] {
+    display: none !important;
+}
+
+.admin-map-tools-status[hidden] {
+    display: none !important;
+}
+
+.map-floor-filter {
+    display: grid;
+    gap: 5px;
+    padding-top: 3px;
+    border-top: 1px solid rgba(var(--pi-gray-400-rgb), 0.3);
+}
+
+.map-floor-filter > small {
+    color: var(--pi-gray-500);
+    font: 700 10px/1.2 sans-serif;
+    text-transform: uppercase;
+}
+
+.map-floor-filter-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.map-floor-filter-buttons .floorButton {
+    width: 30px;
+    height: 30px;
+    margin: 0;
+    padding: 2px;
+    font-size: 13px;
+}
+
+.session-mode-badge > #map-status-panel.embedded-backend-status {
+    position: static;
+    order: -1;
+    width: auto;
+    height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
 }
 
 .admin-map-tools-group {
@@ -668,15 +761,28 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     top: 12px;
     left: 12px;
     z-index: 1200;
-    width: min(224px, calc(100vw - 24px));
-    padding: 12px;
-    border-radius: 14px;
+    width: 28px;
+    height: 28px;
+    padding: 8px;
+    border-radius: 999px;
     border: 1px solid rgba(var(--pi-ink-rgb), 0.12);
     background: rgba(var(--pi-surface-rgb), 0.96);
     box-shadow: 0 14px 32px rgba(var(--pi-ink-rgb), 0.18);
-    color: var(--pi-gray-800);
+    color: transparent;
     font-family: sans-serif;
     pointer-events: auto;
+    box-sizing: border-box;
+}
+
+#map-status-panel > :not(.backend-status-indicator) {
+    display: none !important;
+}
+
+#map-status-panel .backend-status-indicator {
+    display: block;
+    width: 12px;
+    height: 12px;
+    margin: 0;
 }
 
 .backend-status-header {
@@ -779,6 +885,14 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
 }
 
 @media (max-width: 700px) {
+    #searchContainer {
+        position: fixed;
+        top: 8px;
+        left: 50%;
+        margin: 0;
+        transform: translateX(-50%);
+    }
+
     #map-status-panel {
         top: 8px;
         left: 8px;
@@ -787,7 +901,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     }
 
     .session-mode-badge {
-        top: 154px;
+        top: 8px;
         left: 8px;
         width: min(210px, calc(100vw - 16px));
     }
@@ -870,9 +984,9 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
 }
 
 .network-telemetry-panel {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+    position: relative;
+    top: auto;
+    right: auto;
     z-index: 1205;
     width: min(340px, calc(100vw - 32px));
     max-height: calc(100vh - 100px);
@@ -1075,9 +1189,9 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
 }
 
 .route-planner-panel {
-    position: absolute;
-    top: calc(100% + 6px);
-    right: 0;
+    position: relative;
+    top: auto;
+    right: auto;
     z-index: 1205;
     width: min(280px, calc(100vw - 32px));
     padding: 12px;
@@ -1408,6 +1522,10 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     margin-top: 4px;
     font-size: 12px;
     line-height: 1.4;
+}
+
+.empty-campus-notice-text:empty {
+    display: none;
 }
 
 .map-loading-overlay {

@@ -19,7 +19,9 @@ import { getSite, hasCampus, setActiveCampus } from "../config/siteConfig.js";
 import { resolveFloorButtonId } from "./floorButtons.js";
 
 const selectFloor = (floorButtonId) => {
-  var floorButtonsId = document.querySelectorAll("#floorButtons-container [id^='b']");
+  var floorButtonsId = document.querySelectorAll(
+    "#floorButtons-container [id^='b'], #map-floor-filter-buttons [id^='b']"
+  );
   floorButtonsId = Array.from(floorButtonsId).map((element) => element.id);
   floorButtonsId.filter((value, index, array) => {
     if (value == floorButtonId) {
@@ -28,11 +30,9 @@ const selectFloor = (floorButtonId) => {
     }
     return false;
   });
-  document.getElementById(floorButtonId).classList.add("selectedFloorButton");
+  document.getElementById(floorButtonId)?.classList.add("selectedFloorButton");
   for (var i = 0; i < floorButtonsId.length; i++) {
-    document
-      .getElementById(floorButtonsId[i])
-      .classList.remove("selectedFloorButton");
+    document.getElementById(floorButtonsId[i])?.classList.remove("selectedFloorButton");
   }
 };
 
@@ -103,7 +103,9 @@ document.getElementById("bLoc").title = "Activar seguimiento de ubicación";
 /////////////////////////////////////////////////////////////////////////////////
 
 const removeFloorButtons = () => {
-  var floorButtons = document.querySelectorAll("#floorButtons-container [id^='b']");
+  var floorButtons = document.querySelectorAll(
+    "#floorButtons-container [id^='b'], #map-floor-filter-buttons [id^='b']"
+  );
 
   for (var i = 0; i < floorButtons.length; i++) {
     if (floorButtons[i].id == "bLoc") continue;
@@ -165,15 +167,23 @@ export const goTo = (campus, options = {}) => {
     button.innerHTML = parseInt(campus_info["floors"][i]);
     button.classList.add("floorButton");
     
-    document.getElementById("floorButtons-container").appendChild(button);
+    button.hidden = parseInt(button.innerHTML, 10) === 0;
+    const floorHost = document.getElementById("map-floor-filter-buttons") || document.getElementById("floorButtons-container");
+    floorHost.appendChild(button);
   }
 
   showSearch(location, campus_info["school"]);
 
-  document.querySelectorAll("#floorButtons-container [id^='b']").forEach((button) => {
+  document.querySelectorAll("#floorButtons-container [id^='b'], #map-floor-filter-buttons [id^='b']").forEach((button) => {
     if (button.id == "bLoc") return;
     
     button.onclick = function () {
+      const defaultFloorId = resolveFloorButtonId(0, campus_info["floors"]);
+      if (button.id !== defaultFloorId && button.classList.contains("selectedFloorButton")) {
+        const defaultButton = document.getElementById(defaultFloorId);
+        if (defaultButton) forceChange(campus_info["school"], defaultButton.id, location);
+        return;
+      }
       forceChange(campus_info["school"], button.id, location);
     };
   });
@@ -189,7 +199,7 @@ export const setDefaultFloor = (campus) => {
   }
 
   const campusInfo = getSite(campus);
-  const buttonId = resolveFloorButtonId(campusInfo["defaultFloor"], campusInfo["floors"]);
+  const buttonId = resolveFloorButtonId(0, campusInfo["floors"]);
 
   if (document.getElementById(buttonId)) {
     forceChange(campusInfo["school"], buttonId, campus);

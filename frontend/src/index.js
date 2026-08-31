@@ -5,7 +5,7 @@ import { applyBrandingTheme } from "./config/appConfig.js";
 // fallback to the static campuses.js template.
 import { loadSites, isAuthenticated, getPrimaryCampusKey } from "./config/siteConfig.js";
 import { identifiers } from "./utils/identifiers.js";
-import { goTo, goToFreeMap, setDefaultFloor } from "@app/goToCampus";
+import { goTo, setDefaultFloor } from "@app/goToCampus";
 
 // Search for the feature by id/alias in URL
 import "@app/findByUrl";
@@ -66,8 +66,6 @@ const applyInitialCampus = () => {
   if (primary) {
     goTo(primary);
     setDefaultFloor(primary);
-  } else {
-    goToFreeMap();
   }
 };
 

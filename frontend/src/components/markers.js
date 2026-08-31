@@ -2,7 +2,6 @@
 //////////////////////////// Add markers on the map /////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////
 
-import { HOST_URL } from "../views/map.js";
 import { reArrange } from "../utils/tools.js";
 
 const createMarker = (element) => {
@@ -18,13 +17,7 @@ const createMarker = (element) => {
     className: "marker_circle",
   });
   var centerPoint = reArrange(element.properties.center);
-  var link =`${HOST_URL}/?id=${element.properties.id}&zoom=20`;
-  var copyButtonHtml = `<button class="floorButton copy-button" onclick='
-    navigator.clipboard.writeText("${link}")
-      .then(()=>{this.innerHTML="Enlace copiado &check;"})
-      .catch(()=>{alert("No se pudo copiar el enlace : ${link}");});
-    '>Copiar enlace</button>`;
-  var marker = L.marker(centerPoint, { icon: mapIcon }).bindPopup(markerName +", piso "+ element.properties.floor.toString() + copyButtonHtml);
+  var marker = L.marker(centerPoint, { icon: mapIcon }).bindPopup(markerName +", piso "+ element.properties.floor.toString());
   return marker;
 };
 

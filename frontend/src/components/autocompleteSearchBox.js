@@ -320,7 +320,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
   };
 
   const fetchEquipmentMatches = async (query, buildingLookup, resultLimit) => {
-    if (!query) {
+    if (!query || window.syntroBackendSession?.isAuthenticated !== true) {
       return [];
     }
 
@@ -875,6 +875,13 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
 /////////////////////////////////////////////////////////////////////////////////
 
 export const loadSearchBox = (path, campus) => {
+  // Avoid stacking multiple autocomplete instances after campus/session refreshes.
+  const searchContainer = document.getElementById("searchContainer");
+  if (searchContainer) {
+    searchContainer.innerHTML = "";
+    searchContainer.classList.remove("autocomplete-searchContainer");
+  }
+
   var options = {
     geojsonServiceAddress: path,
     placeholderMessage: "Edificios, Salas, Equipos",
