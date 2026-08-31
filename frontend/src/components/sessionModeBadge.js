@@ -1,6 +1,5 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "../utils/identifiers.js";
-import { setCookie } from "../utils/locationCookie.js";
 import { goToFreeMap } from "@app/goToCampus";
 
 const rootId = "session-mode-badge";
@@ -30,7 +29,6 @@ const logout = async () => {
       cache: "no-store",
     });
   } finally {
-    setCookie("location", "", -1);
     goToFreeMap();
     window.dispatchEvent(new CustomEvent(identifiers.events.sessionChanged, { detail: { isAuthenticated: false } }));
     window.location.reload();
@@ -66,7 +64,6 @@ const getSessionKey = (session) =>
     session?.isAuthenticated ? "1" : "0",
     session?.isAdmin ? "admin" : "viewer",
     session?.username || "",
-    session?.organizationId || "",
     getSiteFingerprint(session),
   ].join("|");
 

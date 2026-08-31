@@ -7,17 +7,12 @@ import { map } from "../views/map.js";
 import { openBuildingPopupLayer, setCurrentOpenFeatureId } from "@app/featureDisplay";
 import { getPrimaryCampusKey, getCurrentCampusKey } from "./campusConfig.js";
 import { hasCampus } from "../config/siteConfig.js";
-import { getCookie } from "./locationCookie.js";
 
 const url = new URL(window.location.href);
 const MAX_ATTEMPTS = 48;
 const RETRY_DELAY_MS = 250;
 
 const getDeepLinkCampus = () => {
-  const remembered = getCookie("location");
-  if (remembered && hasCampus(remembered)) {
-    return remembered;
-  }
   const current = getCurrentCampusKey();
   if (current && hasCampus(current)) {
     return current;

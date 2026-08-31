@@ -29,4 +29,4 @@ Replace client-coupled documentation with template documentation and a white-lab
 
 ## Decisiones de implementación
 
-- La guía de white-labeling es parte del README de Pireon y referencia cada SPEC de este bloque.
+- La guía de white-labeling es parte del README de Syntro y referencia cada SPEC de este bloque.

@@ -93,7 +93,7 @@ const updatePreviewLine = () => {
   }
 
   previewLayer = L.polyline(points, {
-    color: "#0f766e",
+    color: "#003366",
     weight: 4,
     dashArray: "8 8",
     lineCap: "round",
@@ -424,7 +424,7 @@ const edgeColor = (status) => {
   const normalized = String(status || "open").toLowerCase();
   if (normalized === "closed") return "#dc2626";
   if (normalized === "restricted") return "#f59e0b";
-  return "#0f766e";
+  return "#003366";
 };
 
 const renderRoutesLayer = async ({
@@ -1261,11 +1261,11 @@ export const initWalkingRouteEditor = async () => {
   syncWalkingRouteEditorForSession(await loadSession());
 };
 
-window.addEventListener("pireon-session-changed", (event) => {
+window.addEventListener("syntro-session-changed", (event) => {
   syncWalkingRouteEditorForSession(event.detail || {});
 });
 
-window.addEventListener("pireon-admin-map-tool-mode", (event) => {
+window.addEventListener("syntro-admin-map-tool-mode", (event) => {
   const mode = event.detail?.mode;
   if (
     !["walking-routes", "walking-route-delete", "walking-route-split", "walking-route-building"].includes(mode) &&
@@ -1276,7 +1276,7 @@ window.addEventListener("pireon-admin-map-tool-mode", (event) => {
   }
 });
 
-window.addEventListener("pireon-building-layer-click", (event) => {
+window.addEventListener("syntro-building-layer-click", (event) => {
   if (!isBuildingConnectMode) return;
 
   event.preventDefault();

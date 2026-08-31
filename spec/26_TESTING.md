@@ -23,8 +23,8 @@
 
 ## Decisiones de implementación
 
-- Backend: proyecto xUnit `Pireon.API.Tests` (SQLite en memoria; los tests nunca usan
-  `pireon.db`). Cubre `PasswordPolicyService`, `BackendAuthService` (bootstrap admin,
+- Backend: proyecto xUnit `Syntro.API.Tests` (SQLite en memoria; los tests nunca usan
+  `syntro.db`). Cubre `PasswordPolicyService`, `BackendAuthService` (bootstrap admin,
   lockout, break-glass), importación Excel (fixture .xlsx generado con ClosedXML),
   reconciliación de inventario, auditoría y servicios de configuración.
 - Frontend: jest + babel (`npm test`) sobre los módulos puros de configuración e

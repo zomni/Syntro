@@ -5,7 +5,7 @@
 import "../lib/leaflet.draw/leaflet.draw.js";
 import { map } from "../views/map.js";
 import { downloadDrawData } from "../utils/downloadDrawData.js"
-import { getCookie } from "../utils/locationCookie.js";
+import { getActiveCampusKey } from "../utils/campusConfig.js";
 
 export var drawLayers = new L.FeatureGroup();
 
@@ -109,7 +109,7 @@ if (url.searchParams.get("draw") == "true") {
 
     map.addControl(drawControl);
 
-    let style = 'z-index: 1000;border: 2px solid #0f766e; border-radius: 25px; height: 60px; width: 80px; color: rgb(100, 100, 100); text-align: center; text-decoration: none; display: block; font-size: 14px; padding: 4px 9px; margin: 1px 4px; cursor: pointer; transition-duration: 0.4s;';  
+    let style = 'z-index: 1000;border: 2px solid #003366; border-radius: 25px; height: 60px; width: 80px; color: rgb(100, 100, 100); text-align: center; text-decoration: none; display: block; font-size: 14px; padding: 4px 9px; margin: 1px 4px; cursor: pointer; transition-duration: 0.4s;';  
     const elem = document.getElementById("top-container");
 
     let btnDownload = document.createElement("button"); 
@@ -119,7 +119,7 @@ if (url.searchParams.get("draw") == "true") {
         var result = confirm("Confirm download");
         if (result) {
             var floorNumber = parseInt(document.getElementsByClassName("selectedFloorButton")[0].innerHTML);
-            downloadDrawData(drawLayers, floorNumber, getCookie("location"));
+            downloadDrawData(drawLayers, floorNumber, getActiveCampusKey());
         }
     });
     elem.appendChild(btnDownload);

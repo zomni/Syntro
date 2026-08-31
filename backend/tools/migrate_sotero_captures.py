@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Migracion one-shot de datos de captura de sotero_map_api -> Pireon.
+Migracion one-shot de datos de captura de sotero_map_api -> Syntro.
 
 Copia NetworkTelemetrySnapshots, NetworkTelemetryObservations, ScheduledScanRuns
 y TelemetryScanSchedules desde la BD de Sotero hacia la organizacion/campus
-indicado de Pireon, sin modificar valores de dominio.
+indicado de Syntro, sin modificar valores de dominio.
 
 - Snapshots/Observations/ScanRuns: reciben GUID nuevo como Id.
 - TelemetryScanSchedules: preserva el Guid original.
 - FK int -> Guid de snapshots se remapea via tabla de traduccion en memoria.
 - FKs int a inventario/equipos/usuarios de Sotero quedan NULL (espacios de IDs
-  incompatibles con Pireon).
-- Campos nuevos de Pireon con defaults: MatchKey='', ScoringSource='rule-only',
+  incompatibles con Syntro).
+- Campos nuevos de Syntro con defaults: MatchKey='', ScoringSource='rule-only',
   MlProbability=NULL, RuleBasedScore=NULL, MlScoredDeviceCount=0.
 - Fechas se copian verbatim (TEXT de SQLite).
 
@@ -265,8 +265,8 @@ def migrate_schedules(src: sqlite3.Connection, dest: sqlite3.Connection, campus:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", required=True, help="Ruta al soteromap.db origen")
-    parser.add_argument("--dest", required=True, help="Ruta al pireon.db destino")
-    parser.add_argument("--campus", default="sotero", help="CampusKey destino en Pireon")
+    parser.add_argument("--dest", required=True, help="Ruta al syntro.db destino")
+    parser.add_argument("--campus", default="sotero", help="CampusKey destino en Syntro")
     parser.add_argument("--apply", action="store_true",
                         help="Ejecuta borrado+migracion. Sin este flag solo informa.")
     args = parser.parse_args()
@@ -311,7 +311,7 @@ def main() -> int:
     print("== CONTEOS ORIGEN (sotero) ==")
     for t, n in src_counts.items():
         print(f"  {t}: {n}")
-    print("== CONTEOS DESTINO (pireon) totales / en scope del campus ==")
+    print("== CONTEOS DESTINO (syntro) totales / en scope del campus ==")
     for t in tables:
         print(f"  {t}: {dest_counts[t]} / {dest_scope[t]}")
 

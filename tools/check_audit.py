@@ -1,5 +1,5 @@
 import sqlite3
-c = sqlite3.connect(r"C:\Users\paolo.vilches\Documents\repos\Pireon\backend\data\pireon.db")
+c = sqlite3.connect(r"C:\Users\paolo.vilches\Documents\repos\Syntro\backend\data\syntro.db")
 print("== TelemetryScanSchedules ==")
 for r in c.execute("SELECT Id, Label, Cron, TimeZone, CampusKey, IsEnabled, SortOrder, CreatedBy, UpdatedBy, DeletedBy, DeletedAtUtc FROM TelemetryScanSchedules"):
     print(r)

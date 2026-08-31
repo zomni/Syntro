@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptRoot
 $backendDataRoot = Join-Path $repoRoot "data"
-$frontendRepoRoot = Join-Path (Split-Path -Parent $repoRoot) "pireon"
+$frontendRepoRoot = Join-Path (Split-Path -Parent $repoRoot) "syntro"
 $frontendDataRoot = Join-Path $frontendRepoRoot "src\data"
 $composeFile = Join-Path $repoRoot "docker-compose.yml"
 
@@ -19,7 +19,7 @@ if (-not (Test-Path $PackagePath)) {
 
 New-Item -ItemType Directory -Force -Path $backendDataRoot,(Join-Path $backendDataRoot "inventory-forms"),(Join-Path $backendDataRoot "backups"),(Join-Path $backendDataRoot "data-protection-keys") | Out-Null
 
-$tempRoot = Join-Path $env:TEMP ("pireon-data-import-" + [guid]::NewGuid().ToString("N"))
+$tempRoot = Join-Path $env:TEMP ("syntro-data-import-" + [guid]::NewGuid().ToString("N"))
 $composeRunning = $false
 
 try {
@@ -34,9 +34,9 @@ try {
         docker compose -f $composeFile stop api | Out-Null
     }
 
-    $dbSource = Join-Path $backendPackageRoot "pireon.db"
+    $dbSource = Join-Path $backendPackageRoot "syntro.db"
     if (Test-Path $dbSource) {
-        Copy-Item $dbSource (Join-Path $backendDataRoot "pireon.db") -Force
+        Copy-Item $dbSource (Join-Path $backendDataRoot "syntro.db") -Force
     }
 
     $formsSource = Join-Path $backendPackageRoot "inventory-forms"

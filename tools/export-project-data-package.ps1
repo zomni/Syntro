@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Split-Path -Parent $scriptRoot
 $backendDataRoot = Join-Path $repoRoot "data"
-$frontendRepoRoot = Join-Path (Split-Path -Parent $repoRoot) "pireon"
+$frontendRepoRoot = Join-Path (Split-Path -Parent $repoRoot) "syntro"
 $frontendDataRoot = Join-Path $frontendRepoRoot "src\data"
 $packageRoot = Join-Path $repoRoot "runtime\data-packages"
 
@@ -20,10 +20,10 @@ if (-not (Test-Path $backendDataRoot)) {
 New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
 
 if ([string]::IsNullOrWhiteSpace($OutFile)) {
-    $OutFile = Join-Path $packageRoot ("pireon-data-package-{0}.zip" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+    $OutFile = Join-Path $packageRoot ("syntro-data-package-{0}.zip" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 }
 
-$tempRoot = Join-Path $env:TEMP ("pireon-data-export-" + [guid]::NewGuid().ToString("N"))
+$tempRoot = Join-Path $env:TEMP ("syntro-data-export-" + [guid]::NewGuid().ToString("N"))
 $stagingRoot = Join-Path $tempRoot "package"
 $backendStaging = Join-Path $stagingRoot "backend-data"
 $frontendStaging = Join-Path $stagingRoot "frontend-data"
@@ -38,7 +38,7 @@ try {
         docker compose -f (Join-Path $repoRoot "docker-compose.yml") stop api | Out-Null
     }
 
-    $backendEntries = @("pireon.db", "inventory-forms")
+    $backendEntries = @("syntro.db", "inventory-forms")
     if ($IncludeBackups) {
         $backendEntries += "backups"
     }
@@ -55,7 +55,7 @@ try {
 
     $frontendFiles = @(
         "walking_routes_backup.json",
-        "pireon_buildings_backend_backup.json",
+        "syntro_buildings_backend_backup.json",
         "network_telemetry_backup.json"
     )
 
@@ -71,13 +71,13 @@ try {
         backendRepo = $repoRoot
         frontendRepo = $frontendRepoRoot
         includes = [ordered]@{
-            database = Test-Path (Join-Path $backendDataRoot "pireon.db")
+            database = Test-Path (Join-Path $backendDataRoot "syntro.db")
             inventoryForms = Test-Path (Join-Path $backendDataRoot "inventory-forms")
             backups = [bool]$IncludeBackups
             dataProtectionKeys = [bool]$IncludeDataProtectionKeys
             frontendBackups = @(
                 "walking_routes_backup.json",
-                "pireon_buildings_backend_backup.json",
+                "syntro_buildings_backend_backup.json",
                 "network_telemetry_backup.json"
             )
         }

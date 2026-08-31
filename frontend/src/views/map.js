@@ -93,7 +93,7 @@ const handleLocationFound = (event) => {
   if (!userAccuracyCircle) {
     userAccuracyCircle = L.circle(position, {
       radius: accuracy,
-      color: "#14b8a6",
+      color: "#1a56a8",
       weight: 1,
       opacity: 0.65,
       fillColor: "#5eead4",

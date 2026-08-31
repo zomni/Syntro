@@ -1,0 +1,630 @@
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Xml.Linq;
+using Syntro.API.ViewModels;
+
+namespace Syntro.API.Services;
+
+public class EquipmentDeliveryDocumentService
+{
+    private static readonly XNamespace W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    private readonly IWebHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
+
+    public EquipmentDeliveryDocumentService(IWebHostEnvironment environment, IConfiguration configuration)
+    {
+        _environment = environment;
+        _configuration = configuration;
+    }
+
+    public async Task<(byte[] Content, string FileName)> GenerateAsync(EquipmentDeliveryFormViewModel model)
+    {
+        var templateBytes = await LoadTemplateBytesAsync();
+        using var outputStream = new MemoryStream();
+        outputStream.Write(templateBytes, 0, templateBytes.Length);
+        outputStream.Position = 0;
+
+        using (var archive = new ZipArchive(outputStream, ZipArchiveMode.Update, true))
+        {
+            var documentEntry = archive.GetEntry("word/document.xml")
+                ?? throw new InvalidOperationException("La plantilla no contiene word/document.xml");
+
+            XDocument document;
+            using (var entryStream = documentEntry.Open())
+            {
+                document = XDocument.Load(entryStream, LoadOptions.PreserveWhitespace);
+            }
+
+            var tables = document.Descendants(W + "tbl").ToList();
+            if (tables.Count < 4)
+            {
+                throw new InvalidOperationException("La plantilla no tiene la estructura esperada de tablas.");
+            }
+
+            FillHeaderTable(tables[0], model);
+            FillComputerTable(tables[1], model);
+            FillPeripheralTable(tables[2], model);
+            FillApplicationsTable(tables[3], model, _configuration);
+            FillSignatureLine(document, model);
+
+            documentEntry.Delete();
+            var newEntry = archive.CreateEntry("word/document.xml", CompressionLevel.Optimal);
+            await using var newStream = newEntry.Open();
+            document.Save(newStream);
+        }
+
+        return (outputStream.ToArray(), BuildFileName(model));
+    }
+
+    private async Task<byte[]> LoadTemplateBytesAsync()
+    {
+        var configuredPath = _configuration["DeliveryForm:TemplatePath"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(configuredPath) && File.Exists(configuredPath))
+        {
+            return await File.ReadAllBytesAsync(configuredPath);
+        }
+
+        var defaultPath = Path.Combine(_environment.ContentRootPath, "Templates", "FormularioEntregaEquipo.docx");
+        if (File.Exists(defaultPath))
+        {
+            return await File.ReadAllBytesAsync(defaultPath);
+        }
+
+        return DeliveryFormTemplateBuilder.BuildGenericTemplate(_configuration);
+    }
+
+    public async Task<(byte[] Content, string FileName)> GeneratePdfAsync(EquipmentDeliveryFormViewModel model, CancellationToken cancellationToken = default)
+    {
+        var generatedWord = await GenerateAsync(model);
+        var tempDirectory = Path.Combine(Path.GetTempPath(), "syntro-delivery-preview", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDirectory);
+
+        var docxPath = Path.Combine(tempDirectory, generatedWord.FileName);
+        var pdfFileName = Path.GetFileNameWithoutExtension(generatedWord.FileName) + ".pdf";
+        var pdfPath = Path.Combine(tempDirectory, pdfFileName);
+
+        try
+        {
+            var pdfCompatibleWord = PreparePdfCompatibleWord(generatedWord.Content);
+
+            await File.WriteAllBytesAsync(docxPath, pdfCompatibleWord, cancellationToken);
+
+            var sofficeExecutable = _configuration["DeliveryForm:SofficePath"]?.Trim();
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = string.IsNullOrWhiteSpace(sofficeExecutable) ? "soffice" : sofficeExecutable,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            startInfo.ArgumentList.Add("--headless");
+            startInfo.ArgumentList.Add("--convert-to");
+            startInfo.ArgumentList.Add("pdf");
+            startInfo.ArgumentList.Add("--outdir");
+            startInfo.ArgumentList.Add(tempDirectory);
+            startInfo.ArgumentList.Add(docxPath);
+
+            using var process = Process.Start(startInfo)
+                ?? throw new InvalidOperationException("No se pudo iniciar LibreOffice para convertir el formulario a PDF.");
+
+            await process.WaitForExitAsync(cancellationToken);
+            var standardOutput = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var standardError = await process.StandardError.ReadToEndAsync(cancellationToken);
+
+            if (process.ExitCode != 0 || !File.Exists(pdfPath))
+            {
+                var details = string.Join(" ", new[] { standardOutput, standardError }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(details)
+                    ? "No se pudo convertir el formulario a PDF."
+                    : $"No se pudo convertir el formulario a PDF: {details}");
+            }
+
+            var pdfBytes = await File.ReadAllBytesAsync(pdfPath, cancellationToken);
+            return (pdfBytes, pdfFileName);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDirectory))
+            {
+                Directory.Delete(tempDirectory, true);
+            }
+        }
+    }
+
+    private static byte[] PreparePdfCompatibleWord(byte[] wordContent)
+    {
+        using var outputStream = new MemoryStream();
+        outputStream.Write(wordContent, 0, wordContent.Length);
+        outputStream.Position = 0;
+
+        using (var archive = new ZipArchive(outputStream, ZipArchiveMode.Update, true))
+        {
+            var documentEntry = archive.GetEntry("word/document.xml")
+                ?? throw new InvalidOperationException("La plantilla no contiene word/document.xml");
+
+            XDocument document;
+            using (var entryStream = documentEntry.Open())
+            {
+                document = XDocument.Load(entryStream, LoadOptions.PreserveWhitespace);
+            }
+
+            ConvertTechnicalDataLabelForPdf(document);
+            CompactFirstPageTablesForPdf(document);
+            NormalizeChecklistCheckboxesForPdf(document);
+
+            documentEntry.Delete();
+            var newEntry = archive.CreateEntry("word/document.xml", CompressionLevel.Optimal);
+            using var newStream = newEntry.Open();
+            document.Save(newStream);
+        }
+
+        return outputStream.ToArray();
+    }
+
+    private static void ConvertTechnicalDataLabelForPdf(XDocument document)
+    {
+        var targetCell = document
+            .Descendants(W + "tc")
+            .FirstOrDefault(cell => string.Join(" ", cell.Descendants(W + "t").Select(t => t.Value))
+                .Contains("DATOS T", StringComparison.OrdinalIgnoreCase));
+
+        if (targetCell == null)
+        {
+            return;
+        }
+
+        var cellProperties = targetCell.Element(W + "tcPr");
+        if (cellProperties == null)
+        {
+            cellProperties = new XElement(W + "tcPr");
+            targetCell.AddFirst(cellProperties);
+        }
+
+        cellProperties.Elements(W + "textDirection").Remove();
+        cellProperties.Add(new XElement(W + "textDirection", new XAttribute(W + "val", "btLr")));
+
+        var preservedProperties = new XElement(cellProperties);
+        targetCell.RemoveNodes();
+        targetCell.Add(preservedProperties);
+        targetCell.Add(CreatePdfVerticalLabelParagraph("DATOS TECNICOS"));
+    }
+
+    private static void CompactFirstPageTablesForPdf(XDocument document)
+    {
+        var firstPageTables = document.Descendants(W + "tbl").Take(3).ToList();
+        foreach (var table in firstPageTables)
+        {
+            ReduceTableFontSizesForPdf(table, 2);
+            TightenTableParagraphSpacing(table);
+            TightenTableCellMargins(table);
+        }
+    }
+
+
+    private static void NormalizeChecklistCheckboxesForPdf(XDocument document)
+    {
+        var paragraphs = document.Descendants(W + "p").ToList();
+        if (paragraphs.Count == 0)
+        {
+            return;
+        }
+
+        var declarationParagraph = paragraphs.FirstOrDefault(p =>
+            GetParagraphText(p).Contains("Declaro recibir con esta fecha el equipo descrito", StringComparison.OrdinalIgnoreCase));
+        var commitmentParagraph = paragraphs.FirstOrDefault(p =>
+            GetParagraphText(p).Contains("Me comprometo a:", StringComparison.OrdinalIgnoreCase));
+        var cap01Paragraph = paragraphs.FirstOrDefault(p =>
+            GetParagraphText(p).Contains("CAP01", StringComparison.OrdinalIgnoreCase));
+
+        var declarationCheckboxRun = declarationParagraph?.Elements(W + "r").FirstOrDefault(ContainsChecklistShape);
+        var cap01CheckboxRun = cap01Paragraph?.Elements(W + "r").FirstOrDefault(ContainsChecklistShape);
+
+        if (declarationCheckboxRun != null && commitmentParagraph != null)
+        {
+            var movedRun = new XElement(declarationCheckboxRun);
+            declarationCheckboxRun.Remove();
+            InsertRunAtParagraphStart(commitmentParagraph, movedRun);
+            NormalizeChecklistCheckboxRun(movedRun);
+        }
+
+        if (cap01CheckboxRun != null)
+        {
+            NormalizeChecklistCheckboxRun(cap01CheckboxRun);
+        }
+    }
+
+    private static void ReduceTableFontSizesForPdf(XElement table, int decrement)
+    {
+        if (decrement <= 0)
+        {
+            return;
+        }
+
+        foreach (var sizeElement in table.Descendants().Where(x => x.Name == W + "sz" || x.Name == W + "szCs"))
+        {
+            var valueAttribute = sizeElement.Attribute(W + "val");
+            if (valueAttribute == null)
+            {
+                continue;
+            }
+
+            if (!int.TryParse(valueAttribute.Value, out var fontSize))
+            {
+                continue;
+            }
+
+            var reduced = Math.Max(12, fontSize - decrement);
+            valueAttribute.Value = reduced.ToString();
+        }
+    }
+
+    private static void TightenTableParagraphSpacing(XElement table)
+    {
+        foreach (var paragraph in table.Descendants(W + "p"))
+        {
+            var paragraphProperties = paragraph.Element(W + "pPr");
+            if (paragraphProperties == null)
+            {
+                paragraphProperties = new XElement(W + "pPr");
+                paragraph.AddFirst(paragraphProperties);
+            }
+
+            var spacing = paragraphProperties.Element(W + "spacing");
+            if (spacing == null)
+            {
+                spacing = new XElement(W + "spacing");
+                paragraphProperties.Add(spacing);
+            }
+
+            spacing.SetAttributeValue(W + "before", "0");
+            spacing.SetAttributeValue(W + "after", "0");
+            spacing.SetAttributeValue(W + "line", "220");
+            spacing.SetAttributeValue(W + "lineRule", "auto");
+        }
+    }
+
+    private static void TightenTableCellMargins(XElement table)
+    {
+        foreach (var cell in table.Descendants(W + "tc"))
+        {
+            var cellProperties = cell.Element(W + "tcPr");
+            if (cellProperties == null)
+            {
+                cellProperties = new XElement(W + "tcPr");
+                cell.AddFirst(cellProperties);
+            }
+
+            var cellMargins = cellProperties.Element(W + "tcMar");
+            if (cellMargins == null)
+            {
+                cellMargins = new XElement(W + "tcMar");
+                cellProperties.Add(cellMargins);
+            }
+
+            SetCellMargin(cellMargins, "top", "10");
+            SetCellMargin(cellMargins, "bottom", "10");
+        }
+    }
+
+    private static void SetCellMargin(XElement cellMargins, string side, string value)
+    {
+        var margin = cellMargins.Element(W + side);
+        if (margin == null)
+        {
+            margin = new XElement(W + side);
+            cellMargins.Add(margin);
+        }
+
+        margin.SetAttributeValue(W + "w", value);
+        margin.SetAttributeValue(W + "type", "dxa");
+    }
+
+
+    private static string GetParagraphText(XElement paragraph)
+        => string.Join(string.Empty, paragraph.Descendants(W + "t").Select(t => t.Value));
+
+    private static bool ContainsChecklistShape(XElement run)
+        => run.Descendants().Any(e =>
+            string.Equals(e.Name.LocalName, "AlternateContent", StringComparison.OrdinalIgnoreCase)
+            || e.Name == W + "pict");
+
+    private static void InsertRunAtParagraphStart(XElement paragraph, XElement run)
+    {
+        var paragraphProperties = paragraph.Element(W + "pPr");
+        if (paragraphProperties != null)
+        {
+            paragraphProperties.AddAfterSelf(run);
+            return;
+        }
+
+        paragraph.AddFirst(run);
+    }
+
+    private static void NormalizeChecklistCheckboxRun(XElement run)
+    {
+        foreach (var positionH in run.Descendants().Where(e => e.Name.LocalName == "positionH"))
+        {
+            var posOffset = positionH.Elements().FirstOrDefault(e => e.Name.LocalName == "posOffset");
+            if (posOffset != null)
+            {
+                posOffset.Value = "-270510";
+            }
+        }
+
+        foreach (var positionV in run.Descendants().Where(e => e.Name.LocalName == "positionV"))
+        {
+            var posOffset = positionV.Elements().FirstOrDefault(e => e.Name.LocalName == "posOffset");
+            if (posOffset != null)
+            {
+                posOffset.Value = "6985";
+            }
+        }
+
+        foreach (var rect in run.Descendants().Where(e =>
+                     string.Equals(e.Name.LocalName, "rect", StringComparison.OrdinalIgnoreCase)))
+        {
+            var style = (string?)rect.Attribute("style");
+            if (string.IsNullOrWhiteSpace(style))
+            {
+                continue;
+            }
+
+            style = ReplaceStyleValue(style, "margin-left", "-21.3pt");
+            style = ReplaceStyleValue(style, "margin-top", ".55pt");
+            rect.SetAttributeValue("style", style);
+        }
+    }
+
+    private static string ReplaceStyleValue(string style, string propertyName, string propertyValue)
+    {
+        var parts = style.Split(';', StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .ToList();
+
+        var replaced = false;
+        for (var i = 0; i < parts.Count; i++)
+        {
+            if (!parts[i].StartsWith(propertyName + ":", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            parts[i] = $"{propertyName}:{propertyValue}";
+            replaced = true;
+            break;
+        }
+
+        if (!replaced)
+        {
+            parts.Add($"{propertyName}:{propertyValue}");
+        }
+
+        return string.Join(";", parts) + ";";
+    }
+
+    private static XElement CreatePdfVerticalLabelParagraph(string value)
+    {
+        return new XElement(W + "p",
+            new XElement(W + "pPr",
+                new XElement(W + "jc", new XAttribute(W + "val", "center")),
+                new XElement(W + "spacing",
+                    new XAttribute(W + "before", "0"),
+                    new XAttribute(W + "after", "0"),
+                    new XAttribute(W + "line", "240"),
+                    new XAttribute(W + "lineRule", "auto")),
+                new XElement(W + "rPr",
+                    new XElement(W + "rFonts",
+                        new XAttribute(W + "ascii", "Calibri"),
+                        new XAttribute(W + "hAnsi", "Calibri")),
+                    new XElement(W + "b"),
+                    new XElement(W + "bCs"),
+                    new XElement(W + "sz", new XAttribute(W + "val", "20")),
+                    new XElement(W + "szCs", new XAttribute(W + "val", "20")))),
+            CreateStyledTextRun(value, "Calibri", 20, true));
+    }
+
+    private static XElement CreateStyledTextRun(string? value, string fontName, int fontSize, bool bold = false)
+    {
+        var runProperties = new XElement(W + "rPr",
+            new XElement(W + "rFonts",
+                new XAttribute(W + "ascii", fontName),
+                new XAttribute(W + "hAnsi", fontName)));
+
+        if (bold)
+        {
+            runProperties.Add(new XElement(W + "b"));
+            runProperties.Add(new XElement(W + "bCs"));
+        }
+
+        runProperties.Add(new XElement(W + "sz", new XAttribute(W + "val", fontSize)));
+        runProperties.Add(new XElement(W + "szCs", new XAttribute(W + "val", fontSize)));
+
+        return new XElement(W + "r",
+            runProperties,
+            new XElement(W + "t",
+                new XAttribute(XNamespace.Xml + "space", "preserve"),
+                Normalize(value)));
+    }
+
+    private static void FillHeaderTable(XElement table, EquipmentDeliveryFormViewModel model)
+    {
+        SetCellText(table, 0, 1, model.Institution);
+        SetCellText(table, 0, 3, model.DocumentDate);
+        SetCellText(table, 1, 1, model.UnitOrDepartment);
+        SetCellText(table, 2, 1, model.SerialNumber);
+        SetCellText(table, 3, 1, model.ResponsibleUser);
+        SetCellText(table, 4, 1, model.Email);
+        SetCellText(table, 4, 3, model.IpAddress);
+        SetCellText(table, 5, 1, model.JobTitle);
+        SetCellText(table, 5, 3, model.Annex);
+        SetCellText(table, 6, 1, model.ActiveDirectoryUser);
+        SetCellText(table, 7, 2, model.ReceptionType);
+        SetCellText(table, 8, 2, model.ReplacedEquipmentSerial);
+        SetCellText(table, 9, 2, model.ReplacedEquipmentModel);
+        SetCellText(table, 10, 2, model.OfficeActivationEmail);
+        SetCellText(table, 11, 2, model.MdaTicket);
+        SetCellText(table, 12, 2, model.MacAddress);
+    }
+
+    private static void FillComputerTable(XElement table, EquipmentDeliveryFormViewModel model)
+    {
+        SetCellText(table, 1, 1, model.ComputerBrand);
+        SetCellText(table, 1, 3, model.OperatingSystem);
+        SetCellText(table, 2, 1, model.ComputerModel);
+        SetCellText(table, 2, 3, model.OfficeSuite);
+        SetCellText(table, 3, 1, model.Processor);
+        SetCellText(table, 3, 3, model.SecurityLock);
+        SetCellText(table, 4, 1, model.Ram);
+        SetCellText(table, 5, 1, model.Disk);
+    }
+
+    private static void FillPeripheralTable(XElement table, EquipmentDeliveryFormViewModel model)
+    {
+        SetCellText(table, 1, 1, ToMark(model.Lexmark));
+        SetCellText(table, 2, 1, ToMark(model.Zebra));
+        SetCellText(table, 3, 1, ToMark(model.FingerprintReader));
+        SetCellText(table, 4, 1, ToMark(model.OtherDevices));
+    }
+
+    private static void FillApplicationsTable(XElement table, EquipmentDeliveryFormViewModel model, IConfiguration configuration)
+    {
+        var sections = DeliveryFormChecklistConfig.GetSections(configuration);
+        if (sections.Count > 0)
+        {
+            var row = 1;
+            foreach (var item in sections[0].Items)
+            {
+                SetCellText(table, row++, 1, ToMark(GetCheckboxValue(model, item.Key)));
+            }
+        }
+
+        if (sections.Count > 1)
+        {
+            var row = 1;
+            foreach (var item in sections[1].Items)
+            {
+                SetCellText(table, row++, 4, ToMark(GetCheckboxValue(model, item.Key)));
+            }
+        }
+
+        SetCellText(table, 1, 7, EffectiveValue(model.ValidationSerialName, model.SerialNumber));
+        SetCellText(table, 2, 7, EffectiveValue(model.ValidationDescriptionChange, model.UnitOrDepartment));
+        SetCellText(table, 3, 7, model.ValidationOfficeSuite);
+        SetCellText(table, 4, 7, EffectiveValue(model.ValidationAdAccount, model.ActiveDirectoryUser));
+        SetCellText(table, 7, 7, model.AntivirusInstalledVersion);
+        SetCellText(table, 8, 7, model.AntivirusConnectionState);
+    }
+
+    private static bool GetCheckboxValue(EquipmentDeliveryFormViewModel model, string propertyName)
+    {
+        var property = typeof(EquipmentDeliveryFormViewModel).GetProperty(propertyName);
+        return property?.GetValue(model) is true;
+    }
+
+    private static void FillSignatureLine(XDocument document, EquipmentDeliveryFormViewModel model)
+    {
+        var bookmark = document
+            .Descendants(W + "bookmarkStart")
+            .FirstOrDefault(x => string.Equals((string?)x.Attribute(W + "name"), "_Hlk185929370", StringComparison.Ordinal));
+
+        var paragraph = bookmark?.Ancestors(W + "p").FirstOrDefault();
+        if (paragraph == null)
+        {
+            return;
+        }
+
+        var preservedElements = paragraph.Elements()
+            .Where(e => e.Name == W + "pPr" || e.Name == W + "bookmarkStart" || e.Name == W + "bookmarkEnd")
+            .Select(e => new XElement(e))
+            .ToList();
+
+        paragraph.RemoveNodes();
+        foreach (var element in preservedElements)
+        {
+            paragraph.Add(element);
+        }
+
+        paragraph.Add(
+            CreateTextRun(string.Empty),
+            new XElement(W + "r", new XElement(W + "tab")),
+            CreateTextRun(string.Empty),
+            new XElement(W + "r", new XElement(W + "tab")),
+            new XElement(W + "r", new XElement(W + "tab")),
+            CreateTextRun(string.Empty));
+    }
+
+    private static void SetCellText(XElement table, int rowIndex, int cellIndex, string? value)
+    {
+        var row = table.Elements(W + "tr").ElementAtOrDefault(rowIndex);
+        var cell = row?.Elements(W + "tc").ElementAtOrDefault(cellIndex);
+        if (cell == null)
+        {
+            return;
+        }
+
+        SetCellText(cell, value);
+    }
+
+    private static void SetCellText(XElement cell, string? value)
+    {
+        var paragraph = cell.Elements(W + "p").FirstOrDefault();
+        if (paragraph == null)
+        {
+            paragraph = new XElement(W + "p");
+            cell.Add(paragraph);
+        }
+
+        var paragraphProperties = paragraph.Element(W + "pPr");
+        paragraph.Elements().Where(e => e.Name != W + "pPr").Remove();
+
+        if (paragraphProperties == null)
+        {
+            paragraph.AddFirst(new XElement(W + "pPr"));
+            paragraphProperties = paragraph.Element(W + "pPr");
+        }
+
+        paragraph.Add(CreateTextRun(value));
+
+        var additionalParagraphs = cell.Elements(W + "p").Skip(1).ToList();
+        foreach (var extraParagraph in additionalParagraphs)
+        {
+            extraParagraph.Remove();
+        }
+    }
+
+    private static XElement CreateTextRun(string? value)
+    {
+        return new XElement(W + "r",
+            new XElement(W + "t",
+                new XAttribute(XNamespace.Xml + "space", "preserve"),
+                Normalize(value)));
+    }
+
+    private static string Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? " " : value.Trim();
+
+    private static string ToMark(bool enabled) => enabled ? "X" : string.Empty;
+
+    private static string EffectiveValue(string? preferred, string? fallback)
+        => string.IsNullOrWhiteSpace(preferred) ? (fallback ?? string.Empty) : preferred;
+
+    private static string BuildFileName(EquipmentDeliveryFormViewModel model)
+    {
+        var serial = SanitizeFilePart(model.SerialNumber, "sin-serie");
+        var user = SanitizeFilePart(model.ResponsibleUser, "sin-usuario");
+        return $"formulario-entrega-{serial}-{user}.docx";
+    }
+
+    private static string SanitizeFilePart(string? value, string fallback)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        foreach (var invalidChar in Path.GetInvalidFileNameChars())
+        {
+            normalized = normalized.Replace(invalidChar, '-');
+        }
+
+        normalized = normalized.Replace(' ', '-');
+        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
+    }
+}

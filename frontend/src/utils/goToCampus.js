@@ -6,8 +6,6 @@ var location = "";
 
 import { map, toggleLocationTracking } from "../views/map.js";
 
-import { setCookie } from "../utils/locationCookie.js";
-
 import {
   showSearch,
   removeSearchContainerElements,
@@ -65,7 +63,7 @@ const applySiteZoomRange = (campusInfo) => {
   map.setMaxZoom(Number.isInteger(maxZoom) && maxZoom >= 0 ? Math.min(maxZoom, 19) : 19);
 };
 
-const applyPireonBounds = (campusInfo, preserveView = false) => {
+const applySyntroBounds = (campusInfo, preserveView = false) => {
   if (!Array.isArray(campusInfo?.bounds) || campusInfo.bounds.length < 2) {
     map.setMaxBounds(null);
     applySiteZoomRange(campusInfo);
@@ -127,7 +125,6 @@ export const goToFreeMap = () => {
   map.setMaxBounds(null);
   map.setMinZoom(0);
   map.setMaxZoom(19);
-  setCookie("location", "", -1);
   dispatchCampusChanged("");
 };
 
@@ -151,7 +148,7 @@ export const goTo = (campus, options = {}) => {
   setActiveCampus(campus);
   removeSearchContainerElements();
   if (Array.isArray(campus_info?.bounds)) {
-    applyPireonBounds(campus_info, preserveView);
+    applySyntroBounds(campus_info, preserveView);
   } else {
     if (!preserveView) {
       map.setView(campus_info["center"], campus_info["zoom"]);
@@ -172,7 +169,6 @@ export const goTo = (campus, options = {}) => {
   }
 
   showSearch(location, campus_info["school"]);
-  setCookie("location", location, 365);
 
   document.querySelectorAll("#floorButtons-container [id^='b']").forEach((button) => {
     if (button.id == "bLoc") return;

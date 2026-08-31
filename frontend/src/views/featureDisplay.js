@@ -23,13 +23,13 @@ let routeOriginFeatureId = null;
 let routeDestinationFeatureId = null;
 let backendSessionIsAdmin = false;
 
-window.openPireonDashboard = (event, url) => {
+window.openSyntroDashboard = (event, url) => {
   event?.preventDefault?.();
   event?.stopPropagation?.();
 
   if (!url) return false;
 
-  const dashboardWindow = window.open("", "pireon-dashboard");
+  const dashboardWindow = window.open("", "syntro-dashboard");
   if (dashboardWindow) {
     dashboardWindow.location.href = url;
     dashboardWindow.focus?.();
@@ -264,7 +264,7 @@ const buildingEquipmentBubbleEntries = new Map();
 const EQUIPMENT_SYNC_POLL_MS = 30000;
 const EQUIPMENT_SYNC_RETRY_MS = 5000;
 const BACKEND_SESSION_CACHE_MS = 15000;
-const BUILDING_LABELS_STORAGE_KEY = "pireon_building_labels_visible";
+const BUILDING_LABELS_STORAGE_KEY = "syntro_building_labels_visible";
 let buildingLabelsVisible = window.sessionStorage?.getItem(BUILDING_LABELS_STORAGE_KEY) === "true";
 
 const setBuildingLabelsVisible = (isVisible) => {
@@ -1352,13 +1352,13 @@ const buildDashboardEquipmentLink = (identifier) => {
   return `
     <a
       href="${url}"
-      target="pireon-dashboard"
+      target="syntro-dashboard"
       rel="noreferrer"
       class="floorButton"
       style="${getActionButtonStyle()}"
       title="Ver en dashboard"
       aria-label="Ver en dashboard"
-      onclick="return window.openPireonDashboard(event, this.href)"
+      onclick="return window.openSyntroDashboard(event, this.href)"
     >
       &#9776;
     </a>
@@ -1375,13 +1375,13 @@ const buildDashboardBuildingEditLink = (buildingId) => {
   return `
     <a
       href="${url}"
-      target="pireon-dashboard"
+      target="syntro-dashboard"
       rel="noreferrer"
       class="floorButton"
       style="${getActionButtonStyle()}"
       title="Editar edificio en dashboard"
       aria-label="Editar edificio en dashboard"
-      onclick="return window.openPireonDashboard(event, this.href)"
+      onclick="return window.openSyntroDashboard(event, this.href)"
     >
       Editar edificio
     </a>
@@ -1994,7 +1994,7 @@ const zoomToFeaturePoint = (e) => {
 
 const handleFeatureClick = (e) => {
   const featureId = e?.target?.feature?.properties?.id || null;
-  const event = new CustomEvent("pireon-building-layer-click", {
+  const event = new CustomEvent("syntro-building-layer-click", {
     cancelable: true,
     detail: {
       featureId,
@@ -2047,8 +2047,8 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
     event?.originalEvent?.stopPropagation?.();
     L.DomEvent.stop(event);
 
-    if (["geometry-shape", "geometry-move", "walking-route-building"].includes(window.pireonAdminMapToolMode)) {
-      const buildingEvent = new CustomEvent("pireon-building-layer-click", {
+    if (["geometry-shape", "geometry-move", "walking-route-building"].includes(window.syntroAdminMapToolMode)) {
+      const buildingEvent = new CustomEvent("syntro-building-layer-click", {
         cancelable: true,
         detail: {
           featureId,
@@ -2209,7 +2209,7 @@ if (document.readyState === "loading") {
   startEquipmentSyncMonitor();
 }
 
-window.addEventListener("pireon-session-changed", (event) => {
+window.addEventListener("syntro-session-changed", (event) => {
   updateBackendSessionCache(event.detail || {});
 
   if (!event?.detail?.isAuthenticated) {
@@ -2219,11 +2219,11 @@ window.addEventListener("pireon-session-changed", (event) => {
   refreshCurrentPopup();
 });
 
-window.addEventListener("pireon-campus-changed", () => {
+window.addEventListener("syntro-campus-changed", () => {
   clearMapEquipmentState();
 });
 
-window.addEventListener("pireon-map-data-refreshed", () => {
+window.addEventListener("syntro-map-data-refreshed", () => {
   window.setTimeout(() => setBuildingLabelsVisible(buildingLabelsVisible), 80);
 });
 

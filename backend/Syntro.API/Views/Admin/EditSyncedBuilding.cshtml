@@ -1,0 +1,290 @@
+@using System.Text.Json
+@model Syntro.API.ViewModels.EditSyncedBuildingViewModel
+@{
+    ViewData["Title"] = "Editar edificio sincronizado";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+
+    static string FloorsToCsv(string floorsJson)
+    {
+        if (string.IsNullOrWhiteSpace(floorsJson))
+            return string.Empty;
+
+        try
+        {
+            var floors = JsonSerializer.Deserialize<List<int>>(floorsJson) ?? new List<int>();
+            return string.Join(", ", floors);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    static List<int> FloorsToList(string floorsJson)
+    {
+        if (string.IsNullOrWhiteSpace(floorsJson))
+            return new List<int>();
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<int>>(floorsJson) ?? new List<int>();
+        }
+        catch
+        {
+            return new List<int>();
+        }
+    }
+
+    var building = Model.Building;
+    var sourceFloorsCsv = FloorsToCsv(building.FloorsJson);
+    var overrideFloorsCsv = FloorsToCsv(building.ManualFloorsJson);
+    var effectiveFloors = FloorsToList(building.EffectiveFloorsJson);
+    var selectedFloors = effectiveFloors.ToHashSet();
+    var floorOptions = Enumerable.Range(-1, 7)
+        .Concat(effectiveFloors)
+        .Concat(FloorsToList(building.FloorsJson))
+        .Distinct()
+        .OrderBy(floor => floor)
+        .ToList();
+    var assignedInventoryUrl = Url.Action("Inventory", "Admin", new
+    {
+        assignment = "assigned",
+        buildingExternalId = building.ExternalId
+    }) ?? $"/admin/inventory?assignment=assigned&buildingExternalId={Uri.EscapeDataString(building.ExternalId)}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="fw-bold mb-1">Editar edificio sincronizado</h2>
+        <div class="text-muted">Los overrides manuales sobreviven cuando vuelvas a sincronizar desde el frontend.</div>
+    </div>
+    <a href="/admin/locations" class="btn btn-secondary shadow-sm fw-semibold px-3">
+        <i class="bi bi-arrow-left me-1"></i> Volver
+    </a>
+</div>
+
+@if (TempData["SuccessMessage"] is string successMessage)
+{
+    <div class="alert alert-success">@successMessage</div>
+}
+
+@if (TempData["ErrorMessage"] is string errorMessage)
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="fw-semibold mb-3">Override manual</h5>
+                <form method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nombre del edificio</label>
+                        <input name="manualDisplayName"
+                               class="form-control"
+                               value="@building.ManualDisplayName"
+                               placeholder="@building.DisplayName" />
+                        <div class="form-text">Dejalo vacio para usar el nombre original sincronizado.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Campus</label>
+                        <input name="manualCampus"
+                               class="form-control"
+                               value="@building.ManualCampus"
+                               placeholder="@building.Campus" />
+                        <div class="form-text">Corrige el campus del edificio si fuese necesario.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Pisos</label>
+                        <input id="manualFloorsCsv" name="manualFloorsCsv" type="hidden" value="@string.Join(", ", selectedFloors.OrderBy(floor => floor))" />
+                        <div class="d-flex flex-wrap gap-2">
+                            @foreach (var floor in floorOptions)
+                            {
+                                var checkboxId = $"floor_{floor}".Replace("-", "minus_");
+                                <input class="btn-check building-floor-checkbox"
+                                       type="checkbox"
+                                       id="@checkboxId"
+                                       value="@floor"
+                                       checked="@selectedFloors.Contains(floor)"
+                                       autocomplete="off" />
+                                <label class="btn btn-outline-primary btn-sm fw-semibold px-3" for="@checkboxId">
+                                    Piso @floor
+                                </label>
+                            }
+                        </div>
+                        <div class="form-text">Selecciona los pisos exactos del edificio. Si marcas 0, el sistema agregara 1 si falta. Para subterraneo usa -1 o -2.</div>
+                        <button type="button" id="clearFloorOverrideButton" class="btn btn-outline-secondary btn-sm mt-2">
+                            Usar pisos fuente
+                        </button>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save me-1"></i> Guardar override
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h5 class="fw-semibold mb-3">Valores actuales</h5>
+                <div class="mb-2"><span class="text-muted">ID:</span> <span class="fw-semibold">@building.ExternalId</span></div>
+                <div class="mb-2"><span class="text-muted">Nombre fuente:</span> @building.DisplayName</div>
+                <div class="mb-2"><span class="text-muted">Campus fuente:</span> @building.Campus</div>
+                <div class="mb-2"><span class="text-muted">Pisos fuente:</span> @(string.IsNullOrWhiteSpace(sourceFloorsCsv) ? "-" : sourceFloorsCsv)</div>
+                <hr />
+                <div class="mb-2"><span class="text-muted">Nombre efectivo:</span> <span class="fw-semibold">@building.EffectiveDisplayName</span></div>
+                <div class="mb-2"><span class="text-muted">Campus efectivo:</span> @building.EffectiveCampus</div>
+                <div class="mb-2"><span class="text-muted">Pisos efectivos:</span> @(string.IsNullOrWhiteSpace(FloorsToCsv(building.EffectiveFloorsJson)) ? "-" : FloorsToCsv(building.EffectiveFloorsJson))</div>
+                <div class="mb-2"><span class="text-muted">Area responsable:</span> @building.ResponsibleArea</div>
+                <div class="mb-0"><span class="text-muted">Ultima sincronizacion:</span> @building.SyncedAtUtc.ToLocalTime().ToString("g")</div>
+            </div>
+        </div>
+
+        <div class="card border-danger shadow-sm mt-4">
+            <div class="card-body">
+                <div class="d-flex align-items-start gap-3">
+                    <div class="rounded-circle bg-danger-subtle text-danger d-flex align-items-center justify-content-center flex-shrink-0" style="width:42px;height:42px;">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="fw-semibold mb-1 text-danger">Eliminar edificio</h5>
+                        <p class="mb-2">
+                            Este edificio tiene <strong>@Model.AssignedInventoryCount equipo(s) asignado(s)</strong>.
+                            Al eliminarlo se ocultara del mapa y de las listas de edificios, pero los equipos asignados se conservaran.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="@assignedInventoryUrl" class="btn btn-outline-secondary fw-semibold">
+                                <i class="bi bi-list-ul me-1"></i> Ver equipos filtrados
+                            </a>
+                            <form method="post"
+                                  action="/admin/deletesyncedbuilding/@Uri.EscapeDataString(building.ExternalId)"
+                                  data-delete-building-form
+                                  data-building-name="@building.EffectiveDisplayName"
+                                  data-assigned-count="@Model.AssignedInventoryCount">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-danger fw-semibold">
+                                    <i class="bi bi-trash me-1"></i> Eliminar edificio
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (() => {
+        const hiddenInput = document.getElementById("manualFloorsCsv");
+        const clearButton = document.getElementById("clearFloorOverrideButton");
+        const checkboxes = Array.from(document.querySelectorAll(".building-floor-checkbox"));
+        const form = hiddenInput?.closest("form");
+        let useSourceFloors = false;
+
+        const updateHiddenFloors = () => {
+            if (!hiddenInput || useSourceFloors) {
+                if (hiddenInput) hiddenInput.value = "";
+                return;
+            }
+
+            const selectedFloors = checkboxes
+                .filter((checkbox) => checkbox.checked)
+                .map((checkbox) => Number(checkbox.value))
+                .filter((floor) => Number.isFinite(floor))
+                .sort((left, right) => left - right);
+
+            hiddenInput.value = selectedFloors.join(", ");
+        };
+
+        checkboxes.forEach((checkbox) => {
+            checkbox.addEventListener("change", () => {
+                useSourceFloors = false;
+                updateHiddenFloors();
+            });
+        });
+
+        clearButton?.addEventListener("click", () => {
+            useSourceFloors = true;
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = false;
+            });
+            updateHiddenFloors();
+        });
+
+        form?.addEventListener("submit", updateHiddenFloors);
+        updateHiddenFloors();
+
+        document.querySelector("[data-delete-building-form]")?.addEventListener("submit", (event) => {
+            const deleteForm = event.currentTarget;
+            const buildingName = deleteForm?.dataset?.buildingName || "este edificio";
+            const assignedCount = deleteForm?.dataset?.assignedCount || "0";
+            const message = `Eliminar ${buildingName}?\n\nTiene ${assignedCount} equipo(s) asignado(s). El edificio se ocultara del mapa y de las listas, pero los equipos se conservaran.`;
+
+            if (!window.confirm(message)) {
+                event.preventDefault();
+            }
+        });
+    })();
+</script>
+
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5 class="fw-semibold mb-1">Salas del edificio</h5>
+                <div class="text-muted small">Desde aqui puedes bajar al detalle de cada sala y ajustar nombre o piso.</div>
+            </div>
+            <a href="/api/synced-rooms?buildingExternalId=@building.ExternalId" class="btn btn-secondary shadow-sm fw-semibold px-3" target="_blank">
+                Ver API
+            </a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Sala</th>
+                        <th>Piso</th>
+                        <th>Tipo</th>
+                        <th>Equipos</th>
+                        <th class="text-end">Accion</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var room in Model.Rooms)
+                    {
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">@room.EffectiveName</div>
+                                <div class="small text-muted">@room.ExternalId</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border">Piso @room.EffectiveFloor</span>
+                                @if (!string.IsNullOrWhiteSpace(room.ManualName) || room.ManualFloor.HasValue)
+                                {
+                                    <span class="badge bg-warning text-dark ms-1">override</span>
+                                }
+                            </td>
+                            <td>@room.Type</td>
+                            <td>@room.DevicesCount</td>
+                            <td class="text-end">
+                                <a href="/admin/editsyncedroom/@room.ExternalId" class="btn btn-sm btn-outline-primary">
+                                    Editar sala
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

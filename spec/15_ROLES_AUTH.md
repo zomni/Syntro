@@ -16,19 +16,19 @@
 
 ## Cookies
 
-- `Pireon.Auth` final session.
-- `Pireon.MfaPending` intermediate MFA flow.
+- `Syntro.Auth` final session.
+- `Syntro.MfaPending` intermediate MFA flow.
 
 ## Claims
 
-Namespaced under `pireon:`:
+Namespaced under `syntro:`:
 
-- pireon:remember_me
-- pireon:can_manage_users
-- pireon:mfa_mode
-- pireon:mfa_setup_key
-- pireon:mfa_user_id
-- pireon:mfa_return_url
+- syntro:remember_me
+- syntro:can_manage_users
+- syntro:mfa_mode
+- syntro:mfa_setup_key
+- syntro:mfa_user_id
+- syntro:mfa_return_url
 
 ## Session API
 

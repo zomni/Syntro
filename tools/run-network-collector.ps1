@@ -6,8 +6,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$collectorDir = Join-Path $repoRoot "tools\Pireon.NetworkCollector"
-$projectPath = Join-Path $collectorDir "Pireon.NetworkCollector.csproj"
+$collectorDir = Join-Path $repoRoot "tools\Syntro.NetworkCollector"
+$projectPath = Join-Path $collectorDir "Syntro.NetworkCollector.csproj"
 $exampleConfigPath = Join-Path $collectorDir "appsettings.example.json"
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
@@ -26,7 +26,7 @@ if (-not (Test-Path $ConfigPath)) {
 }
 
 Write-Host ""
-Write-Host "=== Colector Windows de telemetria Pireon ===" -ForegroundColor Cyan
+Write-Host "=== Colector Windows de telemetria Syntro ===" -ForegroundColor Cyan
 Write-Host "Proyecto : $projectPath"
 Write-Host "Config    : $ConfigPath"
 Write-Host "Modo      : $(if ($Watch) { 'agente' } else { 'manual' })"

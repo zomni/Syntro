@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Export training data for ML models from Pireon's SQLite database.
+Export training data for ML models from Syntro's SQLite database.
 
 Generates two CSV files:
   - item-classification-training.csv  (for inventory item category classification)
@@ -141,8 +141,8 @@ def export_risk_prediction(db_path: str, output_dir: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Export ML training data from Pireon DB")
-    parser.add_argument("--db", default="pireon.db", help="Path to SQLite database")
+    parser = argparse.ArgumentParser(description="Export ML training data from Syntro DB")
+    parser.add_argument("--db", default="syntro.db", help="Path to SQLite database")
     parser.add_argument("--output", default=".", help="Output directory for CSV files")
     args = parser.parse_args()
 

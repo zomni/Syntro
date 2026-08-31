@@ -1,8 +1,8 @@
-# Progreso del proyecto — Pireon
+# Progreso del proyecto — Syntro
 
 ## Estado actual
 
-Pireon es un SaaS white-label starter kit derivado de los proyectos cliente
+Syntro es un SaaS white-label starter kit derivado de los proyectos cliente
 `sotero_map` (frontend vanilla JS + Leaflet + Webpack) y `sotero_map_api`
 (backend ASP.NET Core 8 + EF Core + SQLite + Razor admin).
 
@@ -16,23 +16,23 @@ Pireon es un SaaS white-label starter kit derivado de los proyectos cliente
   - telemetría de red = generalizar y mantener
   - categorías + POIs = incluir
   - proyecto standalone nuevo en carpeta nueva (nada llamado "sotero")
-  - nombre de trabajo "Pireon" reemplazable cuando se nombre el producto final
+  - nombre de trabajo "Syntro" reemplazable cuando se nombre el producto final
   - fase de implementación = Fase 0+1 (fundación white-label), sin contenido de cliente, con Docker
-- **28 SPECs escritas** en `C:\Users\paolo.vilches\Documents\repos\Pireon\spec\`:
+- **28 SPECs escritas** en `C:\Users\paolo.vilches\Documents\repos\Syntro\spec\`:
   - 00–11: SPECs delta (transformación brownfield del sistema cliente)
   - 12–27: SPECs producto (arquitectura backend/frontend, entidades, API, seguridad, deployment, testing, roadmap)
 - **Fase 0+1 implementada** (fundación white-label):
-  - Repo `Pireon` inicializado con `.gitignore` y estructura `backend/`, `frontend/`, `tools/`, `docs/`, `spec/`.
-  - Extracción brownfield: backend (`Pireon.API`), tools (`Pireon.NetworkCollector`) y frontend renombrados y neutralizados (0 tokens de cliente en código enviado).
+  - Repo `Syntro` inicializado con `.gitignore` y estructura `backend/`, `frontend/`, `tools/`, `docs/`, `spec/`.
+  - Extracción brownfield: backend (`Syntro.API`), tools (`Syntro.NetworkCollector`) y frontend renombrados y neutralizados (0 tokens de cliente en código enviado).
   - SPEC 01: `appsettings.json` y `.env.example` genéricos.
   - SPEC 03: campus canónico en `campuses.js` + derivación de nombres de datos (`campusConfig.js`) + backend sin default "sotero" (`CampusSettings:DefaultCampus`).
   - SPEC 04: `SeedData` tras `DemoData:Enabled` (off por defecto).
   - SPEC 06: institución configurable (`DeliveryForm:Institution`); SPEC 08: stripping `HSR`/`SSMSO`/`CASR` eliminado.
   - SPEC 07/10/11: telemetría, identificadores (`identifiers.js`) y scripts de datos derivados de la configuración del campus.
-  - Branding: logos neutros, `lang="es"`, títulos "Pireon Admin".
+  - Branding: logos neutros, `lang="es"`, títulos "Syntro Admin".
   - Docker: `docker-compose.yml` + Dockerfiles; stack verificado en puertos 5001/8081 (build + smoke tests OK).
 - **Fase 2 implementada** (data layer):
-  - Reset Docker + base nueva: `.env` raíz desde `backend/.env.example`, DB legacy renombrada a `backend/data/pireon.legacy-schema.bak`, migración `20260808000634_InitialCreate` aplicada (17 tablas, PK TEXT/Guid).
+  - Reset Docker + base nueva: `.env` raíz desde `backend/.env.example`, DB legacy renombrada a `backend/data/syntro.legacy-schema.bak`, migración `20260808000634_InitialCreate` aplicada (17 tablas, PK TEXT/Guid).
   - Bootstrap admin inicial (`AuthSettings:AdminUsername/AdminPassword`) con `spec/04` actualizado.
   - Login + redirect `/dashboard` verificado en runtime.
 - **Fase 3 implementada** (inventory & telemetry):
@@ -49,7 +49,7 @@ Pireon es un SaaS white-label starter kit derivado de los proyectos cliente
 - **Fase 5 implementada** (hardening):
   - SPEC 24: política de contraseñas NIST 800-63B configurable (`PasswordPolicy:MinLength/MaxLength/DisallowCommonPasswords`) en `Services/PasswordPolicyService.cs`; aplicada al bootstrap del admin inicial (`BackendAuthService`) y al reset de contraseña del panel (`AdminController.ResetPassword`); env mapeada en `docker-compose.yml` y `.env.example`. Headers, cookies, MFA obligatorio para admins, validación de uploads (MIME/extensión/magic bytes) y no-exposición de secretos verificados.
   - SPEC 25: `appsettings.Production.json` (ForceHttps, cookies `Secure=Always`, sin Swagger/demo/telemetría); `dotnet publish -c Release` verificado; despliegue documentado en `docs/ARCHITECTURE.md`.
-  - SPEC 26: proyecto xUnit `Pireon.API.Tests` (30 tests, SQLite en memoria, sin DB real ni LibreOffice: PasswordPolicy, BackendAuth, importación Excel con fixture ClosedXML, reconciliación, auditoría, config) + jest en frontend (7 tests: `campusConfig.js`, `identifiers.js`). Se corrigió el parser Excel para aceptar targets de hoja con `/` inicial (compatibilidad ClosedXML).
+  - SPEC 26: proyecto xUnit `Syntro.API.Tests` (30 tests, SQLite en memoria, sin DB real ni LibreOffice: PasswordPolicy, BackendAuth, importación Excel con fixture ClosedXML, reconciliación, auditoría, config) + jest en frontend (7 tests: `campusConfig.js`, `identifiers.js`). Se corrigió el parser Excel para aceptar targets de hoja con `/` inicial (compatibilidad ClosedXML).
 - **Fase 6 parcial (visual/branding + neutralización delivery form)**:
   - Tema CSS-variables implementado en frontend (`:root` design tokens en `index.css` + `styles/*.css`, ~240 reemplazos de colores hardcodeados); colores de marca ahora tokenizados y sobrescribibles en runtime vía `window.PIREON_CONFIG.themePrimary/themeSecondary` (`applyBrandingTheme()` en `src/index.js`). Paleta heredada azul `#2d79a0/#154860` reemplazada por teal `#0f766e/#134e4a`.
   - Admin Razor + Auth views recolorizados a la misma paleta (sidebar, nav activo, botones primarios, cards de login/MFA/access denied) y logos `app-logo-frontend.svg`/`app-logo-backend.svg` neutrales actualizados al teal.
@@ -103,7 +103,7 @@ Pireon es un SaaS white-label starter kit derivado de los proyectos cliente
 ## Pendiente
 
 - F2 (importar Sotero): registrar Organization "Hospital Sótero del Río" + CampusSite `sotero` (school `cs`, floors `["-1".."5"]`, defaultFloor `b1`), copiar estáticos de `/app/frontend-data` renombrando sin `.map`, sembrar schedules ("Lun-Jue 08:30/13:30/17:30; Vie 08:30/13:30/16:30" en `America/Santiago`, cron por fila), agregar `sotero` a `campuses.js`.
-- F2 (ETL): `tools/migrate-sotero-to-pireon.py` (último snapshot + resumen 12 meses, remapeo FKs, sync-token).
+- F2 (ETL): `tools/migrate-sotero-to-syntro.py` (último snapshot + resumen 12 meses, remapeo FKs, sync-token).
 - F3: motor heurístico de coincidencia inventario vs red/riesgo + panel.
 - Revisiones SPECs 12–27 y aprobación del usuario.
 - Multi-tenant — frontend: agrupar el campus selector por organización (superadmin), adaptar los editores y storage restantes al campus activo.
@@ -118,7 +118,7 @@ Ver apéndices "Decisiones de implementación" dentro de cada SPEC.
 
 ## Notas
 
-- Las SPECs describen Pireon como producto (front + backend juntos); codename "Pireon"
+- Las SPECs describen Syntro como producto (front + backend juntos); codename "Syntro"
   reemplazable en el nombre final (artefactos, cookies, DB, carpeta).
 - Reglas del proyecto: reutilizar antes que reemplazar, generalizar antes que
   reescribir, configurar antes que hardcodear, sin código/implementación en SPECs.

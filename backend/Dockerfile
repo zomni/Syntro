@@ -2,11 +2,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
-COPY Pireon.API/*.csproj ./Pireon.API/
-RUN dotnet restore ./Pireon.API/Pireon.API.csproj
+COPY Syntro.API/*.csproj ./Syntro.API/
+RUN dotnet restore ./Syntro.API/Syntro.API.csproj
 
-COPY Pireon.API/. ./Pireon.API/
-RUN dotnet publish ./Pireon.API/Pireon.API.csproj -c Release -o /out
+COPY Syntro.API/. ./Syntro.API/
+RUN dotnet publish ./Syntro.API/Syntro.API.csproj -c Release -o /out
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
@@ -25,4 +25,4 @@ COPY --from=build /out .
 VOLUME /app/data
 
 EXPOSE 80
-ENTRYPOINT ["dotnet", "Pireon.API.dll"]
+ENTRYPOINT ["dotnet", "Syntro.API.dll"]

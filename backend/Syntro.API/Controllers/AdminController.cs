@@ -1,0 +1,4699 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+using Syntro.API.Infrastructure;
+using Syntro.API.Data;
+using Syntro.API.Models;
+using Syntro.API.Services;
+using Syntro.API.ViewModels;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
+
+namespace Syntro.API.Controllers;
+
+[Authorize]
+public class AdminController : Controller
+{
+    public record UpdateUserRequest(string Role, bool CanManageUsers);
+    public record ResetPasswordRequest(string NewPassword);
+    public record ToggleMfaRequest(string Action);
+    public record CreateUserRequest(string Username, string Password, string? Role, bool CanManageUsers);
+    private readonly AppDbContext _context;
+    private readonly AuditLogService _auditLogService;
+    private readonly DatabaseBackupService _databaseBackupService;
+    private readonly IConfiguration _configuration;
+    private readonly IMemoryCache _memoryCache;
+    private readonly EquipmentDeliveryDocumentService _equipmentDeliveryDocumentService;
+    private readonly NetworkTelemetryService _networkTelemetryService;
+    private readonly IPasswordHasher<AuthUser> _passwordHasher;
+    private const string ManualInventorySourceFile = "manual-admin";
+    private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
+    private const string DefaultPdfAllowedMimeTypes = "application/pdf,application/x-pdf";
+
+    public AdminController(
+        AppDbContext context,
+        AuditLogService auditLogService,
+        DatabaseBackupService databaseBackupService,
+        IConfiguration configuration,
+        IMemoryCache memoryCache,
+        EquipmentDeliveryDocumentService equipmentDeliveryDocumentService,
+        NetworkTelemetryService networkTelemetryService,
+        IPasswordHasher<AuthUser> passwordHasher)
+    {
+        _context = context;
+        _auditLogService = auditLogService;
+        _databaseBackupService = databaseBackupService;
+        _configuration = configuration;
+        _memoryCache = memoryCache;
+        _equipmentDeliveryDocumentService = equipmentDeliveryDocumentService;
+        _networkTelemetryService = networkTelemetryService;
+        _passwordHasher = passwordHasher;
+    }
+
+    public async Task<IActionResult> Index(
+        CancellationToken cancellationToken)
+    {
+        var campusKeys = new List<string> { "sotero" };
+
+        var databaseFileInfo = GetDatabaseFileInfo();
+        var databaseBackups = GetDatabaseBackupFiles();
+
+        var buildingsQuery = _context.SyncedBuildings.AsNoTracking();
+        var roomsQuery = _context.SyncedRooms.AsNoTracking();
+        var inventoryQuery = _context.ImportedInventoryItems.AsNoTracking();
+
+        var model = new AdminDashboardViewModel
+        {
+            SyncedBuildings = await buildingsQuery.CountAsync(building => building.IsActive, cancellationToken),
+            SyncedRooms = await roomsQuery.CountAsync(cancellationToken),
+            TotalImportedItems = await inventoryQuery.CountAsync(cancellationToken),
+            AssignedItems = await inventoryQuery.CountAsync(i => i.AssignedBuildingExternalId != "", cancellationToken),
+            PendingAssignmentItems = await inventoryQuery.CountAsync(i => i.AssignedBuildingExternalId == "", cancellationToken),
+            SuggestedItems = await inventoryQuery.CountAsync(i => i.AssignedBuildingExternalId == "" && i.MatchedBuildingExternalId != "", cancellationToken),
+            StolenItems = await inventoryQuery.CountAsync(i => i.InferredStatus == "stolen", cancellationToken),
+            DistinctImportedCategories = await inventoryQuery
+                .Where(i => i.InferredCategory != "")
+                .Select(i => i.InferredCategory)
+                .Distinct()
+                .CountAsync(cancellationToken),
+            DatabaseFileName = databaseFileInfo?.Name ?? "syntro.db",
+            DatabaseFileSizeBytes = databaseFileInfo?.Length ?? 0,
+            DatabaseLastWriteUtc = databaseFileInfo?.LastWriteTimeUtc,
+            FrontendMapUrl = ResolveFrontendMapUrl(),
+            DatabaseBackups = databaseBackups
+                .Select(file => new DatabaseBackupViewModel
+                {
+                    FileName = file.Name,
+                    SizeBytes = file.Length,
+                    LastWriteUtc = file.LastWriteTimeUtc
+                })
+                .ToList(),
+            CategoryBreakdown = await inventoryQuery
+                .AsNoTracking()
+                .GroupBy(i => i.InferredCategory == "" ? "sin-categoria" : i.InferredCategory)
+                .Select(g => new DashboardCategorySummaryViewModel
+                {
+                    Category = g.Key,
+                    Count = g.Count()
+                })
+                .OrderByDescending(g => g.Count)
+                .Take(6)
+                .ToListAsync(cancellationToken),
+            RecentItems = await inventoryQuery
+                .AsNoTracking()
+                .OrderByDescending(i => i.ImportedAtUtc)
+                .ThenByDescending(i => i.Id)
+                .Take(3)
+                .Select(i => new DashboardInventoryPreviewViewModel
+                {
+                    Id = i.Id,
+                    Description = i.Description,
+                    ResponsibleUser = i.ResponsibleUser,
+                    UnitOrDepartment = i.UnitOrDepartment,
+                    AssignedBuildingExternalId = i.AssignedBuildingExternalId,
+                    InferredStatus = i.InferredStatus
+                })
+                .ToListAsync(cancellationToken),
+            RecentActivity = await _context.AuditLogEntries
+                .AsNoTracking()
+                .OrderByDescending(x => x.CreatedAtUtc)
+                .Take(3)
+                .Select(x => new ActivityLogListItemViewModel
+                {
+                    Id = x.Id,
+                    BuildingExternalId = x.BuildingExternalId,
+                    Resource = x.Resource,
+                    Result = x.Result,
+                    Severity = x.Severity,
+                    Summary = x.Summary,
+                    Details = x.Details,
+                    PreviousValue = x.PreviousValue,
+                    NewValue = x.NewValue,
+                    ChangedByUsername = x.ChangedByUsername,
+                    ActionType = x.ActionType,
+                    ClientIp = x.ClientIp,
+                    UserAgent = x.UserAgent,
+                    CreatedAtUtc = x.CreatedAtUtc
+                })
+                .ToListAsync(cancellationToken)
+        };
+
+        var latestSnapshotId = await _networkTelemetryService.GetLatestSnapshotIdAsync(campusKeys, cancellationToken);
+        if (latestSnapshotId != Guid.Empty)
+        {
+            var latestSnapshot = await _context.NetworkTelemetrySnapshots
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == latestSnapshotId, cancellationToken);
+
+            if (latestSnapshot != null)
+            {
+                model.HasNetworkTelemetryData = true;
+                model.LatestNetworkRiskLevel = latestSnapshot.RiskLevel;
+                model.LatestNetworkRiskScore = latestSnapshot.RiskScore;
+                model.LatestNetworkDeviceCount = latestSnapshot.DeviceCount;
+                model.LatestNetworkHighRiskCount = latestSnapshot.HighRiskDeviceCount;
+                model.LatestNetworkScanUtc = latestSnapshot.ObservedAtUtc;
+            }
+        }
+
+        return View(model);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [HttpGet("/admin/compliance")]
+    public async Task<IActionResult> Compliance()
+    {
+        var databaseFileInfo = GetDatabaseFileInfo();
+        var nowUtc = DateTime.UtcNow;
+        var recentWindow = nowUtc.AddDays(-7);
+        var recentDayWindow = nowUtc.AddDays(-2);
+
+        var databaseConnected = await _context.Database.CanConnectAsync();
+        var totalUsers = await _context.AuthUsers.CountAsync();
+        var activeUsers = await _context.AuthUsers.CountAsync(user => user.IsActive);
+        var adminUsers = await _context.AuthUsers.CountAsync(user => user.IsActive && user.Role == AppRoles.Admin);
+        var adminUsersWithMfa = await _context.AuthUsers.CountAsync(user => user.IsActive && user.Role == AppRoles.Admin && user.MfaEnabled && user.MfaSecretProtected != "");
+        var failedLoginsLast7Days = await _context.AuditLogEntries.CountAsync(entry => entry.ActionType == "login-failed" && entry.CreatedAtUtc >= recentWindow);
+        var criticalEventsLast7Days = await _context.AuditLogEntries.CountAsync(entry => entry.Severity == "critical" && entry.CreatedAtUtc >= recentWindow);
+        var recentAccessEventsCount = await _context.AuditLogEntries.CountAsync(entry =>
+            (entry.ActionType == "login-success" || entry.ActionType == "login-failed" || entry.ActionType == "logout" || entry.ActionType == "access-denied" || entry.ActionType == "mfa-verified") &&
+            entry.CreatedAtUtc >= recentWindow);
+
+        var latestBackups = await _databaseBackupService.GetLatestBackupsAsync(10);
+        var latestSuccessfulBackup = latestBackups.FirstOrDefault(backup => backup.Status == "success");
+        var backupEnabled = _databaseBackupService.IsEnabled();
+        var backupHealthy = backupEnabled && latestSuccessfulBackup is not null && latestSuccessfulBackup.CreatedAtUtc >= recentDayWindow;
+
+        var isDevelopment = string.Equals(
+            System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
+            "Development",
+            StringComparison.OrdinalIgnoreCase);
+        var forceHttps = _configuration.GetSection("SecuritySettings").GetValue<bool?>("ForceHttps") ?? !isDevelopment;
+        var swaggerInProduction = _configuration.GetSection("SecuritySettings").GetValue<bool?>("EnableSwaggerInProduction") ?? false;
+        var httpsActive = string.Equals(Request.Scheme, "https", StringComparison.OrdinalIgnoreCase);
+        var swaggerRestricted = !swaggerInProduction || User.IsInRole(AppRoles.Admin);
+
+        var ldapUseSsl = _configuration.GetSection("LdapSettings").GetValue<bool?>("UseSsl") ?? true;
+        var ldapPort = _configuration.GetSection("LdapSettings").GetValue<int?>("Port") ?? 636;
+        var ldapsConfigured = ldapUseSsl && ldapPort == 636;
+
+        var dataIntegrityHealthy =
+            databaseConnected &&
+            totalUsers > 0 &&
+            adminUsers > 0 &&
+            adminUsersWithMfa == adminUsers &&
+            criticalEventsLast7Days == 0;
+
+        var score = 0;
+        score += databaseConnected ? 1 : 0;
+        score += adminUsers > 0 ? 1 : 0;
+        score += adminUsersWithMfa == adminUsers ? 1 : 0;
+        score += backupHealthy ? 1 : 0;
+        score += ldapsConfigured ? 1 : 0;
+        score += swaggerRestricted ? 1 : 0;
+        score += (forceHttps ? 1 : 0);
+        score += criticalEventsLast7Days == 0 ? 1 : 0;
+
+        var overallStatus = score >= 7 ? "OK" : score >= 5 ? "Advertencia" : "Critico";
+        var overallLabel = overallStatus;
+
+        var checks = new List<ComplianceCheckViewModel>
+        {
+            new() { Title = "Base de datos", Detail = databaseConnected ? "Conexion OK" : "No responde", Status = databaseConnected ? "ok" : "critical", IconClass = "bi bi-database" },
+            new() { Title = "HTTPS", Detail = forceHttps ? (httpsActive ? "Activo en la solicitud actual" : "Forzado en configuracion") : "No forzado", Status = forceHttps ? "ok" : "warning", IconClass = "bi bi-shield-lock" },
+            new() { Title = "Swagger", Detail = swaggerInProduction ? "Protegido en produccion" : "Solo disponible segun entorno", Status = swaggerRestricted ? "ok" : "warning", IconClass = "bi bi-braces" },
+            new() { Title = "MFA admin", Detail = adminUsers == 0 ? "Sin usuarios admin" : $"{adminUsersWithMfa}/{adminUsers} administradores con MFA", Status = adminUsers == 0 || adminUsersWithMfa == adminUsers ? "ok" : "critical", IconClass = "bi bi-patch-check" },
+            new() { Title = "Backup", Detail = backupEnabled ? (backupHealthy ? "Respaldo reciente disponible" : "Habilitado, pero sin respaldo reciente") : "Deshabilitado", Status = backupEnabled && backupHealthy ? "ok" : "warning", IconClass = "bi bi-hdd-stack" },
+            new() { Title = "LDAPS", Detail = ldapsConfigured ? "Configurado sobre 636" : "Revisar configuracion", Status = ldapsConfigured ? "ok" : "warning", IconClass = "bi bi-plug" },
+            new() { Title = "Integridad", Detail = dataIntegrityHealthy ? "Sin alertas criticas" : "Hay elementos por revisar", Status = dataIntegrityHealthy ? "ok" : "critical", IconClass = "bi bi-heart-pulse" }
+        };
+
+        var summaryCards = new List<ComplianceSummaryCardViewModel>
+        {
+            new() { Title = "Usuarios activos", Value = activeUsers.ToString(), Detail = $"de {totalUsers} usuarios", IconClass = "bi bi-people", Tone = "primary" },
+            new() { Title = "Admins", Value = adminUsers.ToString(), Detail = $"{adminUsersWithMfa} con MFA", IconClass = "bi bi-person-badge", Tone = "info" },
+            new() { Title = "Errores criticos", Value = criticalEventsLast7Days.ToString(), Detail = "ultimos 7 dias", IconClass = "bi bi-exclamation-triangle", Tone = "danger" },
+            new() { Title = "Fallos login", Value = failedLoginsLast7Days.ToString(), Detail = "ultimos 7 dias", IconClass = "bi bi-shield-exclamation", Tone = "warning" }
+        };
+
+        var recentBackups = latestBackups
+            .Select(backup => new ComplianceEventViewModel
+            {
+                Title = Path.GetFileName(backup.FilePath),
+                Detail = backup.Status == "success"
+                    ? $"Tamano {backup.SizeBytes / 1024.0 / 1024.0:F2} MB | Hash {backup.Hash[..Math.Min(10, backup.Hash.Length)]}"
+                    : backup.ErrorMessage,
+                Badge = backup.Status,
+                BadgeClass = backup.Status == "success" ? "bg-success" : backup.Status == "expired" ? "bg-secondary" : "bg-danger",
+                TimeLabel = backup.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            })
+            .ToList();
+
+        var recentAccesses = await _context.AuditLogEntries
+            .AsNoTracking()
+            .Where(entry => (entry.ActionType == "login-success" || entry.ActionType == "login-failed" || entry.ActionType == "logout" || entry.ActionType == "access-denied" || entry.ActionType == "mfa-verified") && entry.CreatedAtUtc >= recentWindow)
+            .OrderByDescending(entry => entry.CreatedAtUtc)
+            .Take(10)
+            .Select(entry => new ComplianceEventViewModel
+            {
+                Title = $"{entry.ActionType} - {entry.ChangedByUsername}",
+                Detail = $"{entry.Resource} | {entry.Result} | {entry.ClientIp}",
+                Badge = entry.Severity,
+                BadgeClass = entry.Severity == "critical" ? "bg-danger" : entry.Severity == "warning" ? "bg-warning text-dark" : "bg-info text-dark",
+                TimeLabel = entry.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            })
+            .ToListAsync();
+
+        var criticalEvents = await _context.AuditLogEntries
+            .AsNoTracking()
+            .Where(entry => entry.Severity == "critical" && entry.CreatedAtUtc >= recentWindow)
+            .OrderByDescending(entry => entry.CreatedAtUtc)
+            .Take(10)
+            .Select(entry => new ComplianceEventViewModel
+            {
+                Title = $"{entry.ActionType} - {entry.ChangedByUsername}",
+                Detail = $"{entry.Summary} | {entry.Details}",
+                Badge = entry.Result,
+                BadgeClass = "bg-danger",
+                TimeLabel = entry.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            })
+            .ToListAsync();
+
+        var currentUsername = User.Identity?.Name ?? string.Empty;
+        var canManageUsers = await _context.AuthUsers
+            .Where(u => u.NormalizedUsername == currentUsername.ToUpperInvariant())
+            .Select(u => u.CanManageUsers)
+            .FirstOrDefaultAsync();
+
+        var model = new ComplianceDashboardViewModel
+        {
+            OverallStatus = overallStatus,
+            OverallStatusLabel = overallLabel,
+            Checks = checks,
+            SummaryCards = summaryCards,
+            RecentBackups = recentBackups,
+            RecentAccesses = recentAccesses,
+            CriticalEvents = criticalEvents,
+            TotalUsers = totalUsers,
+            ActiveUsers = activeUsers,
+            AdminUsers = adminUsers,
+            AdminUsersWithMfa = adminUsersWithMfa,
+            FailedLoginsLast7Days = failedLoginsLast7Days,
+            CriticalEventsLast7Days = criticalEventsLast7Days,
+            RecentBackupsCount = latestBackups.Count,
+            RecentAccessEventsCount = recentAccessEventsCount,
+            DatabaseConnected = databaseConnected,
+            HttpsConfigured = forceHttps,
+            HttpsActive = httpsActive,
+            SwaggerRestricted = swaggerRestricted,
+            MfaCompliant = adminUsers == 0 || adminUsersWithMfa == adminUsers,
+            BackupEnabled = backupEnabled,
+            BackupHealthy = backupHealthy,
+            LdapsConfigured = ldapsConfigured,
+            DataIntegrityHealthy = dataIntegrityHealthy,
+            CurrentUserCanManageUsers = canManageUsers,
+            DatabaseFileName = databaseFileInfo?.Name ?? "syntro.db",
+            DatabaseFileSizeBytes = databaseFileInfo?.Length ?? 0,
+            DatabaseLastWriteUtc = databaseFileInfo?.LastWriteTimeUtc,
+            GeneratedAtUtc = nowUtc
+        };
+
+        return View(model);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [HttpGet("/dashboard/compliance")]
+    public IActionResult ComplianceLegacy()
+    {
+        return RedirectToAction(nameof(Compliance));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/api/admin/users")]
+    public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var query = _context.AuthUsers.AsNoTracking();
+
+        var users = await query
+            .OrderBy(u => u.Username)
+            .Select(u => new
+            {
+                u.Id,
+                u.Username,
+                u.Role,
+                u.IsActive,
+                u.CanManageUsers,
+                u.MfaEnabled,
+                MfaState = u.MfaEnabled && !string.IsNullOrEmpty(u.MfaSecretProtected) ? "enabled" : u.MfaEnabled ? "pending" : "disabled",
+                u.LastLoginAtUtc,
+                u.CreatedAtUtc
+            })
+            .ToListAsync(cancellationToken);
+
+        return Ok(users);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/api/admin/users")]
+    public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var username = (request.Username ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return BadRequest(new { message = "El nombre de usuario es obligatorio." });
+        }
+
+        var normalizedUsername = username.ToUpperInvariant();
+        if (await _context.AuthUsers.AnyAsync(u => u.NormalizedUsername == normalizedUsername, cancellationToken))
+        {
+            return Conflict(new { message = $"Ya existe un usuario con el nombre '{username}'." });
+        }
+
+        var password = request.Password ?? string.Empty;
+        var policyError = PasswordPolicyService.Validate(password, username, _configuration);
+        if (policyError is not null)
+        {
+            return BadRequest(new { message = policyError });
+        }
+
+        var role = BackendAuthService.NormalizeRole(request.Role);
+        if (role is AppRoles.Admin or AppRoles.Admin)
+        {
+            role = AppRoles.Editor;
+        }
+
+        var now = DateTime.UtcNow;
+        var user = new AuthUser
+        {
+            Username = username,
+            NormalizedUsername = normalizedUsername,
+            Role = role,
+            CanManageUsers = request.CanManageUsers,
+            IsActive = true,
+            CreatedBy = currentUser.Username,
+            UpdatedBy = currentUser.Username,
+            CreatedAtUtc = now,
+            UpdatedAtUtc = now
+        };
+        user.PasswordHash = _passwordHasher.HashPassword(user, password);
+
+        _context.AuthUsers.Add(user);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-create",
+            resource: "auth",
+            summary: $"Se creo el usuario {user.Username}",
+            details: $"Rol: {user.Role}",
+            result: "success",
+            severity: "info",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new
+        {
+            message = $"Usuario {user.Username} creado.",
+            user.Id,
+            user.Username,
+            user.Role
+        });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPut("/api/admin/users/{id:guid}")]
+    public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var targetUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (targetUser is null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        if (string.Equals(targetUser.Username, currentUser.Username, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "No puedes modificar tus propios permisos." });
+        }
+
+        var oldRole = targetUser.Role;
+        var oldCanManageUsers = targetUser.CanManageUsers;
+
+        if (!string.IsNullOrWhiteSpace(request.Role))
+        {
+            var newRole = BackendAuthService.NormalizeRole(request.Role);
+            if (newRole == AppRoles.Admin)
+            {
+                return BadRequest(new { message = "No puedes asignar el rol superadmin." });
+            }
+
+            targetUser.Role = newRole;
+        }
+
+        targetUser.CanManageUsers = request.CanManageUsers && targetUser.Role is AppRoles.Admin or AppRoles.Admin;
+        targetUser.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-role-update",
+            resource: "auth",
+            summary: $"Se actualizaron permisos de {targetUser.Username}",
+            details: $"Rol: {oldRole} -> {targetUser.Role}; CanManageUsers: {oldCanManageUsers} -> {targetUser.CanManageUsers}",
+            result: "success",
+            severity: "warning",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new { message = $"Usuario {targetUser.Username} actualizado." });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/api/admin/users/{id:guid}/reset-password")]
+    public async Task<IActionResult> ResetPassword(Guid id, [FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var targetUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (targetUser is null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        var policyError = PasswordPolicyService.Validate(request.NewPassword, targetUser.Username, _configuration);
+        if (policyError is not null)
+        {
+            return BadRequest(new { message = policyError });
+        }
+
+        var passwordHasher = HttpContext.RequestServices.GetRequiredService<IPasswordHasher<AuthUser>>();
+        var newHash = passwordHasher.HashPassword(targetUser, request.NewPassword);
+        targetUser.PasswordHash = newHash;
+        targetUser.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-password-reset",
+            resource: "auth",
+            summary: $"Se restablecio la contrasena de {targetUser.Username}",
+            details: $"Restablecido por administrador",
+            result: "success",
+            severity: "warning",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new { message = $"Contrasena de {targetUser.Username} restablecida." });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPut("/api/admin/users/{id:guid}/mfa")]
+    public async Task<IActionResult> ToggleMfa(Guid id, [FromBody] ToggleMfaRequest request, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var targetUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (targetUser is null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        var action = request.Action?.Trim().ToLowerInvariant() ?? "disable";
+        var newState = action switch
+        {
+            "enable" => "enabled",
+            "reenroll" => "pending",
+            _ => "disabled"
+        };
+
+        switch (action)
+        {
+            case "enable":
+                targetUser.MfaEnabled = true;
+                if (string.IsNullOrEmpty(targetUser.MfaSecretProtected))
+                {
+                    newState = "pending";
+                }
+                break;
+            case "reenroll":
+                targetUser.MfaEnabled = true;
+                targetUser.MfaSecretProtected = string.Empty;
+                targetUser.MfaEnrolledAtUtc = null;
+                targetUser.MfaLastVerifiedAtUtc = null;
+                break;
+            default:
+                targetUser.MfaEnabled = false;
+                targetUser.MfaSecretProtected = string.Empty;
+                targetUser.MfaEnrolledAtUtc = null;
+                targetUser.MfaLastVerifiedAtUtc = null;
+                break;
+        }
+
+        targetUser.UpdatedAtUtc = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-mfa-toggle",
+            resource: "auth",
+            summary: $"Se {(action == "disable" ? "desactivo" : action == "reenroll" ? "re-enrolo" : "activo")} MFA de {targetUser.Username}",
+            details: $"Accion: {action}",
+            result: "success",
+            severity: "warning",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new { message = $"MFA {(action == "disable" ? "desactivado" : action == "reenroll" ? "re-enrolado" : "activado")} para {targetUser.Username}.", mfaState = newState });
+    }
+
+    [Authorize]
+    [HttpGet("/dashboard/network-telemetry")]
+    public async Task<IActionResult> NetworkTelemetry(
+        [FromQuery] Guid? snapshotId,
+        CancellationToken cancellationToken)
+    {
+        var campusKeys = new List<string> { "sotero" };
+
+        var modelScopeCampusKeys = (IReadOnlyList<string>)campusKeys;
+        var model = await BuildNetworkTelemetryViewModelAsync(snapshotId, modelScopeCampusKeys, cancellationToken);
+        var telemetryJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        ViewData["InitialDevicePageJson"] = JsonSerializer.Serialize(model.InitialDevicePage, telemetryJsonOptions);
+        ViewData["InitialSnapshotPageJson"] = JsonSerializer.Serialize(model.InitialSnapshotPage, telemetryJsonOptions);
+        ViewData["InitialRiskObservationsJson"] = JsonSerializer.Serialize(model.TopRiskObservations, telemetryJsonOptions);
+        ViewData["InitialScheduledScanRunsJson"] = JsonSerializer.Serialize(model.ScheduledScanRuns, telemetryJsonOptions);
+        ViewData["InitialScheduledScanPageJson"] = JsonSerializer.Serialize(model.InitialScheduledScanPage, telemetryJsonOptions);
+
+        return View("NetworkTelemetry", model);
+    }
+
+    [Authorize]
+    [HttpGet("/dashboard/network-telemetry/matching")]
+    public async Task<IActionResult> InventoryMatching(
+        [FromQuery] Guid? snapshotId,
+        CancellationToken cancellationToken)
+    {
+        var campusKeys = new List<string> { "sotero" };
+
+        // Sin organizacion elegida (superadmin en "Todas") la vista se sirve vacia:
+        // la vista muestra los contenedores y exige seleccionar una organizacion.
+        var modelScopeCampusKeys = campusKeys ?? (IReadOnlyList<string>?)Array.Empty<string>();
+
+        var activeSnapshotId = snapshotId == null || snapshotId == Guid.Empty
+            ? await _networkTelemetryService.GetLatestSnapshotIdAsync(modelScopeCampusKeys, cancellationToken)
+            : snapshotId.Value;
+
+        var telemetryJsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+
+        var snapshots = await _networkTelemetryService.GetRecentSnapshotsAsync(50, modelScopeCampusKeys, cancellationToken);
+        var summary = new NetworkTelemetryMatchingSummaryViewModel { SnapshotId = activeSnapshotId, Found = false };
+        var initialPage = new NetworkTelemetryMatchingPageViewModel { SnapshotId = activeSnapshotId };
+
+        if (activeSnapshotId != Guid.Empty)
+        {
+            try
+            {
+                summary = await _networkTelemetryService.GetMatchingSummaryAsync(activeSnapshotId, modelScopeCampusKeys, cancellationToken);
+            }
+            catch
+            {
+                summary = new NetworkTelemetryMatchingSummaryViewModel { SnapshotId = activeSnapshotId, Found = false };
+            }
+
+            try
+            {
+                initialPage = await _networkTelemetryService.GetMatchingPageAsync(
+                    activeSnapshotId,
+                    new NetworkTelemetryMatchingQueryRequest
+                    {
+                        Page = 1,
+                        PageSize = 25
+                    },
+                    modelScopeCampusKeys,
+                    cancellationToken);
+            }
+            catch
+            {
+                initialPage = new NetworkTelemetryMatchingPageViewModel { SnapshotId = activeSnapshotId };
+            }
+        }
+
+        ViewData["SnapshotsJson"] = JsonSerializer.Serialize(snapshots, telemetryJsonOptions);
+        ViewData["ActiveSnapshotId"] = activeSnapshotId;
+        ViewData["SummaryJson"] = JsonSerializer.Serialize(summary, telemetryJsonOptions);
+        ViewData["InitialMatchesPageJson"] = JsonSerializer.Serialize(initialPage, telemetryJsonOptions);
+
+        return View("InventoryMatching");
+    }
+
+    private async Task<NetworkTelemetryDashboardViewModel> BuildNetworkTelemetryViewModelAsync(
+        Guid? snapshotId,
+        IReadOnlyList<string>? campusKeys,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var model = await _networkTelemetryService.GetDashboardAsync(10, snapshotId, campusKeys, cancellationToken);
+            if (model.ActiveSnapshotId != Guid.Empty)
+            {
+                try
+                {
+                    model.InitialDevicePage = await _networkTelemetryService.GetObservationPageAsync(
+                        model.ActiveSnapshotId,
+                        new NetworkTelemetryObservationQueryRequest
+                        {
+                            ObservationType = "device",
+                            SortBy = "risk",
+                            SortDirection = "desc",
+                            Page = 1,
+                            PageSize = 10
+                        },
+                        campusKeys,
+                        cancellationToken);
+                }
+                catch
+                {
+                    model.InitialDevicePage = new NetworkTelemetryObservationPageViewModel
+                    {
+                        SnapshotId = model.ActiveSnapshotId,
+                        ObservationType = "device"
+                    };
+                }
+            }
+
+            try
+            {
+                model.InitialSnapshotPage = await _networkTelemetryService.GetSnapshotPageAsync(
+                    new NetworkTelemetrySnapshotQueryRequest
+                    {
+                        SortBy = "observedAt",
+                        SortDirection = "desc",
+                        Page = 1,
+                        PageSize = 10
+                    },
+                    campusKeys,
+                    cancellationToken);
+            }
+            catch
+            {
+                model.InitialSnapshotPage = new NetworkTelemetrySnapshotPageViewModel();
+            }
+
+            try
+            {
+                var scheduledPage = await _networkTelemetryService.GetScheduledScanRunsAsync(
+                    new ScheduledScanRunQueryRequest { PageSize = 10 },
+                    campusKeys,
+                    cancellationToken);
+                model.ScheduledScanRuns = scheduledPage.Items;
+                model.InitialScheduledScanPage = scheduledPage;
+            }
+            catch
+            {
+                model.ScheduledScanRuns = [];
+                model.InitialScheduledScanPage = new ScheduledScanRunPageViewModel();
+            }
+
+            return model;
+        }
+        catch
+        {
+            return new NetworkTelemetryDashboardViewModel
+            {
+                HealthLabel = "Error",
+                HealthTone = "danger"
+            };
+        }
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/database/download")]
+    public async Task<IActionResult> DownloadDatabase()
+    {
+        var databasePath = GetDatabaseFilePath();
+        if (!System.IO.File.Exists(databasePath))
+            return NotFound("No se encontro la base de datos.");
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "database-export",
+            resource: "database",
+            summary: "Descarga de base de datos",
+            details: "El administrador descargo una copia de la base SQLite.",
+            result: "success",
+            severity: "info",
+            changedByUsername: User.Identity?.Name ?? "admin");
+
+        return DownloadDatabaseFile(databasePath, $"syntro-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/database/backups/{fileName}")]
+    public async Task<IActionResult> DownloadDatabaseBackup(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+            return NotFound();
+
+        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), Path.GetFileName(fileName));
+        if (!System.IO.File.Exists(backupPath))
+            return NotFound("No se encontro el respaldo solicitado.");
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "backup-download",
+            resource: "database-backup",
+            summary: $"Descarga de respaldo {fileName}",
+            details: "El administrador descargo un respaldo de base de datos.",
+            result: "success",
+            severity: "info",
+            changedByUsername: User.Identity?.Name ?? "admin");
+
+        return DownloadDatabaseFile(backupPath, Path.GetFileName(backupPath));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/database/backups/{fileName}/restore")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RestoreDatabaseBackup(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            TempData["ErrorMessage"] = "No se indico ningun respaldo para restaurar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), Path.GetFileName(fileName));
+        if (!System.IO.File.Exists(backupPath))
+        {
+            TempData["ErrorMessage"] = "No se encontro el respaldo seleccionado.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            ValidateSqliteFile(backupPath);
+            await RestoreDatabaseFromFileAsync(backupPath);
+            TempData["SuccessMessage"] = $"Respaldo restaurado correctamente: {Path.GetFileName(backupPath)}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "database-restore",
+                resource: "database-backup",
+                summary: $"Respaldo restaurado {fileName}",
+                details: "Se reemplazo la base actual usando un respaldo.",
+                result: "success",
+                severity: "critical",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+        catch (Exception ex)
+        {
+            TempData["ErrorMessage"] = $"No se pudo restaurar el respaldo: {ex.Message}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "database-restore",
+                resource: "database-backup",
+                summary: $"Error al restaurar respaldo {fileName}",
+                details: ex.Message,
+                result: "failure",
+                severity: "critical",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/database/backups/{fileName}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteDatabaseBackup(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            TempData["ErrorMessage"] = "No se indico ningun respaldo para eliminar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), Path.GetFileName(fileName));
+        if (!System.IO.File.Exists(backupPath))
+        {
+            TempData["ErrorMessage"] = "No se encontro el respaldo seleccionado.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            System.IO.File.Delete(backupPath);
+            TempData["SuccessMessage"] = $"Respaldo eliminado correctamente: {Path.GetFileName(backupPath)}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "backup-delete",
+                resource: "database-backup",
+                summary: $"Respaldo eliminado {fileName}",
+                details: "El administrador elimino un archivo de respaldo.",
+                result: "success",
+                severity: "warning",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+        catch (Exception ex)
+        {
+            TempData["ErrorMessage"] = $"No se pudo eliminar el respaldo: {ex.Message}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "backup-delete",
+                resource: "database-backup",
+                summary: $"Error al eliminar respaldo {fileName}",
+                details: ex.Message,
+                result: "failure",
+                severity: "warning",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/database/upload")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(100_000_000)]
+    public async Task<IActionResult> UploadDatabase(IFormFile? databaseFile)
+    {
+        if (databaseFile is null || databaseFile.Length == 0)
+        {
+            TempData["ErrorMessage"] = "Selecciona un archivo .db para restaurar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var extension = Path.GetExtension(databaseFile.FileName);
+        if (!new[] { ".db", ".sqlite", ".sqlite3" }.Contains(extension, StringComparer.OrdinalIgnoreCase))
+        {
+            TempData["ErrorMessage"] = "Formato no valido. Sube un archivo .db, .sqlite o .sqlite3.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        Directory.CreateDirectory(databaseDirectory);
+
+        var tempPath = Path.Combine(databaseDirectory, $"upload-{Guid.NewGuid():N}{extension}");
+
+        try
+        {
+            await using (var stream = System.IO.File.Create(tempPath))
+            {
+                await databaseFile.CopyToAsync(stream);
+            }
+
+            ValidateSqliteFile(tempPath);
+            await RestoreDatabaseFromFileAsync(tempPath);
+            TempData["SuccessMessage"] = "Base de datos restaurada correctamente. Si tienes otra sesion abierta, recarga la pagina.";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "database-import",
+                resource: "database",
+                summary: $"Base de datos cargada desde {databaseFile.FileName}",
+                details: "Se reemplazo la base actual con un archivo subido por el administrador.",
+                result: "success",
+                severity: "critical",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+        catch (Exception ex)
+        {
+            TempData["ErrorMessage"] = $"No se pudo restaurar la base de datos: {ex.Message}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "database-import",
+                resource: "database",
+                summary: $"Error al cargar base de datos {databaseFile.FileName}",
+                details: ex.Message,
+                result: "failure",
+                severity: "critical",
+                changedByUsername: User.Identity?.Name ?? "admin");
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tempPath))
+                System.IO.File.Delete(tempPath);
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/project-package/download")]
+    [HttpGet("/dashboard/project-package/download")]
+    public async Task<IActionResult> DownloadProjectPackage(CancellationToken cancellationToken)
+    {
+        var packageName = $"syntro-data-package-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-data-export-{Guid.NewGuid():N}");
+        var stagingRoot = Path.Combine(tempRoot, "package");
+        var backendStaging = Path.Combine(stagingRoot, "backend-data");
+        var frontendStaging = Path.Combine(stagingRoot, "frontend-data");
+        var outputPath = Path.Combine(tempRoot, packageName);
+
+        try
+        {
+            Directory.CreateDirectory(backendStaging);
+            Directory.CreateDirectory(frontendStaging);
+
+            CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
+            CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
+            CopyDirectoryIfExists(GetDatabaseBackupDirectory(), Path.Combine(backendStaging, "backups"));
+            CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
+
+            var frontendDataDirectory = ResolveFrontendDataDirectory();
+            if (!string.IsNullOrWhiteSpace(frontendDataDirectory))
+            {
+                CopyFileIfExists(Path.Combine(frontendDataDirectory, "walking_routes_backup.json"), Path.Combine(frontendStaging, "walking_routes_backup.json"));
+                CopyFileIfExists(Path.Combine(frontendDataDirectory, "syntro_buildings_backend_backup.json"), Path.Combine(frontendStaging, "syntro_buildings_backend_backup.json"));
+                CopyFileIfExists(Path.Combine(frontendDataDirectory, "network_telemetry_backup.json"), Path.Combine(frontendStaging, "network_telemetry_backup.json"));
+            }
+
+            var manifest = JsonSerializer.Serialize(new
+            {
+                exportedAt = DateTime.UtcNow,
+                exportedBy = User.Identity?.Name ?? "admin",
+                includes = new
+                {
+                    database = System.IO.File.Exists(GetDatabaseFilePath()),
+                    inventoryForms = Directory.Exists(GetInventoryFormPdfDirectory()),
+                    backups = Directory.Exists(GetDatabaseBackupDirectory()),
+                    dataProtectionKeys = Directory.Exists(GetDataProtectionKeysDirectory()),
+                    frontendBackups = new[]
+                    {
+                        "walking_routes_backup.json",
+                        "syntro_buildings_backend_backup.json",
+                        "network_telemetry_backup.json"
+                    }
+                }
+            }, new JsonSerializerOptions { WriteIndented = true });
+
+            await System.IO.File.WriteAllTextAsync(Path.Combine(stagingRoot, "manifest.json"), manifest, cancellationToken);
+            ZipFile.CreateFromDirectory(stagingRoot, outputPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "project-package-export",
+                resource: "project-package",
+                summary: "Descarga de paquete completo del proyecto",
+                details: "Incluye DB, formularios PDF, backups, claves de sesion/MFA y respaldos offline del frontend.",
+                result: "success",
+                severity: "info",
+                changedByUsername: User.Identity?.Name ?? "admin",
+                cancellationToken: cancellationToken);
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(outputPath, cancellationToken);
+            return File(bytes, "application/zip", packageName);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/project-package/upload")]
+    [HttpPost("/dashboard/project-package/upload")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(250_000_000)]
+    public async Task<IActionResult> UploadProjectPackage(IFormFile? packageFile, CancellationToken cancellationToken)
+    {
+        if (packageFile is null || packageFile.Length == 0)
+        {
+            TempData["ErrorMessage"] = "Selecciona un paquete del proyecto para restaurar.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var extension = Path.GetExtension(packageFile.FileName);
+        if (!string.Equals(extension, ".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["ErrorMessage"] = "El paquete debe ser un archivo .zip.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-data-import-{Guid.NewGuid():N}");
+        var tempZipPath = Path.Combine(tempRoot, Path.GetFileName(packageFile.FileName));
+        var extractRoot = Path.Combine(tempRoot, "extract");
+
+        try
+        {
+            Directory.CreateDirectory(tempRoot);
+
+            await using (var stream = System.IO.File.Create(tempZipPath))
+            {
+                await packageFile.CopyToAsync(stream, cancellationToken);
+            }
+
+            ZipFile.ExtractToDirectory(tempZipPath, extractRoot, overwriteFiles: true);
+            await RestoreProjectPackageAsync(extractRoot, cancellationToken);
+
+            TempData["SuccessMessage"] = "Paquete del proyecto restaurado correctamente. Si tienes otras sesiones abiertas, recarga la pagina.";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "project-package-import",
+                resource: "project-package",
+                summary: $"Paquete restaurado desde {packageFile.FileName}",
+                details: "Se restauraron DB, formularios PDF, claves de sesion/MFA y respaldos offline del frontend.",
+                result: "success",
+                severity: "warning",
+                changedByUsername: User.Identity?.Name ?? "admin",
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            TempData["ErrorMessage"] = $"No fue posible restaurar el paquete del proyecto: {ex.Message}";
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "project-package-import",
+                resource: "project-package",
+                summary: $"Error al restaurar paquete {packageFile.FileName}",
+                details: ex.Message,
+                result: "failure",
+                severity: "critical",
+                changedByUsername: User.Identity?.Name ?? "admin",
+                cancellationToken: cancellationToken);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("/admin/activity")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    public async Task<IActionResult> Activity(
+        string? buildingExternalId,
+        string? changedByUsername,
+        string? actionType,
+        string? resource,
+        string? result,
+        string? severity,
+        string? search,
+        string? clientIp,
+        string? userAgent,
+        string? from,
+        string? to,
+        int page = 1,
+        int pageSize = 50)
+    {
+        page = Math.Max(1, page);
+        pageSize = NormalizePageSize(pageSize);
+
+        var queryResult = await _auditLogService.QueryAsync(new AuditLogQueryRequest
+        {
+            BuildingExternalId = buildingExternalId ?? string.Empty,
+            ChangedByUsername = changedByUsername ?? string.Empty,
+            ActionType = actionType ?? string.Empty,
+            Resource = resource ?? string.Empty,
+            Result = result ?? string.Empty,
+            Severity = severity ?? string.Empty,
+            Search = search ?? string.Empty,
+            ClientIp = clientIp ?? string.Empty,
+            UserAgent = userAgent ?? string.Empty,
+            DateFrom = from ?? string.Empty,
+            DateTo = to ?? string.Empty,
+            Page = page,
+            PageSize = pageSize
+        });
+
+        var model = new AdminActivityViewModel
+        {
+            BuildingExternalId = buildingExternalId ?? string.Empty,
+            ChangedByUsername = changedByUsername ?? string.Empty,
+            ActionType = actionType ?? string.Empty,
+            Resource = resource ?? string.Empty,
+            Result = result ?? string.Empty,
+            Severity = severity ?? string.Empty,
+            Search = search ?? string.Empty,
+            ClientIp = clientIp ?? string.Empty,
+            UserAgent = userAgent ?? string.Empty,
+            DateFrom = from ?? string.Empty,
+            DateTo = to ?? string.Empty,
+            Page = queryResult.Page,
+            PageSize = queryResult.PageSize,
+            TotalCount = queryResult.TotalCount,
+            TotalPages = queryResult.TotalPages,
+            SuccessCount = queryResult.SuccessCount,
+            FailureCount = queryResult.FailureCount,
+            CriticalCount = queryResult.CriticalCount,
+            WarningCount = queryResult.WarningCount,
+            Items = queryResult.Items
+        };
+
+        return View(model);
+    }
+
+    [HttpGet("/admin/suggestions/inventory")]
+    [HttpGet("/dashboard/suggestions/inventory")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    public async Task<IActionResult> InventorySuggestions(
+        [FromQuery] string? query,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedQuery = NormalizeSortableText(query);
+        if (string.IsNullOrWhiteSpace(normalizedQuery) || normalizedQuery.Length < 2)
+        {
+            return Ok(Array.Empty<string>());
+        }
+
+        var items = await _context.ImportedInventoryItems.AsNoTracking()
+            .Select(item => new
+            {
+                item.SerialNumber,
+                item.ItemNumber,
+                item.Description,
+                item.UnitOrDepartment,
+                item.OrganizationalUnit,
+                item.ResponsibleUser,
+                item.Email,
+                item.IpAddress,
+                item.MacAddress
+            })
+            .ToListAsync(cancellationToken);
+
+        var suggestions = new List<string>();
+
+        void TryAdd(string? rawValue)
+        {
+            var value = rawValue?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (!NormalizeSortableText(value).Contains(normalizedQuery, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!suggestions.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                suggestions.Add(value);
+            }
+        }
+
+        foreach (var item in items)
+        {
+            TryAdd(item.SerialNumber);
+            TryAdd(item.ItemNumber);
+            TryAdd(item.Description);
+            TryAdd(item.UnitOrDepartment);
+            TryAdd(item.OrganizationalUnit);
+            TryAdd(item.ResponsibleUser);
+            TryAdd(item.Email);
+            TryAdd(item.IpAddress);
+            TryAdd(item.MacAddress);
+        }
+
+        return Ok(suggestions
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList());
+    }
+
+    [HttpGet("/admin/suggestions/locations")]
+    [HttpGet("/dashboard/suggestions/locations")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    public async Task<IActionResult> LocationSuggestions(
+        [FromQuery] string? query,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedQuery = NormalizeSortableText(query);
+        if (string.IsNullOrWhiteSpace(normalizedQuery) || normalizedQuery.Length < 2)
+        {
+            return Ok(Array.Empty<string>());
+        }
+
+        var buildings = await _context.SyncedBuildings.AsNoTracking().Where(building => building.IsActive)
+            .Select(building => new
+            {
+                building.ExternalId,
+                DisplayName = building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName,
+                building.ShortName,
+                building.RealName,
+                building.Type,
+                building.ResponsibleArea
+            })
+            .ToListAsync(cancellationToken);
+
+        var suggestions = new List<string>();
+
+        void TryAdd(string? rawValue)
+        {
+            var value = rawValue?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (!NormalizeSortableText(value).Contains(normalizedQuery, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            if (!suggestions.Contains(value, StringComparer.OrdinalIgnoreCase))
+            {
+                suggestions.Add(value);
+            }
+        }
+
+        foreach (var building in buildings)
+        {
+            TryAdd(building.DisplayName);
+            TryAdd(building.ExternalId);
+            TryAdd(building.ShortName);
+            TryAdd(building.RealName);
+            TryAdd(building.Type);
+            TryAdd(building.ResponsibleArea);
+        }
+
+        return Ok(suggestions
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList());
+    }
+
+    [HttpGet("/admin/suggestions/campus")]
+    [HttpGet("/dashboard/suggestions/campus")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    public async Task<IActionResult> CampusSuggestions(
+        [FromQuery] string? query,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedQuery = NormalizeSortableText(query);
+        if (string.IsNullOrWhiteSpace(normalizedQuery))
+        {
+            return Ok(Array.Empty<string>());
+        }
+
+        var campuses = await _context.SyncedBuildings.AsNoTracking().Where(building => building.IsActive)
+            .Select(building => building.ManualCampus != "" ? building.ManualCampus : building.Campus)
+            .Where(campus => campus != "")
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var results = campuses
+            .Where(campus => NormalizeSortableText(campus).Contains(normalizedQuery, StringComparison.Ordinal))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(campus => campus, StringComparer.OrdinalIgnoreCase)
+            .Take(12)
+            .ToList();
+
+        return Ok(results);
+    }
+
+    [HttpGet("/admin/delivery-form")]
+    public IActionResult DeliveryForm()
+    {
+        return View(BuildDefaultDeliveryFormViewModel());
+    }
+
+    [HttpPost("/admin/delivery-form")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeliveryForm(EquipmentDeliveryFormViewModel model)
+    {
+        model.Institution = string.IsNullOrWhiteSpace(model.Institution)
+            ? _configuration["DeliveryForm:Institution"]?.Trim() ?? string.Empty
+            : model.Institution.Trim();
+
+        model.DocumentDate = string.IsNullOrWhiteSpace(model.DocumentDate)
+            ? DateTime.Today.ToString("dd/MM/yyyy")
+            : model.DocumentDate.Trim();
+
+        model.AntivirusConnectionState = string.IsNullOrWhiteSpace(model.AntivirusConnectionState)
+            ? "Activo"
+            : model.AntivirusConnectionState.Trim();
+
+        model.ReceptionType = model.ReceptionType?.Trim() ?? string.Empty;
+        if (!string.Equals(model.ReceptionType, "Nueva", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(model.ReceptionType, "Reemplazo", StringComparison.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError(nameof(model.ReceptionType), "Selecciona si el equipo es nuevo o reemplazo.");
+        }
+
+        if (!string.Equals(model.ReceptionType, "Reemplazo", StringComparison.OrdinalIgnoreCase))
+        {
+            model.ReplacedEquipmentSerial = string.Empty;
+            model.ReplacedEquipmentModel = string.Empty;
+        }
+
+        model.ValidationSerialName = string.IsNullOrWhiteSpace(model.ValidationSerialName) ? model.SerialNumber : model.ValidationSerialName;
+        model.ValidationDescriptionChange = string.IsNullOrWhiteSpace(model.ValidationDescriptionChange) ? model.UnitOrDepartment : model.ValidationDescriptionChange;
+        model.ValidationAdAccount = string.IsNullOrWhiteSpace(model.ValidationAdAccount) ? model.ActiveDirectoryUser : model.ValidationAdAccount;
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        try
+        {
+            var generatedPdf = await _equipmentDeliveryDocumentService.GeneratePdfAsync(model, HttpContext.RequestAborted);
+            var previewId = Guid.NewGuid().ToString("N");
+            var preview = new DeliveryFormPreviewFile
+            {
+                Content = generatedPdf.Content,
+                FileName = generatedPdf.FileName,
+                SourceForm = model
+            };
+            _memoryCache.Set(GetDeliveryFormPreviewCacheKey(previewId), preview, TimeSpan.FromMinutes(30));
+            SaveDeliveryFormPreviewToDisk(previewId, preview);
+
+            TempData["SuccessMessage"] = "Formulario creado exitosamente.";
+            return RedirectToAction(nameof(DeliveryFormPreview), new { id = previewId });
+        }
+        catch (Exception ex)
+        {
+            ModelState.AddModelError(string.Empty, $"No se pudo generar la vista previa PDF: {ex.Message}");
+            return View(model);
+        }
+    }
+
+    [HttpGet("/admin/delivery-form/preview/{id}")]
+    public async Task<IActionResult> DeliveryFormPreview(string id, string? assignedBuildingExternalId = null)
+    {
+        if (!TryGetDeliveryFormPreview(id, out var preview) || preview is null)
+        {
+            TempData["ErrorMessage"] = "La vista previa del formulario ya no esta disponible. Genera el formulario nuevamente.";
+            return RedirectToAction(nameof(DeliveryForm));
+        }
+
+        var selectedBuildingExternalId = assignedBuildingExternalId?.Trim() ?? string.Empty;
+        var buildings = User.IsInRole(AppRoles.Admin)
+            ? await _context.SyncedBuildings
+                .AsNoTracking()
+                .Where(building => building.IsActive)
+                .OrderBy(building => building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName)
+                .ToListAsync()
+            : new List<SyncedBuilding>();
+
+        if (!string.IsNullOrWhiteSpace(selectedBuildingExternalId)
+            && !buildings.Any(building => string.Equals(building.ExternalId, selectedBuildingExternalId, StringComparison.OrdinalIgnoreCase)))
+        {
+            selectedBuildingExternalId = string.Empty;
+        }
+
+        return View(new DeliveryFormPreviewViewModel
+        {
+            PreviewId = id,
+            FileName = preview.FileName,
+            SourceForm = preview.SourceForm,
+            Buildings = buildings,
+            AssignedBuildingExternalId = selectedBuildingExternalId,
+            CreatedInventoryItemId = preview.CreatedInventoryItemId
+        });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/delivery-form/preview/{id}/inventory")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddDeliveryFormToInventory(string id, string? assignedBuildingExternalId)
+    {
+        if (!TryGetDeliveryFormPreview(id, out var preview) || preview is null)
+        {
+            TempData["ErrorMessage"] = "La vista previa del formulario ya no esta disponible. Genera el formulario nuevamente.";
+            return RedirectToAction(nameof(DeliveryForm));
+        }
+
+        if (preview.SourceForm is null)
+        {
+            TempData["ErrorMessage"] = "Esta vista previa no conserva los datos del formulario. Genera el formulario nuevamente para agregar el equipo al inventario.";
+            return RedirectToAction(nameof(DeliveryFormPreview), new { id });
+        }
+
+        var normalizedBuildingExternalId = assignedBuildingExternalId?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(normalizedBuildingExternalId))
+        {
+            var buildingExists = await _context.SyncedBuildings
+                .AsNoTracking()
+                .AnyAsync(building => building.ExternalId == normalizedBuildingExternalId && building.IsActive);
+
+            if (!buildingExists)
+            {
+                TempData["ErrorMessage"] = "El edificio seleccionado ya no existe en la sincronizacion actual.";
+                return RedirectToAction(nameof(DeliveryFormPreview), new { id, assignedBuildingExternalId = normalizedBuildingExternalId });
+            }
+        }
+
+        if (preview.CreatedInventoryItemId.HasValue)
+        {
+            var existingItem = await _context.ImportedInventoryItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == preview.CreatedInventoryItemId.Value);
+
+            if (existingItem is not null)
+            {
+                TempData["SuccessMessage"] = $"Este formulario ya fue agregado al inventario como equipo #{existingItem.Id}.";
+                return RedirectToAction(nameof(DeliveryFormPreview), new { id, assignedBuildingExternalId = normalizedBuildingExternalId });
+            }
+
+            preview.CreatedInventoryItemId = null;
+        }
+
+        var createdItem = await CreateInventoryItemFromDeliveryFormAsync(preview.SourceForm, normalizedBuildingExternalId, preview.Content, HttpContext.RequestAborted);
+        preview.CreatedInventoryItemId = createdItem.Id;
+        _memoryCache.Set(GetDeliveryFormPreviewCacheKey(id), preview, TimeSpan.FromMinutes(30));
+        SaveDeliveryFormPreviewToDisk(id, preview);
+
+        TempData["SuccessMessage"] = string.IsNullOrWhiteSpace(normalizedBuildingExternalId)
+            ? "Equipo agregado al inventario y dejado pendiente de asignacion."
+            : $"Equipo agregado al inventario y asignado inicialmente al edificio {normalizedBuildingExternalId}.";
+
+        return RedirectToAction(nameof(DeliveryFormPreview), new { id, assignedBuildingExternalId = normalizedBuildingExternalId });
+    }
+
+    [HttpGet("/admin/delivery-form/preview/{id}/file")]
+    public IActionResult DeliveryFormPreviewFile(string id)
+    {
+        if (!TryGetDeliveryFormPreview(id, out var preview) || preview is null)
+        {
+            return NotFound("La vista previa PDF ya no esta disponible.");
+        }
+
+        Response.Headers["Content-Disposition"] = $"inline; filename=\"{preview.FileName}\"";
+        return File(preview.Content, "application/pdf");
+    }
+
+    [HttpGet("/admin/inventory/{id:guid}/form-pdf")]
+    public async Task<IActionResult> InventoryItemFormPdf(Guid id)
+    {
+        var item = await _context.ImportedInventoryItems.AsNoTracking().FirstOrDefaultAsync(candidate => candidate.Id == id);
+
+        if (item is null)
+            return NotFound();
+
+        if (string.IsNullOrWhiteSpace(item.DeliveryFormPdfFileName))
+            return NotFound("Este equipo no tiene formulario PDF cargado.");
+
+        var pdfPath = GetInventoryFormPdfPath(item.DeliveryFormPdfFileName);
+        if (!System.IO.File.Exists(pdfPath))
+        {
+            var legacyPath = Path.Combine(
+                GetInventoryDocumentsDirectory(),
+                Path.GetFileName(item.DeliveryFormPdfFileName));
+            if (!System.IO.File.Exists(legacyPath))
+                return NotFound("El formulario PDF asociado ya no esta disponible.");
+            pdfPath = legacyPath;
+        }
+
+        var downloadFileName = BuildInventoryFormPdfDownloadName(item);
+        Response.Headers["Content-Disposition"] = $"inline; filename=\"{downloadFileName}\"";
+        return File(System.IO.File.ReadAllBytes(pdfPath), "application/pdf");
+    }
+
+    [HttpGet("/admin/inventory/{itemId:guid}/documents/{documentId:guid}")]
+    public async Task<IActionResult> InventoryItemDocument(Guid itemId, Guid documentId)
+    {
+        var document = await _context.InventoryDocuments.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == documentId && x.InventoryItemId == itemId);
+        if (document is null)
+            return NotFound();
+
+        var databasePath = GetDatabaseFilePath();
+        var root = Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "inventory-documents");
+        var filePath = Path.Combine(root, Path.GetFileName(document.StoredFileName));
+        if (!System.IO.File.Exists(filePath))
+            return NotFound("El documento asociado ya no esta disponible.");
+
+        Response.Headers["Content-Disposition"] = $"inline; filename=\"{Path.GetFileName(document.OriginalFileName)}\"";
+        return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType, document.OriginalFileName);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/inventory/{id:guid}/documents")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<IActionResult> UploadInventoryDocument(Guid id, IFormFile? documentFile, CancellationToken cancellationToken)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(new object?[] { id }, cancellationToken);
+        if (item is null)
+            return NotFound();
+
+        if (documentFile is null || documentFile.Length == 0)
+        {
+            TempData["ErrorMessage"] = "Selecciona un archivo para subir.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+
+        if (!documentFile.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["ErrorMessage"] = "Solo se permiten archivos PDF.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+
+        var databasePath = GetDatabaseFilePath();
+        var documentsDir = Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "inventory-documents");
+        Directory.CreateDirectory(documentsDir);
+
+        var storedFileName = $"{item.Id}-{Guid.NewGuid()}-{Path.GetFileName(documentFile.FileName)}";
+        var filePath = Path.Combine(documentsDir, storedFileName);
+
+        await using (var stream = new FileStream(filePath, FileMode.Create))
+        {
+            await documentFile.CopyToAsync(stream, cancellationToken);
+        }
+
+        var document = new InventoryDocument
+        {
+            InventoryItemId = id,
+            OriginalFileName = documentFile.FileName,
+            StoredFileName = storedFileName,
+            ContentType = documentFile.ContentType,
+            SizeBytes = documentFile.Length,
+            Source = "upload",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        _context.InventoryDocuments.Add(document);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["SuccessMessage"] = $"Documento \"{documentFile.FileName}\" subido correctamente.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/documents/{documentId:guid}/delete")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInventoryDocument(Guid documentId, CancellationToken cancellationToken)
+    {
+        var document = await _context.InventoryDocuments.FindAsync(new object?[] { documentId }, cancellationToken);
+        if (document is null)
+            return NotFound();
+
+        var itemId = document.InventoryItemId;
+
+        var databasePath = GetDatabaseFilePath();
+        var filePath = Path.Combine(
+            Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory,
+            "inventory-documents",
+            Path.GetFileName(document.StoredFileName));
+
+        if (System.IO.File.Exists(filePath))
+        {
+            System.IO.File.Delete(filePath);
+        }
+
+        _context.InventoryDocuments.Remove(document);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["SuccessMessage"] = "Documento eliminado.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id = itemId });
+    }
+
+    private string GetInventoryDocumentsDirectory()
+    {
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        return Path.Combine(databaseDirectory, "inventory-documents");
+    }
+
+
+    public async Task<IActionResult> Locations(
+        string? search,
+        string? campus,
+        string? floor,
+        string? sortBy,
+        string? sortDirection,
+        string[]? filterField,
+        string[]? filterValue,
+        string? newFilterField,
+        string? newFilterValue,
+        int page = 1,
+        int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        pageSize = NormalizePageSize(pageSize);
+        page = Math.Max(page, 1);
+        sortBy = NormalizeLocationSortBy(sortBy);
+        sortDirection = NormalizeSortDirection(sortDirection);
+        var normalizedColumnFilters = NormalizeLocationColumnFilters(filterField, filterValue);
+        var normalizedNewFilterField = NormalizeLocationColumnFilterField(newFilterField);
+        var trimmedNewFilterValue = newFilterValue?.Trim();
+
+        if (!string.IsNullOrWhiteSpace(normalizedNewFilterField) && !string.IsNullOrWhiteSpace(trimmedNewFilterValue))
+        {
+            normalizedColumnFilters.Add((normalizedNewFilterField, trimmedNewFilterValue));
+        }
+
+        var buildingsQuery = _context.SyncedBuildings.AsNoTracking().Where(b => b.IsActive).AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.Trim().ToLower();
+            buildingsQuery = buildingsQuery.Where(b =>
+                ((b.ManualDisplayName != "" ? b.ManualDisplayName : b.DisplayName).ToLower().Contains(searchLower)) ||
+                (b.ExternalId != null && b.ExternalId.ToLower().Contains(searchLower)) ||
+                (b.ShortName != null && b.ShortName.ToLower().Contains(searchLower)) ||
+                (b.RealName != null && b.RealName.ToLower().Contains(searchLower)) ||
+                (b.Type != null && b.Type.ToLower().Contains(searchLower)) ||
+                (b.ResponsibleArea != null && b.ResponsibleArea.ToLower().Contains(searchLower)));
+        }
+
+        if (!string.IsNullOrEmpty(campus))
+            buildingsQuery = buildingsQuery.Where(b => (b.ManualCampus != "" ? b.ManualCampus : b.Campus).Contains(campus));
+
+        if (!string.IsNullOrEmpty(floor))
+        {
+            var floorToken = $"\"{floor}\"";
+            buildingsQuery = buildingsQuery.Where(b => (b.ManualFloorsJson != "" ? b.ManualFloorsJson : b.FloorsJson).Contains(floorToken));
+        }
+
+        var filteredBuildings = await buildingsQuery.ToListAsync();
+        var filteredBuildingIds = filteredBuildings.Select(b => b.Id).ToList();
+        var filteredBuildingExternalIds = filteredBuildings.Select(b => b.ExternalId).ToList();
+
+        var roomsByBuilding = await _context.SyncedRooms
+            .AsNoTracking()
+            .Where(r => filteredBuildingIds.Contains(r.SyncedBuildingId))
+            .GroupBy(r => r.BuildingExternalId)
+            .Select(g => new
+            {
+                BuildingExternalId = g.Key,
+                Count = g.Count()
+            })
+            .ToDictionaryAsync(x => x.BuildingExternalId, x => x.Count);
+
+        var assignedInventoryByBuilding = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(i => i.AssignedBuildingExternalId != "" && filteredBuildingExternalIds.Contains(i.AssignedBuildingExternalId))
+            .GroupBy(i => i.AssignedBuildingExternalId)
+            .Select(g => new
+            {
+                BuildingExternalId = g.Key,
+                Count = g.Count()
+            })
+            .ToDictionaryAsync(x => x.BuildingExternalId, x => x.Count);
+
+        var suggestedInventoryByBuilding = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(i => i.AssignedBuildingExternalId == "" && i.MatchedBuildingExternalId != "" && filteredBuildingExternalIds.Contains(i.MatchedBuildingExternalId))
+            .GroupBy(i => i.MatchedBuildingExternalId)
+            .Select(g => new
+            {
+                BuildingExternalId = g.Key,
+                Count = g.Count()
+            })
+            .ToDictionaryAsync(x => x.BuildingExternalId, x => x.Count);
+
+        var locationRows = filteredBuildings.Select(b => new AdminLocationRowViewModel
+            {
+                ExternalId = b.ExternalId,
+                DisplayName = b.EffectiveDisplayName,
+                Campus = b.EffectiveCampus,
+                DefaultMapFloor = GetPrimaryFloor(b.EffectiveFloorsJson),
+                HasManualOverride = !string.IsNullOrWhiteSpace(b.ManualCampus) ||
+                                    !string.IsNullOrWhiteSpace(b.ManualDisplayName) ||
+                                    !string.IsNullOrWhiteSpace(b.ManualFloorsJson),
+                Type = b.Type,
+                HasInteriorMap = b.HasInteriorMap,
+                MappingStatus = b.MappingStatus,
+                InventoryStatus = b.InventoryStatus,
+                AvailableFloors = FormatFloors(b.EffectiveFloorsJson),
+                RoomsCount = roomsByBuilding.GetValueOrDefault(b.ExternalId, 0),
+                AssignedInventoryCount = assignedInventoryByBuilding.GetValueOrDefault(b.ExternalId, 0),
+                SuggestedInventoryCount = suggestedInventoryByBuilding.GetValueOrDefault(b.ExternalId, 0),
+                Coordinates = b.CentroidLatitude.HasValue && b.CentroidLongitude.HasValue
+                    ? $"{b.CentroidLatitude.Value:F4}, {b.CentroidLongitude.Value:F4}"
+                    : "-",
+                Latitude = b.CentroidLatitude,
+                Longitude = b.CentroidLongitude
+            })
+            .ToList();
+
+        IEnumerable<AdminLocationRowViewModel> filteredLocationRows = locationRows;
+        foreach (var columnFilter in normalizedColumnFilters)
+        {
+            filteredLocationRows = ApplyLocationColumnFilter(filteredLocationRows, columnFilter);
+        }
+
+        var filteredLocationRowsList = filteredLocationRows.ToList();
+        var totalFilteredLocations = filteredLocationRowsList.Count;
+
+        var sortedRows = SortLocationRows(
+            filteredLocationRowsList,
+            sortBy,
+            sortDirection)
+            .ToList();
+
+        var locations = sortedRows
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var model = new AdminLocationsViewModel
+        {
+            Search = search ?? string.Empty,
+            Campus = campus ?? string.Empty,
+            Floor = floor ?? string.Empty,
+            SortBy = sortBy,
+            SortDirection = sortDirection,
+            Page = page,
+            PageSize = pageSize,
+            TotalFilteredLocations = totalFilteredLocations,
+            Locations = locations,
+            TotalBuildings = totalFilteredLocations,
+            BuildingsWithInteriorMap = filteredLocationRowsList.Count(row => row.HasInteriorMap),
+            TotalRooms = filteredLocationRowsList.Sum(row => row.RoomsCount),
+            AssignedInventoryItems = filteredLocationRowsList.Sum(row => row.AssignedInventoryCount),
+            NewFilterField = string.Empty,
+            NewFilterValue = string.Empty,
+            AvailableColumnFilters = GetLocationColumnFilterOptions(),
+            ColumnFilters = normalizedColumnFilters
+                .Select(filter => new LocationColumnFilterViewModel
+                {
+                    Field = filter.Field,
+                    Label = GetLocationColumnFilterLabel(filter.Field),
+                    Value = filter.Value
+                })
+                .ToList()
+        };
+
+        return View(model);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/editsyncedbuilding/{externalId}")]
+    public async Task<IActionResult> EditSyncedBuilding(string externalId)
+    {
+        var building = await _context.SyncedBuildings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.ExternalId == externalId);
+        if (building is null)
+            return NotFound();
+
+        var model = new EditSyncedBuildingViewModel
+        {
+            Building = building,
+            AssignedInventoryCount = await _context.ImportedInventoryItems
+                .AsNoTracking()
+                .CountAsync(item => item.AssignedBuildingExternalId == externalId),
+            Rooms = await _context.SyncedRooms
+                .AsNoTracking()
+                .Where(r => r.BuildingExternalId == externalId)
+                .OrderBy(r => r.ManualFloor ?? r.Floor)
+                .ThenBy(r => r.ManualName != "" ? r.ManualName : r.Name)
+                .ToListAsync()
+        };
+
+        return View(model);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/editsyncedbuilding/{externalId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditSyncedBuilding(
+        string externalId,
+        string? manualCampus,
+        string? manualDisplayName,
+        string? manualFloorsCsv)
+    {
+        var building = await _context.SyncedBuildings.FirstOrDefaultAsync(b => b.ExternalId == externalId);
+        if (building is null)
+            return NotFound();
+
+        var previousCampus = building.EffectiveCampus;
+        var previousDisplayName = building.EffectiveDisplayName;
+        var previousFloors = building.EffectiveFloorsJson;
+
+        building.ManualCampus = manualCampus?.Trim() ?? string.Empty;
+        building.ManualDisplayName = manualDisplayName?.Trim() ?? string.Empty;
+        building.ManualFloorsJson = NormalizeFloorsCsv(manualFloorsCsv);
+
+        var manualBuilding = await _context.ManualBuildings.FirstOrDefaultAsync(manual => manual.ExternalId == externalId);
+        if (manualBuilding is not null)
+        {
+            manualBuilding.Campus = building.EffectiveCampus;
+            manualBuilding.DisplayName = building.EffectiveDisplayName;
+            manualBuilding.Type = building.Type;
+            manualBuilding.Notes = building.Notes;
+            manualBuilding.FloorsJson = BuildingFloorNormalizer.NormalizeJson(building.EffectiveFloorsJson);
+            manualBuilding.UpdatedAtUtc = DateTime.UtcNow;
+        }
+
+        building.SyncedAtUtc = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+        await LogBuildingOverrideAsync(building, previousCampus, previousDisplayName, previousFloors);
+
+        TempData["SuccessMessage"] = "Override del edificio guardado correctamente.";
+        return RedirectToAction(nameof(EditSyncedBuilding), new { externalId });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/deletesyncedbuilding/{externalId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteSyncedBuilding(string externalId)
+    {
+        var building = await _context.SyncedBuildings.FirstOrDefaultAsync(b => b.ExternalId == externalId);
+        if (building is null)
+            return NotFound();
+
+        if (building.IsActive)
+        {
+            var now = DateTime.UtcNow;
+            building.SoftDelete(User.Identity?.Name ?? "sistema");
+            building.SyncedAtUtc = now;
+
+            _context.AuditLogEntries.Add(new AuditLogEntry
+            {
+                BuildingExternalId = building.ExternalId,
+                EntityType = "synced-building",
+                EntityId = building.ExternalId,
+                ActionType = "delete-building",
+                Summary = $"Edificio eliminado del mapa: {building.EffectiveDisplayName}",
+                Details = "El edificio fue marcado como eliminado desde el dashboard. Los equipos asignados se conservaron sin cambios.",
+                ChangedByUsername = User.Identity?.Name ?? "sistema",
+                CreatedAtUtc = now
+            });
+
+            await _context.SaveChangesAsync();
+        }
+
+        TempData["SuccessMessage"] = $"El edificio {building.EffectiveDisplayName} fue eliminado del mapa. Los equipos asignados se conservaron.";
+        return RedirectToAction(nameof(Locations));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/editsyncedroom/{externalId}")]
+    public async Task<IActionResult> EditSyncedRoom(string externalId)
+    {
+        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId);
+        if (room is null)
+            return NotFound();
+
+        var building = await _context.SyncedBuildings
+            .AsNoTracking()
+            .FirstAsync(b => b.ExternalId == room.BuildingExternalId);
+
+        return View(new EditSyncedRoomViewModel
+        {
+            Room = room,
+            Building = building
+        });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/editsyncedroom/{externalId}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditSyncedRoom(string externalId, string? manualName, int? manualFloor)
+    {
+        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId);
+        if (room is null)
+            return NotFound();
+
+        var previousName = room.EffectiveName;
+        var previousFloor = room.EffectiveFloor;
+
+        room.ManualName = manualName?.Trim() ?? string.Empty;
+        room.ManualFloor = manualFloor;
+
+        await _context.SaveChangesAsync();
+        await LogRoomOverrideAsync(room, previousName, previousFloor);
+
+        TempData["SuccessMessage"] = "Override de la sala guardado correctamente.";
+        return RedirectToAction(nameof(EditSyncedRoom), new { externalId });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    public IActionResult CreateLocation() => View(new Location());
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateLocation(Location location)
+    {
+        if (!ModelState.IsValid)
+            return View(location);
+
+        location.CreatedAtUtc = DateTime.UtcNow;
+        _context.Locations.Add(location);
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Locations));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    public async Task<IActionResult> EditLocation(Guid id)
+    {
+        var location = await _context.Locations.FindAsync(id);
+        if (location == null)
+            return NotFound();
+
+        return View(location);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditLocation(Guid id, Location location)
+    {
+        if (id != location.Id)
+            return BadRequest();
+
+        if (!ModelState.IsValid)
+            return View(location);
+
+        _context.Entry(location).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+        return RedirectToAction(nameof(Locations));
+    }
+
+    public IActionResult Equipments()
+    {
+        return RedirectToAction(nameof(Inventory));
+    }
+
+    public async Task<IActionResult> Inventory(
+        string? search,
+        string? category,
+        string? status,
+        string? assignment,
+        string? buildingExternalId,
+        string? sortBy,
+        string? sortDirection,
+        string? inconsistencyType,
+        string[]? filterField,
+        string[]? filterValue,
+        string? newFilterField,
+        string? newFilterValue,
+        bool onlyInconsistencies = false,
+        int page = 1,
+        int pageSize = 30,
+        CancellationToken cancellationToken = default)
+    {
+        pageSize = NormalizePageSize(pageSize);
+        page = Math.Max(page, 1);
+        assignment = string.IsNullOrWhiteSpace(assignment) ? "all" : assignment.Trim().ToLowerInvariant();
+        sortBy = NormalizeInventorySortBy(sortBy);
+        sortDirection = NormalizeSortDirection(sortDirection);
+        inconsistencyType = NormalizeInconsistencyType(inconsistencyType);
+        var normalizedColumnFilters = NormalizeInventoryColumnFilters(filterField, filterValue);
+        var appendedFilterField = NormalizeInventoryFilterField(newFilterField);
+        var appendedFilterValue = newFilterValue?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(appendedFilterField) && !string.IsNullOrWhiteSpace(appendedFilterValue))
+        {
+            normalizedColumnFilters.Add((appendedFilterField, appendedFilterValue));
+        }
+
+        if (onlyInconsistencies && assignment == "all")
+        {
+            assignment = "inconsistent";
+        }
+
+        var inconsistencyFilterActive = onlyInconsistencies || assignment == "inconsistent";
+
+        var inconsistencySnapshot = await AnalyzeInventoryInconsistenciesAsync();
+        var inconsistentItemIds = inconsistencySnapshot.ItemIds.ToHashSet();
+        var availableCategories = await GetInventoryCategoryOptionsAsync();
+        var availableStatuses = await GetInventoryStatusOptionsAsync();
+
+        var query = _context.ImportedInventoryItems.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.Trim().ToLower();
+            query = query.Where(i =>
+                (i.SerialNumber != null && i.SerialNumber.ToLower().Contains(searchLower)) ||
+                (i.ItemNumber != null && i.ItemNumber.ToLower().Contains(searchLower)) ||
+                (i.Lot != null && i.Lot.ToLower().Contains(searchLower)) ||
+                (i.Description != null && i.Description.ToLower().Contains(searchLower)) ||
+                (i.UnitOrDepartment != null && i.UnitOrDepartment.ToLower().Contains(searchLower)) ||
+                (i.OrganizationalUnit != null && i.OrganizationalUnit.ToLower().Contains(searchLower)) ||
+                (i.ResponsibleUser != null && i.ResponsibleUser.ToLower().Contains(searchLower)) ||
+                (i.Email != null && i.Email.ToLower().Contains(searchLower)) ||
+                (i.JobTitle != null && i.JobTitle.ToLower().Contains(searchLower)) ||
+                (i.IpAddress != null && i.IpAddress.ToLower().Contains(searchLower)) ||
+                (i.MacAddress != null && i.MacAddress.ToLower().Contains(searchLower)) ||
+                (i.TicketMda != null && i.TicketMda.ToLower().Contains(searchLower)) ||
+                (i.Observation != null && i.Observation.ToLower().Contains(searchLower)));
+        }
+
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            query = query.Where(i => i.InferredCategory == category);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            query = query.Where(i => i.InferredStatus == status);
+        }
+
+        foreach (var columnFilter in normalizedColumnFilters)
+        {
+            query = ApplyInventoryColumnFilter(query, columnFilter);
+        }
+
+        switch (assignment)
+        {
+            case "pending":
+                query = query.Where(i => i.AssignedBuildingExternalId == "");
+                break;
+            case "assigned":
+                if (!string.IsNullOrWhiteSpace(buildingExternalId))
+                {
+                    query = query.Where(i => i.AssignedBuildingExternalId == buildingExternalId);
+                }
+
+                query = query.Where(i => i.AssignedBuildingExternalId != "");
+                break;
+            case "suggested":
+                if (!string.IsNullOrWhiteSpace(buildingExternalId))
+                {
+                    query = query.Where(i => i.MatchedBuildingExternalId == buildingExternalId);
+                }
+
+                query = query.Where(i => i.AssignedBuildingExternalId == "" && i.MatchedBuildingExternalId != "");
+                break;
+            case "inconsistent":
+                if (!string.IsNullOrWhiteSpace(buildingExternalId))
+                {
+                    query = query.Where(i =>
+                        i.AssignedBuildingExternalId == buildingExternalId ||
+                        i.MatchedBuildingExternalId == buildingExternalId);
+                }
+                break;
+            case "all":
+                if (!string.IsNullOrWhiteSpace(buildingExternalId))
+                {
+                    query = query.Where(i =>
+                        i.AssignedBuildingExternalId == buildingExternalId ||
+                        i.MatchedBuildingExternalId == buildingExternalId);
+                }
+                break;
+            default:
+                assignment = "all";
+                break;
+        }
+
+        if (inconsistencyFilterActive)
+        {
+            query = inconsistentItemIds.Count == 0
+                ? query.Where(i => false)
+                : query.Where(i => inconsistentItemIds.Contains(i.Id));
+        }
+
+        var inconsistencyTypeIds = string.IsNullOrWhiteSpace(inconsistencyType)
+            ? null
+            : inconsistencySnapshot.Summaries
+                .Where(entry => MatchesInconsistencyType(entry.Value, inconsistencyType))
+                .Select(entry => entry.Key)
+                .ToHashSet();
+
+        if (inconsistencyTypeIds is not null)
+        {
+            query = inconsistencyTypeIds.Count == 0
+                ? query.Where(i => false)
+                : query.Where(i => inconsistencyTypeIds.Contains(i.Id));
+        }
+
+        var filteredItems = await query.ToListAsync();
+        var totalFilteredItems = filteredItems.Count;
+        var sortedItems = SortInventoryItems(filteredItems, sortBy, sortDirection).ToList();
+        var items = sortedItems
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        var model = new AdminInventoryListViewModel
+        {
+            Search = search ?? string.Empty,
+            Category = category ?? string.Empty,
+            Status = status ?? string.Empty,
+            AssignmentFilter = assignment,
+            BuildingExternalId = buildingExternalId ?? string.Empty,
+            SortBy = sortBy,
+            SortDirection = sortDirection,
+            InconsistencyType = inconsistencyType ?? string.Empty,
+            OnlyInconsistencies = inconsistencyFilterActive,
+            Page = page,
+            PageSize = pageSize,
+            TotalFilteredItems = totalFilteredItems,
+            Items = items,
+            Buildings = await _context.SyncedBuildings.AsNoTracking().Where(b => b.IsActive || b.ExternalId == buildingExternalId)
+                .OrderBy(b => b.ManualDisplayName != "" ? b.ManualDisplayName : b.DisplayName)
+                .ToListAsync(cancellationToken),
+            Categories = availableCategories,
+            Statuses = availableStatuses,
+            AvailableColumnFilters = GetInventoryColumnFilterOptions(),
+            ColumnFilters = normalizedColumnFilters
+                .Select(filter => new InventoryColumnFilterViewModel
+                {
+                    Field = filter.Field,
+                    Label = GetInventoryColumnFilterLabel(filter.Field),
+                    Value = filter.Value
+                })
+                .ToList(),
+            AvailableInconsistencyTypes = GetInventoryInconsistencyFilterOptions(),
+            InconsistencySummaries = items
+                .Where(item => inconsistencySnapshot.Summaries.ContainsKey(item.Id))
+                .ToDictionary(item => item.Id, item => inconsistencySnapshot.Summaries[item.Id]),
+            TotalItems = await _context.ImportedInventoryItems.AsNoTracking().CountAsync(cancellationToken),
+            AssignedItems = await _context.ImportedInventoryItems.AsNoTracking().Where(i => i.AssignedBuildingExternalId != "").CountAsync(cancellationToken),
+            PendingItems = await _context.ImportedInventoryItems.AsNoTracking().Where(i => i.AssignedBuildingExternalId == "").CountAsync(cancellationToken),
+            SuggestedItems = await _context.ImportedInventoryItems.AsNoTracking().Where(i => i.AssignedBuildingExternalId == "" && i.MatchedBuildingExternalId != "").CountAsync(cancellationToken),
+            InconsistentItems = inconsistencySnapshot.ItemIds.Count
+        };
+
+        return View("Equipments", model);
+    }
+
+    [HttpGet("/admin/inventory/inconsistency/{id:guid}")]
+    public async Task<IActionResult> InventoryInconsistency(Guid id, string? returnUrl = null)
+    {
+        var model = await BuildInventoryInconsistencyDetailViewModelAsync(id, returnUrl);
+        if (model is null)
+            return NotFound();
+
+        return View(model);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/inventory/inconsistency/{id:guid}/merge")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> MergeInventoryInconsistency(Guid id, Guid[]? selectedItemIds, string? returnUrl = null)
+    {
+        var normalizedReturnUrl = !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? returnUrl
+            : (Url.Action(nameof(InventoryInconsistency), new { id }) ?? $"/admin/inventory/inconsistency/{id}");
+
+        var primary = await _context.ImportedInventoryItems.FirstOrDefaultAsync(item => item.Id == id);
+        if (primary is null)
+            return NotFound();
+
+        var requestedIds = (selectedItemIds ?? Array.Empty<Guid>())
+            .Where(itemId => itemId != id)
+            .Distinct()
+            .ToList();
+
+        if (requestedIds.Count == 0)
+        {
+            TempData["ErrorMessage"] = "Selecciona al menos un equipo relacionado para fusionar.";
+            return RedirectToAction(nameof(InventoryInconsistency), new { id, returnUrl = normalizedReturnUrl });
+        }
+
+        var requestedItems = await _context.ImportedInventoryItems
+            .Where(item => requestedIds.Contains(item.Id))
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+
+        var mergePlan = requestedItems
+            .Select(item => new InventoryMergePlanEntry
+            {
+                Item = item,
+                MatchingFields = GetInventoryMatchingFields(primary, item)
+            })
+            .Where(entry => entry.MatchingFields.Count > 0)
+            .OrderByDescending(entry => entry.MatchingFields.Count)
+            .ThenBy(entry => entry.Item.Id)
+            .ToList();
+
+        if (mergePlan.Count == 0)
+        {
+            TempData["ErrorMessage"] = "No se encontraron coincidencias suficientes entre el equipo base y los equipos seleccionados.";
+            return RedirectToAction(nameof(InventoryInconsistency), new { id, returnUrl = normalizedReturnUrl });
+        }
+
+        var previousBuildingExternalId = primary.AssignedBuildingExternalId;
+        var previousRoomExternalId = primary.AssignedRoomExternalId;
+        var previousFloor = primary.AssignedFloor;
+        var previousSerialNumber = primary.SerialNumber;
+        var previousAssignmentNotes = primary.AssignmentNotes;
+
+        foreach (var entry in mergePlan)
+        {
+            MergeInventoryItems(primary, entry.Item);
+        }
+
+        _context.ImportedInventoryItems.RemoveRange(mergePlan.Select(entry => entry.Item));
+        await _context.SaveChangesAsync();
+
+        var actor = User.Identity?.Name ?? "sistema";
+        var assignmentChanged = !string.Equals(previousBuildingExternalId ?? string.Empty, primary.AssignedBuildingExternalId ?? string.Empty, StringComparison.Ordinal)
+            || !string.Equals(previousRoomExternalId ?? string.Empty, primary.AssignedRoomExternalId ?? string.Empty, StringComparison.Ordinal)
+            || previousFloor != primary.AssignedFloor
+            || !string.Equals(previousSerialNumber ?? string.Empty, primary.SerialNumber ?? string.Empty, StringComparison.Ordinal)
+            || !string.Equals(previousAssignmentNotes ?? string.Empty, primary.AssignmentNotes ?? string.Empty, StringComparison.Ordinal);
+
+        if (assignmentChanged)
+        {
+            await _auditLogService.LogInventoryItemChangeAsync(
+                primary,
+                actor,
+                previousBuildingExternalId,
+                previousRoomExternalId,
+                previousFloor,
+                previousSerialNumber,
+                previousAssignmentNotes);
+        }
+
+        await LogInventoryMergeAsync(primary, mergePlan, actor);
+
+        TempData["SuccessMessage"] = $"Fusion completada. Se integraron {mergePlan.Count} registro(s) en el equipo #{primary.Id}.";
+        return RedirectToAction(nameof(InventoryInconsistency), new { id = primary.Id, returnUrl = normalizedReturnUrl });
+    }
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/admin/inventory/create")]
+    public async Task<IActionResult> CreateInventoryItem()
+    {
+        var form = new InventoryItemFormModel
+        {
+            InferredCategory = "other",
+            InferredStatus = "active"
+        };
+
+        return View(await BuildCreateInventoryItemViewModelAsync(form));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/inventory/create")]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<IActionResult> CreateInventoryItem(CreateInventoryItemViewModel model, IFormFile? deliveryFormPdf, CancellationToken cancellationToken)
+    {
+        var form = model.Form ?? new InventoryItemFormModel();
+        var categories = await GetInventoryCategoryOptionsAsync();
+        var statuses = await GetInventoryStatusOptionsAsync();
+
+        var normalizedCategory = string.IsNullOrWhiteSpace(form.InferredCategory)
+            ? "other"
+            : form.InferredCategory.Trim().ToLowerInvariant();
+        var normalizedStatus = string.IsNullOrWhiteSpace(form.InferredStatus)
+            ? "active"
+            : form.InferredStatus.Trim().ToLowerInvariant();
+
+        if (!categories.Contains(normalizedCategory, StringComparer.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError("Form.InferredCategory", "Selecciona una categoria valida de la lista.");
+        }
+
+        if (!statuses.Contains(normalizedStatus, StringComparer.OrdinalIgnoreCase))
+        {
+            ModelState.AddModelError("Form.InferredStatus", "Selecciona un estado valido de la lista.");
+        }
+
+        if (string.IsNullOrWhiteSpace(form.SerialNumber) && string.IsNullOrWhiteSpace(form.Description))
+        {
+            ModelState.AddModelError("Form.SerialNumber", "Ingresa al menos un S/N o una descripcion para identificar el equipo.");
+        }
+
+        var pdfValidationError = await ValidateInventoryFormPdfAsync(deliveryFormPdf, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(pdfValidationError))
+        {
+            ModelState.AddModelError(string.Empty, pdfValidationError);
+        }
+
+        var assignedBuildingExternalId = form.AssignedBuildingExternalId?.Trim() ?? string.Empty;
+        var assignedRoomExternalId = form.AssignedRoomExternalId?.Trim() ?? string.Empty;
+        var assignedFloor = form.AssignedFloor;
+
+        SyncedRoom? assignedRoom = null;
+        if (!string.IsNullOrWhiteSpace(assignedRoomExternalId))
+        {
+            assignedRoom = await _context.SyncedRooms
+                .AsNoTracking()
+                .FirstOrDefaultAsync(room => room.ExternalId == assignedRoomExternalId, cancellationToken);
+
+            if (assignedRoom == null)
+            {
+                ModelState.AddModelError("Form.AssignedRoomExternalId", "La sala seleccionada ya no existe en la sincronizacion actual.");
+            }
+            else
+            {
+                assignedRoomExternalId = assignedRoom.ExternalId;
+                assignedBuildingExternalId = assignedRoom.BuildingExternalId;
+                assignedFloor = assignedRoom.ManualFloor ?? assignedRoom.Floor;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(assignedBuildingExternalId))
+        {
+            var buildingExists = await _context.SyncedBuildings
+                .AsNoTracking()
+                .AnyAsync(building => building.ExternalId == assignedBuildingExternalId && building.IsActive, cancellationToken);
+
+            if (!buildingExists)
+            {
+                ModelState.AddModelError("Form.AssignedBuildingExternalId", "El edificio seleccionado ya no existe en la sincronizacion actual.");
+            }
+        }
+        else
+        {
+            assignedRoomExternalId = string.Empty;
+            assignedFloor = null;
+        }
+
+        form.InferredCategory = normalizedCategory;
+        form.InferredStatus = normalizedStatus;
+        form.AssignedBuildingExternalId = assignedBuildingExternalId;
+        form.AssignedRoomExternalId = assignedRoomExternalId;
+        form.AssignedFloor = assignedFloor;
+
+        if (!ModelState.IsValid)
+        {
+            return View(await BuildCreateInventoryItemViewModelAsync(form));
+        }
+
+        string storedPdfFileName = string.Empty;
+
+        try
+        {
+            if (deliveryFormPdf is not null && deliveryFormPdf.Length > 0)
+            {
+                storedPdfFileName = await SaveInventoryFormPdfUploadAsync(deliveryFormPdf, form.SerialNumber, cancellationToken);
+            }
+
+            var nextRowNumber = (await _context.ImportedInventoryItems.MaxAsync(i => (int?)i.RowNumber, cancellationToken) ?? 0) + 1;
+            var item = new ImportedInventoryItem
+            {
+                RowNumber = nextRowNumber,
+                ItemNumber = string.IsNullOrWhiteSpace(form.ItemNumber) ? $"MANUAL-{nextRowNumber:D5}" : form.ItemNumber.Trim(),
+                SerialNumber = form.SerialNumber?.Trim() ?? string.Empty,
+                Description = form.Description?.Trim() ?? string.Empty,
+                Lot = form.Lot?.Trim() ?? string.Empty,
+                UnitOrDepartment = form.UnitOrDepartment?.Trim() ?? string.Empty,
+                OrganizationalUnit = form.OrganizationalUnit?.Trim() ?? string.Empty,
+                ResponsibleUser = form.ResponsibleUser?.Trim() ?? string.Empty,
+                Email = form.Email?.Trim() ?? string.Empty,
+                JobTitle = form.JobTitle?.Trim() ?? string.Empty,
+                IpAddress = form.IpAddress?.Trim() ?? string.Empty,
+                MacAddress = form.MacAddress?.Trim() ?? string.Empty,
+                AnnexPhone = form.AnnexPhone?.Trim() ?? string.Empty,
+                TicketMda = form.TicketMda?.Trim() ?? string.Empty,
+                Installer = form.Installer?.Trim() ?? string.Empty,
+                Observation = form.Observation?.Trim() ?? string.Empty,
+                InferredCategory = normalizedCategory,
+                InferredStatus = normalizedStatus,
+                AssignedBuildingExternalId = assignedBuildingExternalId,
+                AssignedRoomExternalId = assignedRoomExternalId,
+                AssignedFloor = assignedFloor,
+                AssignmentNotes = form.AssignmentNotes?.Trim() ?? string.Empty,
+                DeliveryFormPdfFileName = storedPdfFileName,
+                SourceFile = ManualInventorySourceFile,
+                ImportedAtUtc = DateTime.UtcNow,
+                AssignmentUpdatedAtUtc = string.IsNullOrWhiteSpace(assignedBuildingExternalId) ? null : DateTime.UtcNow,
+                MatchedSyncedBuildingId = null,
+                MatchedSyncedRoomId = null,
+                MatchedBuildingExternalId = string.Empty,
+                MatchedRoomExternalId = string.Empty,
+                MatchConfidence = string.Empty,
+                MatchNotes = string.Empty
+            };
+
+            _context.ImportedInventoryItems.Add(item);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
+            {
+                await _auditLogService.LogInventoryItemChangeAsync(
+                    item,
+                    User.Identity?.Name ?? "sistema",
+                    string.Empty,
+                    string.Empty,
+                    null,
+                    string.Empty,
+                    string.Empty);
+            }
+
+            TempData["SuccessMessage"] = "Equipo creado correctamente.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id = item.Id });
+        }
+        catch (Exception ex)
+        {
+            if (!string.IsNullOrWhiteSpace(storedPdfFileName))
+            {
+                DeleteInventoryFormPdfIfExists(storedPdfFileName);
+            }
+
+            ModelState.AddModelError(string.Empty, $"No se pudo crear el equipo: {ex.Message}");
+            return View(await BuildCreateInventoryItemViewModelAsync(form));
+        }
+    }
+
+    public async Task<IActionResult> EditInventoryItem(Guid id)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(id);
+        if (item == null)
+            return NotFound();
+
+        return View(await BuildEditInventoryItemViewModelAsync(item));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    [RequestSizeLimit(25_000_000)]
+    public async Task<IActionResult> EditInventoryItem(
+        Guid id,
+        string? serialNumber,
+        string? inferredCategory,
+        string? inferredStatus,
+        string? assignedBuildingExternalId,
+        string? assignedRoomExternalId,
+        int? assignedFloor,
+        string? assignmentNotes,
+        IFormFile? deliveryFormPdf,
+        CancellationToken cancellationToken)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(new object?[] { id }, cancellationToken);
+        if (item == null)
+            return NotFound();
+
+        var categories = await GetInventoryCategoryOptionsAsync();
+        var statuses = await GetInventoryStatusOptionsAsync();
+        var previousBuildingExternalId = item.AssignedBuildingExternalId;
+        var previousRoomExternalId = item.AssignedRoomExternalId;
+        var previousFloor = item.AssignedFloor;
+        var previousSerialNumber = item.SerialNumber;
+        var previousAssignmentNotes = item.AssignmentNotes;
+        var previousPdfFileName = item.DeliveryFormPdfFileName;
+
+        var normalizedCategory = string.IsNullOrWhiteSpace(inferredCategory)
+            ? "other"
+            : inferredCategory.Trim().ToLowerInvariant();
+        var normalizedStatus = string.IsNullOrWhiteSpace(inferredStatus)
+            ? "active"
+            : inferredStatus.Trim().ToLowerInvariant();
+
+        if (!categories.Contains(normalizedCategory, StringComparer.OrdinalIgnoreCase))
+        {
+            normalizedCategory = "other";
+        }
+
+        if (!statuses.Contains(normalizedStatus, StringComparer.OrdinalIgnoreCase))
+        {
+            normalizedStatus = "active";
+        }
+
+        var pdfValidationError = await ValidateInventoryFormPdfAsync(deliveryFormPdf, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(pdfValidationError))
+        {
+            ModelState.AddModelError(string.Empty, pdfValidationError);
+        }
+
+        var resolvedBuildingExternalId = assignedBuildingExternalId?.Trim() ?? string.Empty;
+        var resolvedRoomExternalId = assignedRoomExternalId?.Trim() ?? string.Empty;
+        var resolvedFloor = assignedFloor;
+
+        if (!string.IsNullOrWhiteSpace(resolvedRoomExternalId))
+        {
+            var room = await _context.SyncedRooms
+                .AsNoTracking()
+                .FirstOrDefaultAsync(candidate => candidate.ExternalId == resolvedRoomExternalId, cancellationToken);
+
+            if (room != null)
+            {
+                resolvedRoomExternalId = room.ExternalId;
+                resolvedBuildingExternalId = room.BuildingExternalId;
+                resolvedFloor = room.ManualFloor ?? room.Floor;
+            }
+            else
+            {
+                resolvedRoomExternalId = string.Empty;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(resolvedBuildingExternalId))
+        {
+            resolvedRoomExternalId = string.Empty;
+            resolvedFloor = null;
+        }
+
+        item.SerialNumber = serialNumber?.Trim() ?? string.Empty;
+        item.InferredCategory = normalizedCategory;
+        item.InferredStatus = normalizedStatus;
+        item.AssignedBuildingExternalId = resolvedBuildingExternalId;
+        item.AssignedRoomExternalId = resolvedRoomExternalId;
+        item.AssignedFloor = resolvedFloor;
+        item.AssignmentNotes = assignmentNotes?.Trim() ?? string.Empty;
+        item.AssignmentUpdatedAtUtc = DateTime.UtcNow;
+
+        if (!ModelState.IsValid)
+        {
+            item.DeliveryFormPdfFileName = previousPdfFileName;
+            return View(await BuildEditInventoryItemViewModelAsync(item));
+        }
+
+        string newPdfFileName = string.Empty;
+
+        try
+        {
+            if (deliveryFormPdf is not null && deliveryFormPdf.Length > 0)
+            {
+                newPdfFileName = await SaveInventoryFormPdfUploadAsync(deliveryFormPdf, item.SerialNumber, cancellationToken);
+                item.DeliveryFormPdfFileName = newPdfFileName;
+            }
+            else
+            {
+                item.DeliveryFormPdfFileName = previousPdfFileName;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(newPdfFileName)
+                && !string.IsNullOrWhiteSpace(previousPdfFileName)
+                && !string.Equals(previousPdfFileName, newPdfFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                DeleteInventoryFormPdfIfExists(previousPdfFileName);
+            }
+
+            await _auditLogService.LogInventoryItemChangeAsync(
+                item,
+                User.Identity?.Name ?? "sistema",
+                previousBuildingExternalId,
+                previousRoomExternalId,
+                previousFloor,
+                previousSerialNumber,
+                previousAssignmentNotes);
+            TempData["SuccessMessage"] = "Equipo actualizado correctamente.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+        catch (Exception ex)
+        {
+            if (!string.IsNullOrWhiteSpace(newPdfFileName))
+            {
+                DeleteInventoryFormPdfIfExists(newPdfFileName);
+            }
+
+            item.DeliveryFormPdfFileName = previousPdfFileName;
+            ModelState.AddModelError(string.Empty, $"No se pudo actualizar el equipo: {ex.Message}");
+            return View(await BuildEditInventoryItemViewModelAsync(item));
+        }
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/removeinventoryformpdf/{id:guid}")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveInventoryFormPdf(Guid id)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(id);
+        if (item == null)
+            return NotFound();
+
+        if (string.IsNullOrWhiteSpace(item.DeliveryFormPdfFileName))
+        {
+            TempData["ErrorMessage"] = "Este equipo no tiene un formulario PDF cargado.";
+            return RedirectToAction(nameof(EditInventoryItem), new { id });
+        }
+
+        var previousPdfFileName = item.DeliveryFormPdfFileName;
+        item.DeliveryFormPdfFileName = string.Empty;
+        await _context.SaveChangesAsync();
+        DeleteInventoryFormPdfIfExists(previousPdfFileName);
+
+        TempData["SuccessMessage"] = "Formulario PDF eliminado correctamente.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearInventoryAssignment(Guid id)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(id);
+        if (item == null)
+            return NotFound();
+
+        var previousBuildingExternalId = item.AssignedBuildingExternalId;
+        var previousRoomExternalId = item.AssignedRoomExternalId;
+        var previousFloor = item.AssignedFloor;
+        var previousSerialNumber = item.SerialNumber;
+        var previousAssignmentNotes = item.AssignmentNotes;
+
+        item.AssignedBuildingExternalId = string.Empty;
+        item.AssignedRoomExternalId = string.Empty;
+        item.AssignedFloor = null;
+        item.AssignmentNotes = string.Empty;
+        item.AssignmentUpdatedAtUtc = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+        await _auditLogService.LogInventoryItemChangeAsync(
+            item,
+            User.Identity?.Name ?? "sistema",
+            previousBuildingExternalId,
+            previousRoomExternalId,
+            previousFloor,
+            previousSerialNumber,
+            previousAssignmentNotes);
+        TempData["SuccessMessage"] = "Asignacion limpiada. El equipo quedo pendiente.";
+        return RedirectToAction(nameof(EditInventoryItem), new { id });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteInventoryItem(Guid id)
+    {
+        var item = await _context.ImportedInventoryItems.FindAsync(id);
+        if (item == null)
+            return NotFound();
+
+        var actor = User.Identity?.Name ?? "sistema";
+        var itemLabel = !string.IsNullOrWhiteSpace(item.SerialNumber)
+            ? $"S/N {item.SerialNumber}"
+            : $"fila #{item.RowNumber}";
+        var impactedBuildings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var deliveryFormPdfFileName = item.DeliveryFormPdfFileName;
+
+        if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
+        {
+            impactedBuildings.Add(item.AssignedBuildingExternalId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.MatchedBuildingExternalId))
+        {
+            impactedBuildings.Add(item.MatchedBuildingExternalId);
+        }
+
+        foreach (var buildingExternalId in impactedBuildings)
+        {
+            _context.AuditLogEntries.Add(new AuditLogEntry
+            {
+                BuildingExternalId = buildingExternalId,
+                EntityType = "inventory-item",
+                EntityId = item.Id.ToString(),
+                ActionType = "deleted",
+                Summary = $"{itemLabel} eliminado",
+                Details = "Equipo eliminado manualmente desde el dashboard.",
+                ChangedByUsername = actor,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        _context.ImportedInventoryItems.Remove(item);
+        await _context.SaveChangesAsync();
+        DeleteInventoryFormPdfIfExists(deliveryFormPdfFileName);
+
+        TempData["SuccessMessage"] = "Equipo eliminado correctamente.";
+        return RedirectToAction(nameof(Inventory));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    public async Task<IActionResult> CreateEquipment()
+    {
+        ViewBag.Locations = await _context.Locations.Where(l => l.IsActive).ToListAsync();
+        return View(new Equipment());
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateEquipment(Equipment equipment)
+    {
+        if (!ModelState.IsValid)
+        {
+            ViewBag.Locations = await _context.Locations.Where(l => l.IsActive).ToListAsync();
+            return View(equipment);
+        }
+
+        equipment.CreatedAtUtc = DateTime.UtcNow;
+        _context.Equipments.Add(equipment);
+        await _context.SaveChangesAsync();
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "equipment-create",
+            resource: "equipment",
+            summary: $"Equipo creado: {equipment.Name}",
+            details: $"LocationId={equipment.LocationId}; Categoria={equipment.Category}; Estado={equipment.Status}",
+            result: "success",
+            severity: "info",
+            entityType: "equipment",
+            entityId: equipment.Id.ToString(),
+            changedByUsername: User.Identity?.Name ?? "admin");
+        return RedirectToAction(nameof(Inventory));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteEquipment(Guid id)
+    {
+        var equipment = await _context.Equipments.FindAsync(id);
+        if (equipment != null)
+        {
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "equipment-delete",
+                resource: "equipment",
+                summary: $"Equipo eliminado: {equipment.Name}",
+                details: $"Serial={equipment.SerialNumber}; LocationId={equipment.LocationId}",
+                result: "success",
+                severity: "warning",
+                entityType: "equipment",
+                entityId: equipment.Id.ToString(),
+                changedByUsername: User.Identity?.Name ?? "admin");
+            _context.Equipments.Remove(equipment);
+            await _context.SaveChangesAsync();
+        }
+
+        return RedirectToAction(nameof(Inventory));
+    }
+
+    private static string FormatFloors(string floorsJson)
+    {
+        if (string.IsNullOrWhiteSpace(floorsJson))
+            return "-";
+
+        var trimmed = floorsJson
+            .Replace("[", string.Empty)
+            .Replace("]", string.Empty)
+            .Replace("\"", string.Empty)
+            .Trim();
+
+        return string.IsNullOrWhiteSpace(trimmed) ? "-" : trimmed;
+    }
+
+    private static int GetPrimaryFloor(string floorsJson)
+    {
+        if (string.IsNullOrWhiteSpace(floorsJson))
+            return 0;
+
+        try
+        {
+            var floors = JsonSerializer.Deserialize<List<int>>(floorsJson);
+            if (floors is { Count: > 0 })
+                return floors.Min();
+        }
+        catch
+        {
+        }
+
+        var firstToken = floorsJson
+            .Replace("[", string.Empty)
+            .Replace("]", string.Empty)
+            .Replace("\"", string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault();
+
+        return int.TryParse(firstToken, out var parsedFloor) ? parsedFloor : 0;
+    }
+
+    private sealed class InventoryInconsistencySnapshot
+    {
+        public HashSet<Guid> ItemIds { get; } = [];
+        public Dictionary<Guid, string> Summaries { get; } = [];
+    }
+
+    private sealed class InventoryInconsistencyCandidate
+    {
+        public Guid Id { get; init; }
+        public string SerialKey { get; init; } = string.Empty;
+        public string SerialFamilyKey { get; init; } = string.Empty;
+        public string IpKey { get; init; } = string.Empty;
+        public string MacKey { get; init; } = string.Empty;
+        public string UnitSignature { get; init; } = string.Empty;
+        public string AssignedBuildingExternalId { get; init; } = string.Empty;
+        public string MatchedBuildingExternalId { get; init; } = string.Empty;
+    }
+
+    private sealed class InventoryMergePlanEntry
+    {
+        public ImportedInventoryItem Item { get; init; } = null!;
+        public IReadOnlyList<string> MatchingFields { get; init; } = [];
+    }
+
+    private async Task<InventoryInconsistencySnapshot> AnalyzeInventoryInconsistenciesAsync()
+    {
+        var snapshot = new InventoryInconsistencySnapshot();
+
+        var candidatesQuery = _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Select(item => new InventoryInconsistencyCandidate
+            {
+                Id = item.Id,
+                SerialKey = NormalizeInventoryToken(item.SerialNumber),
+                SerialFamilyKey = NormalizeInventorySerialFamily(item.SerialNumber),
+                IpKey = NormalizeInventoryToken(item.IpAddress),
+                MacKey = NormalizeInventoryToken(item.MacAddress),
+                UnitSignature = $"{NormalizeInventoryToken(item.UnitOrDepartment)}|{NormalizeInventoryToken(item.OrganizationalUnit)}",
+                AssignedBuildingExternalId = item.AssignedBuildingExternalId,
+                MatchedBuildingExternalId = item.MatchedBuildingExternalId
+            });
+
+        var candidates = await candidatesQuery.ToListAsync();
+
+        var reasons = new Dictionary<Guid, HashSet<string>>();
+
+        void AddReason(Guid id, string reason)
+        {
+            if (!reasons.TryGetValue(id, out var itemReasons))
+            {
+                itemReasons = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                reasons[id] = itemReasons;
+            }
+
+            itemReasons.Add(reason);
+        }
+
+        foreach (var group in candidates.Where(item => item.SerialKey != string.Empty).GroupBy(item => item.SerialKey).Where(group => group.Count() > 1))
+        {
+            foreach (var item in group)
+            {
+                AddReason(item.Id, "S/N duplicado");
+            }
+        }
+
+        foreach (var group in candidates.Where(item => item.SerialFamilyKey != string.Empty).GroupBy(item => item.SerialFamilyKey).Where(group => group.Count() > 1))
+        {
+            var items = group.ToList();
+            if (items.Select(item => item.SerialKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            {
+                foreach (var item in items)
+                {
+                    AddReason(item.Id, "S/N muy parecido");
+                }
+            }
+
+            if (items.Select(item => item.UnitSignature).Where(signature => signature != "|").Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            {
+                foreach (var item in items)
+                {
+                    AddReason(item.Id, "Unidad/org distinta en posibles duplicados");
+                }
+            }
+        }
+
+        foreach (var group in candidates.Where(item => item.IpKey != string.Empty).GroupBy(item => item.IpKey).Where(group => group.Count() > 1))
+        {
+            foreach (var item in group)
+            {
+                AddReason(item.Id, "IP repetida");
+            }
+        }
+
+        foreach (var group in candidates.Where(item => item.MacKey != string.Empty).GroupBy(item => item.MacKey).Where(group => group.Count() > 1))
+        {
+            foreach (var item in group)
+            {
+                AddReason(item.Id, "MAC repetida");
+            }
+        }
+
+        foreach (var entry in reasons)
+        {
+            snapshot.ItemIds.Add(entry.Key);
+            snapshot.Summaries[entry.Key] = string.Join("; ", entry.Value.OrderBy(value => value, StringComparer.OrdinalIgnoreCase));
+        }
+
+        return snapshot;
+    }
+
+    private async Task<InventoryInconsistencyDetailViewModel?> BuildInventoryInconsistencyDetailViewModelAsync(Guid id, string? returnUrl)
+    {
+        var items = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+
+        var current = items.FirstOrDefault(item => item.Id == id);
+        if (current is null)
+        {
+            return null;
+        }
+
+        var candidatesById = items.ToDictionary(
+            item => item.Id,
+            item => new InventoryInconsistencyCandidate
+            {
+                Id = item.Id,
+                SerialKey = NormalizeInventoryToken(item.SerialNumber),
+                SerialFamilyKey = NormalizeInventorySerialFamily(item.SerialNumber),
+                IpKey = NormalizeInventoryToken(item.IpAddress),
+                MacKey = NormalizeInventoryToken(item.MacAddress),
+                UnitSignature = $"{NormalizeInventoryToken(item.UnitOrDepartment)}|{NormalizeInventoryToken(item.OrganizationalUnit)}"
+            });
+
+        var currentCandidate = candidatesById[id];
+        var reasons = new List<InventoryInconsistencyReasonViewModel>();
+        var relatedItemsById = new Dictionary<Guid, InventoryInconsistencyRelatedItemViewModel>();
+
+        void AddReason(string title, string suggestedAction, IEnumerable<ImportedInventoryItem> relatedItems)
+        {
+            var related = MapInventoryRelatedItems(current, relatedItems, current.Id);
+            if (related.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var relatedItem in related)
+            {
+                relatedItemsById[relatedItem.Id] = relatedItem;
+            }
+
+            reasons.Add(new InventoryInconsistencyReasonViewModel
+            {
+                Title = title,
+                SuggestedAction = suggestedAction,
+                RelatedItems = related
+            });
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentCandidate.SerialKey))
+        {
+            var exactSerialItems = candidatesById.Values
+                .Where(candidate => candidate.SerialKey == currentCandidate.SerialKey)
+                .Select(candidate => items.First(item => item.Id == candidate.Id))
+                .ToList();
+
+            if (exactSerialItems.Count > 1)
+            {
+                AddReason(
+                    "S/N duplicado",
+                    "Compara ambos registros y corrige el serial o elimina el duplicado si representan el mismo equipo.",
+                    exactSerialItems);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentCandidate.SerialFamilyKey))
+        {
+            var familyCandidates = candidatesById.Values
+                .Where(candidate => candidate.SerialFamilyKey == currentCandidate.SerialFamilyKey)
+                .ToList();
+            var familyItems = familyCandidates
+                .Select(candidate => items.First(item => item.Id == candidate.Id))
+                .ToList();
+
+            if (familyCandidates.Count > 1 && familyCandidates.Select(candidate => candidate.SerialKey).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            {
+                AddReason(
+                    "S/N muy parecido",
+                    "Revisa si se trata del mismo equipo cargado con un prefijo extra o con una variacion menor del serial.",
+                    familyItems);
+            }
+
+            if (familyCandidates.Count > 1 && familyCandidates.Select(candidate => candidate.UnitSignature).Where(signature => signature != "|").Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
+            {
+                AddReason(
+                    "Unidad/org distinta en posibles duplicados",
+                    "Confirma cual es la unidad correcta y deja ambos registros consistentes o consolida el duplicado.",
+                    familyItems);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentCandidate.IpKey))
+        {
+            var ipItems = candidatesById.Values
+                .Where(candidate => candidate.IpKey == currentCandidate.IpKey)
+                .Select(candidate => items.First(item => item.Id == candidate.Id))
+                .ToList();
+
+            if (ipItems.Count > 1)
+            {
+                AddReason(
+                    "IP repetida",
+                    "Verifica si ambos registros apuntan al mismo equipo o si una IP quedo repetida por error u obsolescencia.",
+                    ipItems);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentCandidate.MacKey))
+        {
+            var macItems = candidatesById.Values
+                .Where(candidate => candidate.MacKey == currentCandidate.MacKey)
+                .Select(candidate => items.First(item => item.Id == candidate.Id))
+                .ToList();
+
+            if (macItems.Count > 1)
+            {
+                AddReason(
+                    "MAC repetida",
+                    "Revisa si la MAC pertenece realmente a mas de un registro o si un equipo fue duplicado durante la carga.",
+                    macItems);
+            }
+        }
+
+        var mergeCandidates = relatedItemsById.Values
+            .OrderByDescending(item => item.IsMergeRecommended)
+            .ThenByDescending(item => item.MatchingFieldCount)
+            .ThenBy(item => item.Id)
+            .ToList();
+
+        var defaultReturnUrl = Url.Action("Inventory", new { assignment = "inconsistent", page = 1, pageSize = 30 })
+            ?? "/admin/inventory?assignment=inconsistent";
+        var normalizedReturnUrl = !string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)
+            ? returnUrl
+            : defaultReturnUrl;
+
+        return new InventoryInconsistencyDetailViewModel
+        {
+            Item = current,
+            Summary = reasons.Count == 0
+                ? "No se detectaron incongruencias activas para este equipo."
+                : string.Join("; ", reasons.Select(reason => reason.Title).Distinct(StringComparer.OrdinalIgnoreCase)),
+            ReturnUrl = normalizedReturnUrl,
+            Reasons = reasons,
+            SuggestedActions = BuildInventoryInconsistencyActions(current, normalizedReturnUrl),
+            MergeCandidates = mergeCandidates,
+            RecommendedMergeCount = mergeCandidates.Count(item => item.IsMergeRecommended)
+        };
+    }
+
+    private List<InventoryInconsistencyActionViewModel> BuildInventoryInconsistencyActions(ImportedInventoryItem item, string returnUrl)
+    {
+        var actions = new List<InventoryInconsistencyActionViewModel>
+        {
+            new()
+            {
+                Label = "Volver al inventario",
+                Url = returnUrl,
+                IconClass = "bi bi-arrow-left",
+                ButtonClass = "btn btn-outline-secondary"
+            },
+            new()
+            {
+                Label = User.IsInRole(AppRoles.Admin) ? "Editar este equipo" : "Ver equipo",
+                Url = $"/admin/editinventoryitem/{item.Id}",
+                IconClass = "bi bi-pencil-square",
+                ButtonClass = "btn btn-primary"
+            }
+        };
+
+        void AddSearchAction(string label, string? value, string iconClass)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            var trimmed = value.Trim();
+            var url = Url.Action("Inventory", new { search = trimmed, assignment = "all", page = 1, pageSize = 30 })
+                ?? $"/admin/inventory?search={Uri.EscapeDataString(trimmed)}";
+
+            actions.Add(new InventoryInconsistencyActionViewModel
+            {
+                Label = label,
+                Url = url,
+                IconClass = iconClass,
+                ButtonClass = "btn btn-outline-primary"
+            });
+        }
+
+        AddSearchAction("Filtrar por S/N", item.SerialNumber, "bi bi-upc-scan");
+        AddSearchAction("Filtrar por IP", item.IpAddress, "bi bi-diagram-3");
+        AddSearchAction("Filtrar por MAC", item.MacAddress, "bi bi-hdd-network");
+
+        return actions;
+    }
+
+    private async Task LogInventoryMergeAsync(
+        ImportedInventoryItem primary,
+        IReadOnlyList<InventoryMergePlanEntry> mergePlan,
+        string changedByUsername,
+        CancellationToken cancellationToken = default)
+    {
+        var actor = string.IsNullOrWhiteSpace(changedByUsername) ? "sistema" : changedByUsername.Trim();
+        var itemLabel = !string.IsNullOrWhiteSpace(primary.SerialNumber)
+            ? $"S/N {primary.SerialNumber}"
+            : $"fila #{primary.RowNumber}";
+
+        var summary = $"{itemLabel} fusionado con {mergePlan.Count} registro(s)";
+        var details = string.Join(
+            "; ",
+            mergePlan.Select(entry => $"#{entry.Item.Id}: {string.Join(", ", entry.MatchingFields)}"));
+
+        var impactedBuildings = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(primary.AssignedBuildingExternalId))
+        {
+            impactedBuildings.Add(primary.AssignedBuildingExternalId);
+        }
+        if (!string.IsNullOrWhiteSpace(primary.MatchedBuildingExternalId))
+        {
+            impactedBuildings.Add(primary.MatchedBuildingExternalId);
+        }
+
+        foreach (var entry in mergePlan)
+        {
+            if (!string.IsNullOrWhiteSpace(entry.Item.AssignedBuildingExternalId))
+            {
+                impactedBuildings.Add(entry.Item.AssignedBuildingExternalId);
+            }
+            if (!string.IsNullOrWhiteSpace(entry.Item.MatchedBuildingExternalId))
+            {
+                impactedBuildings.Add(entry.Item.MatchedBuildingExternalId);
+            }
+        }
+
+        if (impactedBuildings.Count == 0)
+        {
+            impactedBuildings.Add(string.Empty);
+        }
+
+        foreach (var buildingExternalId in impactedBuildings)
+        {
+            _context.AuditLogEntries.Add(new AuditLogEntry
+            {
+                BuildingExternalId = buildingExternalId,
+                EntityType = "inventory-item",
+                EntityId = primary.Id.ToString(),
+                ActionType = "merged",
+                Summary = summary,
+                Details = details,
+                ChangedByUsername = actor,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void MergeInventoryItems(ImportedInventoryItem primary, ImportedInventoryItem duplicate)
+    {
+        primary.ItemNumber = PreferInventoryValue(primary.ItemNumber, duplicate.ItemNumber);
+        primary.SerialNumber = PreferInventoryValue(primary.SerialNumber, duplicate.SerialNumber);
+        primary.Description = PreferInventoryValue(primary.Description, duplicate.Description);
+        primary.Lot = PreferInventoryValue(primary.Lot, duplicate.Lot);
+        primary.InstallDate = PreferInventoryValue(primary.InstallDate, duplicate.InstallDate);
+        primary.UnitOrDepartment = PreferInventoryValue(primary.UnitOrDepartment, duplicate.UnitOrDepartment);
+        primary.OrganizationalUnit = PreferInventoryValue(primary.OrganizationalUnit, duplicate.OrganizationalUnit);
+        primary.ResponsibleUser = PreferInventoryValue(primary.ResponsibleUser, duplicate.ResponsibleUser);
+        primary.Run = PreferInventoryValue(primary.Run, duplicate.Run);
+        primary.Email = PreferInventoryValue(primary.Email, duplicate.Email);
+        primary.JobTitle = PreferInventoryValue(primary.JobTitle, duplicate.JobTitle);
+        primary.IpAddress = PreferInventoryValue(primary.IpAddress, duplicate.IpAddress);
+        primary.MacAddress = PreferInventoryValue(primary.MacAddress, duplicate.MacAddress);
+        primary.AnnexPhone = PreferInventoryValue(primary.AnnexPhone, duplicate.AnnexPhone);
+        primary.ReplacedEquipment = PreferInventoryValue(primary.ReplacedEquipment, duplicate.ReplacedEquipment);
+        primary.TicketMda = PreferInventoryValue(primary.TicketMda, duplicate.TicketMda);
+        primary.Installer = PreferInventoryValue(primary.Installer, duplicate.Installer);
+        primary.Rut = PreferInventoryValue(primary.Rut, duplicate.Rut);
+        primary.InventoryDate = PreferInventoryValue(primary.InventoryDate, duplicate.InventoryDate);
+        primary.SourceFile = PreferInventoryValue(primary.SourceFile, duplicate.SourceFile);
+
+        if (IsWeakInventoryCategory(primary.InferredCategory) && !string.IsNullOrWhiteSpace(duplicate.InferredCategory))
+        {
+            primary.InferredCategory = duplicate.InferredCategory.Trim().ToLowerInvariant();
+        }
+
+        if (string.IsNullOrWhiteSpace(primary.InferredStatus) && !string.IsNullOrWhiteSpace(duplicate.InferredStatus))
+        {
+            primary.InferredStatus = duplicate.InferredStatus.Trim().ToLowerInvariant();
+        }
+
+        if (string.IsNullOrWhiteSpace(primary.AssignedBuildingExternalId) && !string.IsNullOrWhiteSpace(duplicate.AssignedBuildingExternalId))
+        {
+            primary.AssignedBuildingExternalId = duplicate.AssignedBuildingExternalId;
+            primary.AssignedRoomExternalId = PreferInventoryValue(primary.AssignedRoomExternalId, duplicate.AssignedRoomExternalId);
+            primary.AssignedFloor = primary.AssignedFloor ?? duplicate.AssignedFloor;
+            primary.AssignmentUpdatedAtUtc = duplicate.AssignmentUpdatedAtUtc ?? DateTime.UtcNow;
+        }
+
+        if (string.IsNullOrWhiteSpace(primary.MatchedBuildingExternalId) && !string.IsNullOrWhiteSpace(duplicate.MatchedBuildingExternalId))
+        {
+            primary.MatchedBuildingExternalId = duplicate.MatchedBuildingExternalId;
+            primary.MatchedRoomExternalId = PreferInventoryValue(primary.MatchedRoomExternalId, duplicate.MatchedRoomExternalId);
+            primary.MatchConfidence = PreferInventoryValue(primary.MatchConfidence, duplicate.MatchConfidence);
+            primary.MatchNotes = AppendInventoryUnique(primary.MatchNotes, duplicate.MatchNotes);
+            primary.MatchedSyncedBuildingId ??= duplicate.MatchedSyncedBuildingId;
+            primary.MatchedSyncedRoomId ??= duplicate.MatchedSyncedRoomId;
+        }
+        else
+        {
+            primary.MatchNotes = AppendInventoryUnique(primary.MatchNotes, duplicate.MatchNotes);
+        }
+
+        primary.AssignmentNotes = AppendInventoryUnique(primary.AssignmentNotes, duplicate.AssignmentNotes);
+        primary.Observation = AppendInventoryUnique(primary.Observation, duplicate.Observation);
+
+        if (duplicate.ImportedAtUtc < primary.ImportedAtUtc)
+        {
+            primary.ImportedAtUtc = duplicate.ImportedAtUtc;
+        }
+
+        if (!primary.AssignmentUpdatedAtUtc.HasValue || (duplicate.AssignmentUpdatedAtUtc.HasValue && duplicate.AssignmentUpdatedAtUtc > primary.AssignmentUpdatedAtUtc))
+        {
+            primary.AssignmentUpdatedAtUtc = duplicate.AssignmentUpdatedAtUtc ?? primary.AssignmentUpdatedAtUtc;
+        }
+    }
+
+    private static IReadOnlyList<InventoryInconsistencyRelatedItemViewModel> MapInventoryRelatedItems(
+        ImportedInventoryItem currentItem,
+        IEnumerable<ImportedInventoryItem> items,
+        Guid currentItemId)
+    {
+        return items
+            .Where(item => item.Id != currentItemId)
+            .GroupBy(item => item.Id)
+            .Select(group => group.First())
+            .Select(item =>
+            {
+                var matchingFields = GetInventoryMatchingFields(currentItem, item);
+                return new InventoryInconsistencyRelatedItemViewModel
+                {
+                    Id = item.Id,
+                    SerialNumber = string.IsNullOrWhiteSpace(item.SerialNumber) ? "Sin S/N" : item.SerialNumber,
+                    ItemNumber = item.ItemNumber,
+                    Description = item.Description,
+                    UnitOrDepartment = item.UnitOrDepartment,
+                    OrganizationalUnit = item.OrganizationalUnit,
+                    ResponsibleUser = item.ResponsibleUser,
+                    Email = item.Email,
+                    IpAddress = item.IpAddress,
+                    MacAddress = item.MacAddress,
+                    AssignmentLabel = FormatInventoryAssignmentLabel(item),
+                    MatchingFields = matchingFields,
+                    MatchingFieldCount = matchingFields.Count,
+                    IsMergeRecommended = matchingFields.Count >= 3
+                };
+            })
+            .Where(item => item.MatchingFieldCount > 0)
+            .OrderByDescending(item => item.IsMergeRecommended)
+            .ThenByDescending(item => item.MatchingFieldCount)
+            .ThenBy(item => item.Id)
+            .ToList();
+    }
+
+    private static IReadOnlyList<string> GetInventoryMatchingFields(ImportedInventoryItem currentItem, ImportedInventoryItem otherItem)
+    {
+        var matchingFields = new List<string>();
+
+        var currentSerialKey = NormalizeInventoryToken(currentItem.SerialNumber);
+        var otherSerialKey = NormalizeInventoryToken(otherItem.SerialNumber);
+        var currentSerialFamily = NormalizeInventorySerialFamily(currentItem.SerialNumber);
+        var otherSerialFamily = NormalizeInventorySerialFamily(otherItem.SerialNumber);
+
+        if (!string.IsNullOrWhiteSpace(currentSerialKey) && !string.IsNullOrWhiteSpace(otherSerialKey)
+            && (string.Equals(currentSerialKey, otherSerialKey, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(currentSerialFamily, otherSerialFamily, StringComparison.OrdinalIgnoreCase)))
+        {
+            matchingFields.Add("S/N");
+        }
+
+        void AddIfSame(string label, string? currentValue, string? otherValue)
+        {
+            var normalizedCurrent = NormalizeInventoryToken(currentValue);
+            var normalizedOther = NormalizeInventoryToken(otherValue);
+            if (!string.IsNullOrWhiteSpace(normalizedCurrent)
+                && string.Equals(normalizedCurrent, normalizedOther, StringComparison.OrdinalIgnoreCase))
+            {
+                matchingFields.Add(label);
+            }
+        }
+
+        AddIfSame("IP", currentItem.IpAddress, otherItem.IpAddress);
+        AddIfSame("MAC", currentItem.MacAddress, otherItem.MacAddress);
+        AddIfSame("Unidad", currentItem.UnitOrDepartment, otherItem.UnitOrDepartment);
+        AddIfSame("Org", currentItem.OrganizationalUnit, otherItem.OrganizationalUnit);
+        AddIfSame("Usuario", currentItem.ResponsibleUser, otherItem.ResponsibleUser);
+        AddIfSame("Email", currentItem.Email, otherItem.Email);
+
+        return matchingFields
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool IsWeakInventoryCategory(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category)
+            || string.Equals(category.Trim(), "other", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string PreferInventoryValue(string? currentValue, string? incomingValue)
+    {
+        return string.IsNullOrWhiteSpace(currentValue)
+            ? (incomingValue?.Trim() ?? string.Empty)
+            : currentValue.Trim();
+    }
+
+    private static string AppendInventoryUnique(string? currentValue, string? incomingValue)
+    {
+        var current = currentValue?.Trim() ?? string.Empty;
+        var incoming = incomingValue?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(incoming))
+        {
+            return current;
+        }
+
+        if (string.IsNullOrWhiteSpace(current))
+        {
+            return incoming;
+        }
+
+        return current.Contains(incoming, StringComparison.OrdinalIgnoreCase)
+            ? current
+            : $"{current} | {incoming}";
+    }
+
+    private static string FormatInventoryAssignmentLabel(ImportedInventoryItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
+        {
+            var parts = new List<string> { item.AssignedBuildingExternalId };
+            if (!string.IsNullOrWhiteSpace(item.AssignedRoomExternalId))
+            {
+                parts.Add(item.AssignedRoomExternalId);
+            }
+            if (item.AssignedFloor.HasValue)
+            {
+                parts.Add($"Piso {item.AssignedFloor.Value}");
+            }
+
+            return string.Join(" / ", parts);
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.MatchedBuildingExternalId))
+        {
+            return $"Sugerido: {item.MatchedBuildingExternalId}";
+        }
+
+        return "Pendiente";
+    }
+
+    private static string NormalizeInventorySerialFamily(string? value)
+    {
+        var normalized = NormalizeInventoryToken(value);
+        if (normalized.Length > 5 && normalized.StartsWith('S'))
+        {
+            return normalized[1..];
+        }
+
+        return normalized;
+    }
+
+    private static bool IsInventoryPlaceholderToken(string value)
+    {
+        return value switch
+        {
+            "ND" => true,
+            "NA" => true,
+            "NODISPONIBLE" => true,
+            "SINDATO" => true,
+            "SINDATOS" => true,
+            "NOINFORMADO" => true,
+            "NOREGISTRA" => true,
+            "NULL" => true,
+            "NULO" => true,
+            "VACIO" => true,
+            "NONE" => true,
+            _ => false
+        };
+    }
+
+    private static string NormalizeInventoryToken(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var decomposed = value.Normalize(System.Text.NormalizationForm.FormD);
+        var builder = new System.Text.StringBuilder(decomposed.Length);
+
+        foreach (var character in decomposed)
+        {
+            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character);
+            if (category == System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(char.ToUpperInvariant(character));
+            }
+        }
+
+        var normalized = builder.ToString();
+        return IsInventoryPlaceholderToken(normalized) ? string.Empty : normalized;
+    }
+
+    private async Task<IReadOnlyList<string>> GetInventoryCategoryOptionsAsync()
+    {
+        var defaults = Syntro.API.Services.InventoryCategoriesConfig.GetCategoryNames(_configuration);
+        var values = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(item => item.InferredCategory != "")
+            .Select(item => item.InferredCategory)
+            .ToListAsync();
+
+        return MergeInventoryOptionLists(defaults, values);
+    }
+
+    private async Task<IReadOnlyList<string>> GetInventoryStatusOptionsAsync()
+    {
+        var defaults = Syntro.API.Services.InventoryCategoriesConfig.GetStatusNames(_configuration);
+        var values = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(item => item.InferredStatus != "")
+            .Select(item => item.InferredStatus)
+            .ToListAsync();
+
+        return MergeInventoryOptionLists(defaults, values);
+    }
+
+    private static IReadOnlyList<string> MergeInventoryOptionLists(IEnumerable<string> defaults, IEnumerable<string> values)
+    {
+        var results = new List<string>();
+
+        void AddOption(string? rawValue)
+        {
+            var normalizedValue = rawValue?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalizedValue))
+            {
+                return;
+            }
+
+            if (!results.Contains(normalizedValue, StringComparer.OrdinalIgnoreCase))
+            {
+                results.Add(normalizedValue);
+            }
+        }
+
+        foreach (var value in defaults)
+        {
+            AddOption(value);
+        }
+
+        foreach (var value in values.OrderBy(value => value, StringComparer.OrdinalIgnoreCase))
+        {
+            AddOption(value);
+        }
+
+        return results;
+    }
+
+
+    private static string GetDeliveryFormPreviewCacheKey(string id)
+    {
+        return $"{DeliveryFormPreviewCachePrefix}{id}";
+    }
+
+    private static string GetDeliveryFormPreviewDirectory()
+    {
+        return Path.Combine(Path.GetTempPath(), "syntro-delivery-preview-cache");
+    }
+
+    private static string GetDeliveryFormPreviewPdfPath(string id)
+    {
+        return Path.Combine(GetDeliveryFormPreviewDirectory(), $"{id}.pdf");
+    }
+
+    private static string GetDeliveryFormPreviewMetadataPath(string id)
+    {
+        return Path.Combine(GetDeliveryFormPreviewDirectory(), $"{id}.json");
+    }
+
+    private void SaveDeliveryFormPreviewToDisk(string id, DeliveryFormPreviewFile preview)
+    {
+        CleanupExpiredDeliveryFormPreviews();
+
+        var directory = GetDeliveryFormPreviewDirectory();
+        Directory.CreateDirectory(directory);
+
+        System.IO.File.WriteAllBytes(GetDeliveryFormPreviewPdfPath(id), preview.Content);
+        var metadataJson = JsonSerializer.Serialize(new DeliveryFormPreviewMetadata
+        {
+            PreviewId = id,
+            FileName = preview.FileName,
+            SourceForm = preview.SourceForm,
+            CreatedInventoryItemId = preview.CreatedInventoryItemId
+        });
+        System.IO.File.WriteAllText(GetDeliveryFormPreviewMetadataPath(id), metadataJson);
+    }
+
+    private bool TryGetDeliveryFormPreview(string id, out DeliveryFormPreviewFile? preview)
+    {
+        if (_memoryCache.TryGetValue(GetDeliveryFormPreviewCacheKey(id), out DeliveryFormPreviewFile? cachedPreview) && cachedPreview is not null)
+        {
+            preview = cachedPreview;
+            return true;
+        }
+
+        var pdfPath = GetDeliveryFormPreviewPdfPath(id);
+        var metadataPath = GetDeliveryFormPreviewMetadataPath(id);
+        if (!System.IO.File.Exists(pdfPath) || !System.IO.File.Exists(metadataPath))
+        {
+            preview = null;
+            return false;
+        }
+
+        try
+        {
+            var metadataJson = System.IO.File.ReadAllText(metadataPath);
+            var metadata = JsonSerializer.Deserialize<DeliveryFormPreviewMetadata>(metadataJson);
+            if (metadata is null)
+            {
+                preview = null;
+                return false;
+            }
+
+            preview = new DeliveryFormPreviewFile
+            {
+                Content = System.IO.File.ReadAllBytes(pdfPath),
+                FileName = metadata.FileName,
+                SourceForm = metadata.SourceForm,
+                CreatedInventoryItemId = metadata.CreatedInventoryItemId
+            };
+
+            _memoryCache.Set(GetDeliveryFormPreviewCacheKey(id), preview, TimeSpan.FromMinutes(30));
+            return true;
+        }
+        catch
+        {
+            preview = null;
+            return false;
+        }
+    }
+
+    private void CleanupExpiredDeliveryFormPreviews()
+    {
+        var directory = GetDeliveryFormPreviewDirectory();
+        if (!Directory.Exists(directory))
+        {
+            return;
+        }
+
+        var thresholdUtc = DateTime.UtcNow.AddMinutes(-30);
+        foreach (var filePath in Directory.EnumerateFiles(directory))
+        {
+            try
+            {
+                if (System.IO.File.GetLastWriteTimeUtc(filePath) < thresholdUtc)
+                {
+                    System.IO.File.Delete(filePath);
+                }
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private async Task<ImportedInventoryItem> CreateInventoryItemFromDeliveryFormAsync(
+        EquipmentDeliveryFormViewModel form,
+        string assignedBuildingExternalId,
+        byte[]? deliveryFormPdfContent,
+        CancellationToken cancellationToken)
+    {
+        var normalizedBuildingExternalId = assignedBuildingExternalId?.Trim() ?? string.Empty;
+        var nextRowNumber = (await _context.ImportedInventoryItems.MaxAsync(item => (int?)item.RowNumber, cancellationToken) ?? 0) + 1;
+        var description = BuildInventoryDescriptionFromDeliveryForm(form);
+        var replacedEquipment = BuildDeliveryFormReplacedEquipment(form);
+        var storedPdfFileName = string.Empty;
+
+        try
+        {
+            if (deliveryFormPdfContent is { Length: > 0 })
+            {
+                storedPdfFileName = await SaveInventoryFormPdfBytesAsync(deliveryFormPdfContent, form.SerialNumber, cancellationToken);
+            }
+
+            var item = new ImportedInventoryItem
+            {
+                RowNumber = nextRowNumber,
+                ItemNumber = $"MANUAL-{nextRowNumber:D5}",
+                SerialNumber = form.SerialNumber?.Trim() ?? string.Empty,
+                Description = description,
+                Lot = string.Empty,
+                InstallDate = form.DocumentDate?.Trim() ?? string.Empty,
+                UnitOrDepartment = form.UnitOrDepartment?.Trim() ?? string.Empty,
+                OrganizationalUnit = string.Empty,
+                ResponsibleUser = form.ResponsibleUser?.Trim() ?? string.Empty,
+                Run = form.SignedUserRut?.Trim() ?? string.Empty,
+                Email = form.Email?.Trim() ?? string.Empty,
+                JobTitle = form.JobTitle?.Trim() ?? string.Empty,
+                IpAddress = form.IpAddress?.Trim() ?? string.Empty,
+                MacAddress = form.MacAddress?.Trim() ?? string.Empty,
+                AnnexPhone = form.Annex?.Trim() ?? string.Empty,
+                ReplacedEquipment = replacedEquipment,
+                TicketMda = form.MdaTicket?.Trim() ?? string.Empty,
+                Installer = form.TechnicianName?.Trim() ?? string.Empty,
+                Observation = BuildDeliveryFormObservation(form),
+                Rut = form.SignedUserRut?.Trim() ?? string.Empty,
+                InventoryDate = form.DocumentDate?.Trim() ?? string.Empty,
+                InferredCategory = "pc",
+                InferredStatus = "active",
+                AssignedBuildingExternalId = normalizedBuildingExternalId,
+                AssignedRoomExternalId = string.Empty,
+                AssignedFloor = null,
+                AssignmentNotes = BuildDeliveryFormAssignmentNotes(form, !string.IsNullOrWhiteSpace(normalizedBuildingExternalId)),
+                AssignmentUpdatedAtUtc = string.IsNullOrWhiteSpace(normalizedBuildingExternalId) ? null : DateTime.UtcNow,
+                DeliveryFormPdfFileName = storedPdfFileName,
+                SourceFile = $"{ManualInventorySourceFile}:delivery-form",
+                ImportedAtUtc = DateTime.UtcNow,
+                MatchedSyncedBuildingId = null,
+                MatchedSyncedRoomId = null,
+                MatchedBuildingExternalId = string.Empty,
+                MatchedRoomExternalId = string.Empty,
+                MatchConfidence = string.Empty,
+                MatchNotes = string.Empty
+            };
+
+            _context.ImportedInventoryItems.Add(item);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
+            {
+                await _auditLogService.LogInventoryItemChangeAsync(
+                    item,
+                    User.Identity?.Name ?? "sistema",
+                    string.Empty,
+                    string.Empty,
+                    null,
+                    string.Empty,
+                    string.Empty);
+            }
+
+            return item;
+        }
+        catch
+        {
+            if (!string.IsNullOrWhiteSpace(storedPdfFileName))
+            {
+                DeleteInventoryFormPdfIfExists(storedPdfFileName);
+            }
+
+            throw;
+        }
+    }
+
+    private async Task<string?> ValidateInventoryFormPdfAsync(IFormFile? pdfFile, CancellationToken cancellationToken)
+    {
+        if (pdfFile is null || pdfFile.Length == 0)
+        {
+            return null;
+        }
+
+        var maxUploadBytes = _configuration.GetValue<long?>("PdfSettings:MaxUploadBytes") ?? 25_000_000;
+        if (pdfFile.Length > maxUploadBytes)
+        {
+            return $"El formulario PDF supera el limite de {maxUploadBytes / 1_000_000d:0.#} MB.";
+        }
+
+        var allowedMimeTypes = (_configuration["PdfSettings:AllowedMimeTypes"] ?? DefaultPdfAllowedMimeTypes)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        if (!allowedMimeTypes.Contains(pdfFile.ContentType, StringComparer.OrdinalIgnoreCase))
+        {
+            return "El formulario PDF debe subirse con un tipo MIME PDF valido.";
+        }
+
+        if (!string.Equals(Path.GetExtension(pdfFile.FileName), ".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Solo puedes adjuntar archivos PDF para el formulario.";
+        }
+
+        await using var stream = pdfFile.OpenReadStream();
+        var header = new byte[5];
+        var bytesRead = await stream.ReadAsync(header, cancellationToken);
+        if (bytesRead < 5 || !string.Equals(Encoding.ASCII.GetString(header, 0, 5), "%PDF-", StringComparison.Ordinal))
+        {
+            return "El archivo seleccionado no parece ser un PDF valido.";
+        }
+
+        return null;
+    }
+
+    private async Task<string> SaveInventoryFormPdfUploadAsync(IFormFile pdfFile, string? serialNumber, CancellationToken cancellationToken)
+    {
+        var storedFileName = BuildInventoryFormPdfStorageFileName(serialNumber);
+        var pdfPath = GetInventoryFormPdfPath(storedFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(pdfPath) ?? GetInventoryFormPdfDirectory());
+
+        await using var stream = System.IO.File.Create(pdfPath);
+        await pdfFile.CopyToAsync(stream, cancellationToken);
+        return storedFileName;
+    }
+
+    private async Task<string> SaveInventoryFormPdfBytesAsync(byte[] content, string? serialNumber, CancellationToken cancellationToken)
+    {
+        var storedFileName = BuildInventoryFormPdfStorageFileName(serialNumber);
+        var pdfPath = GetInventoryFormPdfPath(storedFileName);
+        Directory.CreateDirectory(Path.GetDirectoryName(pdfPath) ?? GetInventoryFormPdfDirectory());
+        await System.IO.File.WriteAllBytesAsync(pdfPath, content, cancellationToken);
+        return storedFileName;
+    }
+
+    private string BuildInventoryFormPdfStorageFileName(string? serialNumber)
+    {
+        var sanitizedSerial = SanitizeInventoryFormFileNameSegment(serialNumber);
+        if (string.IsNullOrWhiteSpace(sanitizedSerial))
+        {
+            sanitizedSerial = "sin-serie";
+        }
+
+        return $"inventory-form-{sanitizedSerial}-{Guid.NewGuid():N}.pdf";
+    }
+
+    private static string BuildInventoryFormPdfDownloadName(ImportedInventoryItem item)
+    {
+        var serialSegment = SanitizeInventoryFormFileNameSegment(item.SerialNumber);
+        var userSegment = SanitizeInventoryFormFileNameSegment(item.ResponsibleUser);
+
+        if (string.IsNullOrWhiteSpace(serialSegment))
+        {
+            serialSegment = $"equipo-{item.Id}";
+        }
+
+        var baseName = string.IsNullOrWhiteSpace(userSegment)
+            ? $"formulario-{serialSegment}"
+            : $"formulario-{serialSegment}-{userSegment}";
+
+        return $"{baseName}.pdf";
+    }
+
+    private string GetInventoryFormPdfDirectory()
+    {
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        return Path.Combine(databaseDirectory, "inventory-forms");
+    }
+
+    private string GetInventoryFormPdfPath(string storedFileName)
+    {
+        return Path.Combine(GetInventoryFormPdfDirectory(), Path.GetFileName(storedFileName ?? string.Empty));
+    }
+
+    private void DeleteInventoryFormPdfIfExists(string? storedFileName)
+    {
+        if (string.IsNullOrWhiteSpace(storedFileName))
+        {
+            return;
+        }
+
+        var pdfPath = GetInventoryFormPdfPath(storedFileName);
+        if (System.IO.File.Exists(pdfPath))
+        {
+            try
+            {
+                System.IO.File.Delete(pdfPath);
+            }
+            catch
+            {
+            }
+        }
+    }
+
+    private static string SanitizeInventoryFormFileNameSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var builder = new StringBuilder();
+        var previousWasSeparator = false;
+
+        foreach (var character in value.Trim().ToLowerInvariant())
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                previousWasSeparator = false;
+            }
+            else if (!previousWasSeparator)
+            {
+                builder.Append('-');
+                previousWasSeparator = true;
+            }
+        }
+
+        return builder.ToString().Trim('-');
+    }
+
+    private static string BuildInventoryDescriptionFromDeliveryForm(EquipmentDeliveryFormViewModel form)
+    {
+        var parts = new[]
+        {
+            form.ComputerBrand?.Trim(),
+            form.ComputerModel?.Trim(),
+            form.Processor?.Trim()
+        };
+
+        var description = string.Join(" ", parts.Where(value => !string.IsNullOrWhiteSpace(value)));
+        return string.IsNullOrWhiteSpace(description)
+            ? "Equipo creado desde formulario de entrega"
+            : description;
+    }
+
+    private static string BuildDeliveryFormReplacedEquipment(EquipmentDeliveryFormViewModel form)
+    {
+        var parts = new[]
+        {
+            form.ReplacedEquipmentSerial?.Trim(),
+            form.ReplacedEquipmentModel?.Trim()
+        }
+        .Where(value => !string.IsNullOrWhiteSpace(value))
+        .ToList();
+
+        return parts.Count == 0 ? string.Empty : string.Join(" | ", parts);
+    }
+
+    private static string BuildDeliveryFormObservation(EquipmentDeliveryFormViewModel form)
+    {
+        var notes = new List<string>
+        {
+            "Creado desde formulario de entrega"
+        };
+
+        if (!string.IsNullOrWhiteSpace(form.DocumentDate))
+        {
+            notes.Add($"fecha {form.DocumentDate.Trim()}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(form.ReceptionType))
+        {
+            notes.Add($"brecha: {form.ReceptionType.Trim()}");
+        }
+
+        var replacedEquipment = BuildDeliveryFormReplacedEquipment(form);
+        if (!string.IsNullOrWhiteSpace(replacedEquipment))
+        {
+            notes.Add($"equipo anterior: {replacedEquipment}");
+        }
+
+        return string.Join(". ", notes) + ".";
+    }
+
+    private static string BuildDeliveryFormAssignmentNotes(EquipmentDeliveryFormViewModel form, bool hasAssignedBuilding)
+    {
+        var notes = new List<string>
+        {
+            "Creado desde formulario de entrega"
+        };
+
+        if (!string.IsNullOrWhiteSpace(form.ReceptionType))
+        {
+            notes.Add($"Brecha: {form.ReceptionType.Trim()}");
+        }
+
+        if (!hasAssignedBuilding)
+        {
+            notes.Add("Pendiente de asignar edificio");
+        }
+
+        return string.Join(". ", notes) + ".";
+    }
+
+    private EquipmentDeliveryFormViewModel BuildDefaultDeliveryFormViewModel()
+    {
+        return new EquipmentDeliveryFormViewModel
+        {
+            DocumentDate = DateTime.Today.ToString("dd/MM/yyyy"),
+            Institution = _configuration["DeliveryForm:Institution"]?.Trim() ?? string.Empty,
+            ReceptionType = string.Empty,
+            OperatingSystem = "WINDOWS 10",
+            OfficeSuite = "OFFICE 2021",
+            SecurityLock = "Si",
+            AntivirusConnectionState = "Activo"
+        };
+    }
+
+    private async Task<CreateInventoryItemViewModel> BuildCreateInventoryItemViewModelAsync(InventoryItemFormModel form)
+    {
+        return new CreateInventoryItemViewModel
+        {
+            Form = form,
+            Buildings = await _context.SyncedBuildings
+                .AsNoTracking()
+                .Where(building => building.IsActive)
+                .OrderBy(building => building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName)
+                .ToListAsync(),
+            Rooms = await _context.SyncedRooms
+                .AsNoTracking()
+                .OrderBy(room => room.ManualFloor ?? room.Floor)
+                .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
+                .ToListAsync(),
+            Categories = await GetInventoryCategoryOptionsAsync(),
+            Statuses = await GetInventoryStatusOptionsAsync()
+        };
+    }
+
+    private async Task<EditInventoryItemViewModel> BuildEditInventoryItemViewModelAsync(ImportedInventoryItem item)
+    {
+        return new EditInventoryItemViewModel
+        {
+            Item = item,
+            Buildings = await _context.SyncedBuildings
+                .AsNoTracking()
+                .Where(building => building.IsActive || building.ExternalId == item.AssignedBuildingExternalId)
+                .OrderBy(building => building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName)
+                .ToListAsync(),
+            Rooms = await _context.SyncedRooms
+                .AsNoTracking()
+                .OrderBy(room => room.ManualFloor ?? room.Floor)
+                .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
+                .ToListAsync(),
+            Categories = await GetInventoryCategoryOptionsAsync(),
+            Statuses = await GetInventoryStatusOptionsAsync(),
+            Documents = await _context.InventoryDocuments
+                .AsNoTracking()
+                .Where(document => document.InventoryItemId == item.Id)
+                .OrderByDescending(document => document.CreatedAtUtc)
+                .ToListAsync()
+        };
+    }
+
+    private static string NormalizeSortDirection(string? sortDirection)
+    {
+        return string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+    }
+
+    private static string NormalizeInventorySortBy(string? sortBy)
+    {
+        return sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "equipment" => "equipment",
+            "unit" => "unit",
+            "user" => "user",
+            "ip" => "ip",
+            "category" => "category",
+            "status" => "status",
+            "suggestion" => "suggestion",
+            "assignment" => "assignment",
+            _ => "row"
+        };
+    }
+
+    private static string NormalizeInventoryFilterField(string? field)
+    {
+        return field?.Trim().ToLowerInvariant() switch
+        {
+            "serial" => "serial",
+            "item" => "item",
+            "description" => "description",
+            "unit" => "unit",
+            "org" => "org",
+            "user" => "user",
+            "email" => "email",
+            "ip" => "ip",
+            "mac" => "mac",
+            "ticket" => "ticket",
+            "observation" => "observation",
+            "assigned-building" => "assigned-building",
+            "suggested-building" => "suggested-building",
+            "source" => "source",
+            _ => string.Empty
+        };
+    }
+
+    private static List<(string Field, string Value)> NormalizeInventoryColumnFilters(string[]? fields, string[]? values)
+    {
+        var result = new List<(string Field, string Value)>();
+        if (fields is null || values is null)
+        {
+            return result;
+        }
+
+        var length = Math.Min(fields.Length, values.Length);
+        for (var index = 0; index < length; index++)
+        {
+            var field = NormalizeInventoryFilterField(fields[index]);
+            var value = values[index]?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(field) || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            result.Add((field, value));
+        }
+
+        return result;
+    }
+
+    private static IQueryable<ImportedInventoryItem> ApplyInventoryColumnFilter(
+        IQueryable<ImportedInventoryItem> query,
+        (string Field, string Value) columnFilter)
+    {
+        var value = columnFilter.Value.ToLowerInvariant();
+
+        return columnFilter.Field switch
+        {
+            "serial" => query.Where(i => i.SerialNumber != null && i.SerialNumber.ToLower().Contains(value)),
+            "item" => query.Where(i => i.ItemNumber != null && i.ItemNumber.ToLower().Contains(value)),
+            "description" => query.Where(i => i.Description != null && i.Description.ToLower().Contains(value)),
+            "unit" => query.Where(i => i.UnitOrDepartment != null && i.UnitOrDepartment.ToLower().Contains(value)),
+            "org" => query.Where(i => i.OrganizationalUnit != null && i.OrganizationalUnit.ToLower().Contains(value)),
+            "user" => query.Where(i => i.ResponsibleUser != null && i.ResponsibleUser.ToLower().Contains(value)),
+            "email" => query.Where(i => i.Email != null && i.Email.ToLower().Contains(value)),
+            "ip" => query.Where(i => i.IpAddress != null && i.IpAddress.ToLower().Contains(value)),
+            "mac" => query.Where(i => i.MacAddress != null && i.MacAddress.ToLower().Contains(value)),
+            "ticket" => query.Where(i => i.TicketMda != null && i.TicketMda.ToLower().Contains(value)),
+            "observation" => query.Where(i => i.Observation != null && i.Observation.ToLower().Contains(value)),
+            "assigned-building" => query.Where(i => i.AssignedBuildingExternalId != null && i.AssignedBuildingExternalId.ToLower().Contains(value)),
+            "suggested-building" => query.Where(i => i.MatchedBuildingExternalId != null && i.MatchedBuildingExternalId.ToLower().Contains(value)),
+            "source" => query.Where(i => i.SourceFile != null && i.SourceFile.ToLower().Contains(value)),
+            _ => query
+        };
+    }
+
+    private static string NormalizeLocationSortBy(string? sortBy)
+    {
+        return sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "campus" => "campus",
+            "type" => "type",
+            "floors" => "floors",
+            "rooms" => "rooms",
+            "assigned" => "assigned",
+            "suggested" => "suggested",
+            "map" => "map",
+            "coordinates" => "coordinates",
+            _ => "building"
+        };
+    }
+
+    private static string NormalizeLocationColumnFilterField(string? field)
+    {
+        return field?.Trim().ToLowerInvariant() switch
+        {
+            "id" => "id",
+            "building" => "building",
+            "campus" => "campus",
+            "type" => "type",
+            "floors" => "floors",
+            "rooms" => "rooms",
+            "assigned" => "assigned",
+            "suggested" => "suggested",
+            "map" => "map",
+            "inventory" => "inventory",
+            "coordinates" => "coordinates",
+            _ => string.Empty
+        };
+    }
+
+    private static List<(string Field, string Value)> NormalizeLocationColumnFilters(string[]? fields, string[]? values)
+    {
+        var result = new List<(string Field, string Value)>();
+        if (fields is null || values is null)
+        {
+            return result;
+        }
+
+        var max = Math.Min(fields.Length, values.Length);
+        for (var index = 0; index < max; index++)
+        {
+            var field = NormalizeLocationColumnFilterField(fields[index]);
+            var value = values[index]?.Trim();
+            if (string.IsNullOrWhiteSpace(field) || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            result.Add((field, value));
+        }
+
+        return result;
+    }
+
+    private static IEnumerable<AdminLocationRowViewModel> ApplyLocationColumnFilter(
+        IEnumerable<AdminLocationRowViewModel> rows,
+        (string Field, string Value) columnFilter)
+    {
+        var value = NormalizeSortableText(columnFilter.Value);
+
+        return columnFilter.Field switch
+        {
+            "id" => rows.Where(row => NormalizeSortableText(row.ExternalId).Contains(value)),
+            "building" => rows.Where(row => NormalizeSortableText(row.DisplayName).Contains(value)),
+            "campus" => rows.Where(row => NormalizeSortableText(row.Campus).Contains(value)),
+            "type" => rows.Where(row => NormalizeSortableText(row.Type).Contains(value)),
+            "floors" => rows.Where(row => NormalizeSortableText(row.AvailableFloors).Contains(value)),
+            "rooms" => rows.Where(row => row.RoomsCount.ToString().Contains(columnFilter.Value.Trim(), StringComparison.OrdinalIgnoreCase)),
+            "assigned" => rows.Where(row => row.AssignedInventoryCount.ToString().Contains(columnFilter.Value.Trim(), StringComparison.OrdinalIgnoreCase)),
+            "suggested" => rows.Where(row => row.SuggestedInventoryCount.ToString().Contains(columnFilter.Value.Trim(), StringComparison.OrdinalIgnoreCase)),
+            "map" => rows.Where(row => NormalizeSortableText(row.MappingStatus).Contains(value)),
+            "inventory" => rows.Where(row => NormalizeSortableText(row.InventoryStatus).Contains(value)),
+            "coordinates" => rows.Where(row => NormalizeSortableText(row.Coordinates).Contains(value)),
+            _ => rows
+        };
+    }
+
+    private static string NormalizeInconsistencyType(string? inconsistencyType)
+    {
+        return inconsistencyType?.Trim().ToLowerInvariant() switch
+        {
+            "serial-duplicate" => "serial-duplicate",
+            "serial-similar" => "serial-similar",
+            "ip" => "ip",
+            "mac" => "mac",
+            "unit-org" => "unit-org",
+            "multi" => "multi",
+            _ => string.Empty
+        };
+    }
+
+    private static IReadOnlyList<FilterOptionViewModel> GetInventoryInconsistencyFilterOptions()
+    {
+        return
+        [
+            new() { Value = string.Empty, Label = "Todas" },
+            new() { Value = "serial-duplicate", Label = "S/N duplicado" },
+            new() { Value = "serial-similar", Label = "S/N muy parecido" },
+            new() { Value = "ip", Label = "IP repetida" },
+            new() { Value = "mac", Label = "MAC repetida" },
+            new() { Value = "unit-org", Label = "Unidad/org distinta" },
+            new() { Value = "multi", Label = "2 o mas tipos" }
+        ];
+    }
+
+    private static IReadOnlyList<FilterOptionViewModel> GetInventoryColumnFilterOptions()
+    {
+        return
+        [
+            new() { Value = "serial", Label = "S/N" },
+            new() { Value = "item", Label = "Numero item" },
+            new() { Value = "description", Label = "Descripcion" },
+            new() { Value = "unit", Label = "Unidad" },
+            new() { Value = "org", Label = "Unidad organizativa" },
+            new() { Value = "user", Label = "Usuario" },
+            new() { Value = "email", Label = "Correo" },
+            new() { Value = "ip", Label = "IP" },
+            new() { Value = "mac", Label = "MAC" },
+            new() { Value = "ticket", Label = "Ticket MDA" },
+            new() { Value = "observation", Label = "Observacion" },
+            new() { Value = "assigned-building", Label = "Edificio asignado" },
+            new() { Value = "suggested-building", Label = "Edificio sugerido" },
+            new() { Value = "source", Label = "Archivo origen" }
+        ];
+    }
+
+    private static IReadOnlyList<FilterOptionViewModel> GetLocationColumnFilterOptions()
+    {
+        return
+        [
+            new() { Value = "id", Label = "ID edificio" },
+            new() { Value = "building", Label = "Edificio" },
+            new() { Value = "campus", Label = "Campus" },
+            new() { Value = "type", Label = "Tipo" },
+            new() { Value = "floors", Label = "Pisos" },
+            new() { Value = "rooms", Label = "Salas" },
+            new() { Value = "assigned", Label = "Equipos asignados" },
+            new() { Value = "suggested", Label = "Sugeridos" },
+            new() { Value = "map", Label = "Estado mapa" },
+            new() { Value = "inventory", Label = "Estado inventario" },
+            new() { Value = "coordinates", Label = "Coordenadas" }
+        ];
+    }
+
+    private static string GetInventoryColumnFilterLabel(string field)
+    {
+        return GetInventoryColumnFilterOptions().FirstOrDefault(option => option.Value == field)?.Label ?? field;
+    }
+
+    private static string GetLocationColumnFilterLabel(string field)
+    {
+        return GetLocationColumnFilterOptions().FirstOrDefault(option => option.Value == field)?.Label ?? field;
+    }
+
+    private static bool MatchesInconsistencyType(string summary, string inconsistencyType)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return false;
+        }
+
+        return inconsistencyType switch
+        {
+            "serial-duplicate" => summary.Contains("S/N duplicado", StringComparison.OrdinalIgnoreCase),
+            "serial-similar" => summary.Contains("S/N muy parecido", StringComparison.OrdinalIgnoreCase),
+            "ip" => summary.Contains("IP repetida", StringComparison.OrdinalIgnoreCase),
+            "mac" => summary.Contains("MAC repetida", StringComparison.OrdinalIgnoreCase),
+            "unit-org" => summary.Contains("Unidad/org distinta", StringComparison.OrdinalIgnoreCase),
+            "multi" => summary.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Length >= 2,
+            _ => true
+        };
+    }
+
+    private static IEnumerable<ImportedInventoryItem> SortInventoryItems(
+        IEnumerable<ImportedInventoryItem> items,
+        string sortBy,
+        string sortDirection)
+    {
+        IOrderedEnumerable<ImportedInventoryItem> ordered = sortBy switch
+        {
+            "equipment" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.SerialNumber))
+                    .ThenByDescending(item => NormalizeSortableText(item.Description))
+                    .ThenByDescending(item => NormalizeSortableText(item.ItemNumber))
+                : items.OrderBy(item => NormalizeSortableText(item.SerialNumber))
+                    .ThenBy(item => NormalizeSortableText(item.Description))
+                    .ThenBy(item => NormalizeSortableText(item.ItemNumber)),
+            "unit" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.UnitOrDepartment))
+                    .ThenByDescending(item => NormalizeSortableText(item.OrganizationalUnit))
+                : items.OrderBy(item => NormalizeSortableText(item.UnitOrDepartment))
+                    .ThenBy(item => NormalizeSortableText(item.OrganizationalUnit)),
+            "user" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.ResponsibleUser))
+                    .ThenByDescending(item => NormalizeSortableText(item.Email))
+                : items.OrderBy(item => NormalizeSortableText(item.ResponsibleUser))
+                    .ThenBy(item => NormalizeSortableText(item.Email)),
+            "ip" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.IpAddress))
+                : items.OrderBy(item => NormalizeSortableText(item.IpAddress)),
+            "category" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.InferredCategory))
+                : items.OrderBy(item => NormalizeSortableText(item.InferredCategory)),
+            "status" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(item.InferredStatus))
+                : items.OrderBy(item => NormalizeSortableText(item.InferredStatus)),
+            "suggestion" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(BuildInventorySuggestionLabel(item)))
+                : items.OrderBy(item => NormalizeSortableText(BuildInventorySuggestionLabel(item))),
+            "assignment" => sortDirection == "desc"
+                ? items.OrderByDescending(item => NormalizeSortableText(FormatInventoryAssignmentLabel(item)))
+                : items.OrderBy(item => NormalizeSortableText(FormatInventoryAssignmentLabel(item))),
+            _ => sortDirection == "desc"
+                ? items.OrderByDescending(item => item.Id)
+                : items.OrderBy(item => item.Id)
+        };
+
+        return ordered.ThenBy(item => item.Id);
+    }
+
+    private static IEnumerable<AdminLocationRowViewModel> SortLocationRows(
+        IEnumerable<AdminLocationRowViewModel> rows,
+        string sortBy,
+        string sortDirection)
+    {
+        IOrderedEnumerable<AdminLocationRowViewModel> ordered = sortBy switch
+        {
+            "campus" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText(row.Campus))
+                    .ThenByDescending(row => NormalizeSortableText(row.DisplayName))
+                : rows.OrderBy(row => NormalizeSortableText(row.Campus))
+                    .ThenBy(row => NormalizeSortableText(row.DisplayName)),
+            "type" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText(row.Type))
+                    .ThenByDescending(row => NormalizeSortableText(row.DisplayName))
+                : rows.OrderBy(row => NormalizeSortableText(row.Type))
+                    .ThenBy(row => NormalizeSortableText(row.DisplayName)),
+            "floors" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText(row.AvailableFloors))
+                : rows.OrderBy(row => NormalizeSortableText(row.AvailableFloors)),
+            "rooms" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => row.RoomsCount)
+                : rows.OrderBy(row => row.RoomsCount),
+            "assigned" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => row.AssignedInventoryCount)
+                : rows.OrderBy(row => row.AssignedInventoryCount),
+            "suggested" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => row.SuggestedInventoryCount)
+                : rows.OrderBy(row => row.SuggestedInventoryCount),
+            "map" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText($"{row.MappingStatus} {row.InventoryStatus}"))
+                : rows.OrderBy(row => NormalizeSortableText($"{row.MappingStatus} {row.InventoryStatus}")),
+            "coordinates" => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText(row.Coordinates))
+                : rows.OrderBy(row => NormalizeSortableText(row.Coordinates)),
+            _ => sortDirection == "desc"
+                ? rows.OrderByDescending(row => NormalizeSortableText(row.DisplayName))
+                : rows.OrderBy(row => NormalizeSortableText(row.DisplayName))
+        };
+
+        return ordered.ThenBy(row => NormalizeSortableText(row.ExternalId));
+    }
+
+    private static string BuildInventorySuggestionLabel(ImportedInventoryItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.MatchedBuildingExternalId))
+        {
+            return string.Empty;
+        }
+
+        var parts = new List<string> { item.MatchedBuildingExternalId };
+        if (!string.IsNullOrWhiteSpace(item.MatchedRoomExternalId))
+        {
+            parts.Add(item.MatchedRoomExternalId);
+        }
+        if (!string.IsNullOrWhiteSpace(item.MatchConfidence))
+        {
+            parts.Add(item.MatchConfidence);
+        }
+
+        return string.Join(" / ", parts);
+    }
+
+    private static string NormalizeSortableText(string? value)
+    {
+        return NormalizeInventoryToken(value);
+    }
+
+    private static int NormalizePageSize(int pageSize)
+    {
+        return pageSize switch
+        {
+            30 or 50 or 100 or 200 or 500 => pageSize,
+            _ => 30
+        };
+    }
+
+    private static string NormalizeFloorsCsv(string? manualFloorsCsv)
+    {
+        var rawValue = manualFloorsCsv?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(rawValue))
+            return string.Empty;
+
+        return BuildingFloorNormalizer.NormalizeCsv(rawValue);
+    }
+
+    private string ResolveFrontendMapUrl()
+    {
+        var configured = _configuration["FrontendAppUrl"];
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+
+        var requestHost = Request?.Host.Host;
+        if (!string.IsNullOrWhiteSpace(requestHost))
+        {
+            var requestScheme = string.IsNullOrWhiteSpace(Request?.Scheme) ? "http" : Request.Scheme;
+            return $"{requestScheme}://{requestHost}:8080";
+        }
+
+        var allowedOrigins = _configuration["AllowedOrigins"];
+        if (!string.IsNullOrWhiteSpace(allowedOrigins))
+        {
+            var frontendOrigin = allowedOrigins
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .FirstOrDefault(origin => origin.Contains("8081", StringComparison.OrdinalIgnoreCase)
+                    || origin.Contains("8080", StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(frontendOrigin))
+                return frontendOrigin;
+        }
+
+        return "http://localhost:8080";
+    }
+
+    private string GetDatabaseFilePath()
+    {
+        var environment = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
+        return SqliteDatabasePathResolver.ResolveDatabasePath(_configuration, environment.ContentRootPath);
+    }
+
+    private FileInfo? GetDatabaseFileInfo()
+    {
+        var databasePath = GetDatabaseFilePath();
+        return System.IO.File.Exists(databasePath) ? new FileInfo(databasePath) : null;
+    }
+
+    private IReadOnlyList<FileInfo> GetDatabaseBackupFiles()
+    {
+        var backupDirectory = GetDatabaseBackupDirectory();
+        if (!Directory.Exists(backupDirectory))
+            return [];
+
+        return new DirectoryInfo(backupDirectory)
+            .GetFiles("*.db", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .Take(15)
+            .ToList();
+    }
+
+    private string GetDatabaseBackupDirectory()
+    {
+        var configuredPath = _configuration["BackupSettings:Path"] ?? Environment.GetEnvironmentVariable("BACKUP_PATH");
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            var trimmed = configuredPath.Trim();
+            if (!Path.IsPathRooted(trimmed))
+            {
+                var environment = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
+                return Path.GetFullPath(Path.Combine(environment.ContentRootPath, trimmed));
+            }
+
+            return trimmed;
+        }
+
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        return Path.Combine(databaseDirectory, "backups");
+    }
+
+    private string GetDataProtectionKeysDirectory()
+    {
+        var configuredPath = _configuration["SecuritySettings:DataProtectionKeysPath"];
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.GetFullPath(configuredPath.Trim());
+        }
+
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        return Path.Combine(databaseDirectory, "data-protection-keys");
+    }
+
+    private string? ResolveFrontendDataDirectory()
+    {
+        var configuredPath = _configuration["FrontendDataPath"];
+        if (!string.IsNullOrWhiteSpace(configuredPath))
+        {
+            return Path.GetFullPath(configuredPath);
+        }
+
+        const string dockerPath = "/app/frontend-data";
+        if (Directory.Exists(dockerPath))
+        {
+            return dockerPath;
+        }
+
+        var current = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (current is not null)
+        {
+            var siblingFrontendData = Path.Combine(current.FullName, "..", "syntro", "src", "data");
+            if (Directory.Exists(siblingFrontendData))
+            {
+                return Path.GetFullPath(siblingFrontendData);
+            }
+
+            var directFrontendData = Path.Combine(current.FullName, "syntro", "src", "data");
+            if (Directory.Exists(directFrontendData))
+            {
+                return Path.GetFullPath(directFrontendData);
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private async Task RestoreProjectPackageAsync(string extractRoot, CancellationToken cancellationToken)
+    {
+        var backendPackageRoot = Path.Combine(extractRoot, "backend-data");
+        var frontendPackageRoot = Path.Combine(extractRoot, "frontend-data");
+
+        if (!Directory.Exists(backendPackageRoot))
+        {
+            throw new InvalidOperationException("El paquete no contiene la carpeta backend-data.");
+        }
+
+        var dbSource = Path.Combine(backendPackageRoot, "syntro.db");
+        if (!System.IO.File.Exists(dbSource))
+        {
+            throw new InvalidOperationException("El paquete no contiene syntro.db.");
+        }
+
+        ValidateSqliteFile(dbSource);
+        await RestoreDatabaseFromFileAsync(dbSource);
+
+        CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-forms"), GetInventoryFormPdfDirectory(), overwrite: true);
+        CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "backups"), GetDatabaseBackupDirectory(), overwrite: true);
+        CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
+
+        var frontendDataDirectory = ResolveFrontendDataDirectory();
+        if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendPackageRoot))
+        {
+            Directory.CreateDirectory(frontendDataDirectory);
+            CopyFileIfExists(Path.Combine(frontendPackageRoot, "walking_routes_backup.json"), Path.Combine(frontendDataDirectory, "walking_routes_backup.json"));
+            CopyFileIfExists(Path.Combine(frontendPackageRoot, "syntro_buildings_backend_backup.json"), Path.Combine(frontendDataDirectory, "syntro_buildings_backend_backup.json"));
+            CopyFileIfExists(Path.Combine(frontendPackageRoot, "network_telemetry_backup.json"), Path.Combine(frontendDataDirectory, "network_telemetry_backup.json"));
+        }
+    }
+
+    private static void CopyFileIfExists(string sourcePath, string destinationPath)
+    {
+        if (!System.IO.File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        var destinationDirectory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrWhiteSpace(destinationDirectory))
+        {
+            Directory.CreateDirectory(destinationDirectory);
+        }
+
+        System.IO.File.Copy(sourcePath, destinationPath, overwrite: true);
+    }
+
+    private static void CopyDirectoryIfExists(string sourceDirectory, string destinationDirectory, bool overwrite = false)
+    {
+        if (!Directory.Exists(sourceDirectory))
+        {
+            return;
+        }
+
+        if (overwrite && Directory.Exists(destinationDirectory))
+        {
+            Directory.Delete(destinationDirectory, recursive: true);
+        }
+
+        Directory.CreateDirectory(destinationDirectory);
+
+        foreach (var directory in Directory.GetDirectories(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(directory.Replace(sourceDirectory, destinationDirectory));
+        }
+
+        foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var destinationFile = file.Replace(sourceDirectory, destinationDirectory);
+            var destinationParent = Path.GetDirectoryName(destinationFile);
+            if (!string.IsNullOrWhiteSpace(destinationParent))
+            {
+                Directory.CreateDirectory(destinationParent);
+            }
+
+            System.IO.File.Copy(file, destinationFile, overwrite: true);
+        }
+    }
+
+    private static void TryDeleteDirectory(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+        {
+            return;
+        }
+
+        try
+        {
+            Directory.Delete(path, recursive: true);
+        }
+        catch
+        {
+        }
+    }
+
+    private FileContentResult DownloadDatabaseFile(string sourcePath, string downloadFileName)
+    {
+        var bytes = System.IO.File.ReadAllBytes(sourcePath);
+        return File(bytes, "application/octet-stream", downloadFileName);
+    }
+
+    private async Task RestoreDatabaseFromFileAsync(string sourcePath)
+    {
+        var databasePath = GetDatabaseFilePath();
+        var databaseDirectory = Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory;
+        Directory.CreateDirectory(databaseDirectory);
+
+        _context.ChangeTracker.Clear();
+        _context.Database.CloseConnection();
+        SqliteConnection.ClearAllPools();
+
+        if (System.IO.File.Exists(databasePath))
+        {
+            await _databaseBackupService.CreateBackupFromCurrentDatabaseAsync(User.Identity?.Name ?? "admin", "pre-restore");
+        }
+
+        System.IO.File.Copy(sourcePath, databasePath, overwrite: true);
+        SqliteConnection.ClearAllPools();
+    }
+
+    private static void ValidateSqliteFile(string path)
+    {
+        using var connection = new SqliteConnection($"Data Source={path}");
+        connection.Open();
+
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT name FROM sqlite_master LIMIT 1;";
+        command.ExecuteScalar();
+    }
+
+    private async Task LogBuildingOverrideAsync(
+        SyncedBuilding building,
+        string previousCampus,
+        string previousDisplayName,
+        string previousFloorsJson)
+    {
+        var changes = new List<string>();
+
+        if (!string.Equals(previousCampus, building.EffectiveCampus, StringComparison.Ordinal))
+            changes.Add($"campus: '{previousCampus}' -> '{building.EffectiveCampus}'");
+
+        if (!string.Equals(previousDisplayName, building.EffectiveDisplayName, StringComparison.Ordinal))
+            changes.Add($"edificio: '{previousDisplayName}' -> '{building.EffectiveDisplayName}'");
+
+        if (!string.Equals(previousFloorsJson, building.EffectiveFloorsJson, StringComparison.Ordinal))
+            changes.Add("pisos actualizados");
+
+        if (changes.Count == 0)
+            changes.Add("override revisado sin cambios");
+
+        _context.AuditLogEntries.Add(new AuditLogEntry
+        {
+            BuildingExternalId = building.ExternalId,
+            EntityType = "synced-building",
+            EntityId = building.ExternalId,
+            ActionType = "override-building",
+            Summary = $"Override manual en edificio {building.EffectiveDisplayName}",
+            Details = string.Join("; ", changes),
+            ChangedByUsername = User.Identity?.Name ?? "sistema",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+    }
+
+    private async Task LogRoomOverrideAsync(SyncedRoom room, string previousName, int previousFloor)
+    {
+        var changes = new List<string>();
+
+        if (!string.Equals(previousName, room.EffectiveName, StringComparison.Ordinal))
+            changes.Add($"sala: '{previousName}' -> '{room.EffectiveName}'");
+
+        if (previousFloor != room.EffectiveFloor)
+            changes.Add($"piso: '{previousFloor}' -> '{room.EffectiveFloor}'");
+
+        if (changes.Count == 0)
+            changes.Add("override revisado sin cambios");
+
+        _context.AuditLogEntries.Add(new AuditLogEntry
+        {
+            BuildingExternalId = room.BuildingExternalId,
+            EntityType = "synced-room",
+            EntityId = room.ExternalId,
+            ActionType = "override-room",
+            Summary = $"Override manual en sala {room.EffectiveName}",
+            Details = string.Join("; ", changes),
+            ChangedByUsername = User.Identity?.Name ?? "sistema",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

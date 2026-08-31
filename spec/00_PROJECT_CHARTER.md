@@ -2,7 +2,7 @@
 
 ## Project Name
 
-Pireon (working codename). The final product name is defined by the licensee.
+Syntro (working codename). The final product name is defined by the licensee.
 
 ## Purpose
 

@@ -1,8 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 
-const catalogPath = path.join(__dirname, "..", "src", "data", "pireon_buildings_catalog.json");
-const manualDataPath = path.join(__dirname, "..", "src", "data", "pireon_buildings_manual_data.json");
+const catalogPath = path.join(__dirname, "..", "src", "data", "syntro_buildings_catalog.json");
+const manualDataPath = path.join(__dirname, "..", "src", "data", "syntro_buildings_manual_data.json");
 
 function main() {
   const catalogRaw = fs.readFileSync(catalogPath, "utf-8");

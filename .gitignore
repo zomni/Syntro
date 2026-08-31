@@ -25,7 +25,7 @@ npm-debug.log
 coverage/
 
 # SQLite locales residuales del backend
-backend/Pireon.API/*.db*
+backend/Syntro.API/*.db*
 
 # Datos vivos del proyecto (no versionar; paquete separado)
 backend/data/**
@@ -39,7 +39,7 @@ backend/data/data-protection-keys/**
 backend/runtime/**
 
 # Respaldos legacy del backend
-backend/Pireon.API/backups/**
+backend/Syntro.API/backups/**
 
 # Temporales de trabajo locales
 .tmp/**
@@ -48,8 +48,8 @@ backend/Pireon.API/backups/**
 tools/*/appsettings.local.json
 
 # Modelos ML entrenados y estado runtime
-backend/Pireon.API/ml-models/
-backend/Pireon.API/Data/ml-state.json
+backend/Syntro.API/ml-models/
+backend/Syntro.API/Data/ml-state.json
 
 # Contenido de datos de frontend (opcional, nunca versionar)
 frontend/src/data/*.json

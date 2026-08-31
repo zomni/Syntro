@@ -2,7 +2,7 @@
 
 ## Restart y rebuild
 
-- Siempre que se hagan cambios en el backend (`backend/Pireon.API`), el frontend
+- Siempre que se hagan cambios en el backend (`backend/Syntro.API`), el frontend
   (`frontend/`) o las tools (`tools/`), el agente DEBE encargarse él mismo de
   detener, rebuildear y levantar de nuevo los servicios afectados para que el
   usuario pueda probar los cambios sin pasos manuales.

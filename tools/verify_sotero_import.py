@@ -1,4 +1,4 @@
-"""Verificación post-ETL del campus Sotero en Pireon (vía API) y siembra del
+"""Verificación post-ETL del campus Sotero en Syntro (vía API) y siembra del
 horario de planificación Lun-Jue si no existe.
 
 Uso: python tools/verify_sotero_import.py

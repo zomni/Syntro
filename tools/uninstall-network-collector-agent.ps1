@@ -1,10 +1,10 @@
 param(
-    [string]$TaskName = "Pireon Network Collector Agent"
+    [string]$TaskName = "Syntro Network Collector Agent"
 )
 
 $ErrorActionPreference = "Stop"
 $runRegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$runRegistryName = "PireonNetworkCollectorAgent"
+$runRegistryName = "SyntroNetworkCollectorAgent"
 
 try {
     Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue | Out-Null

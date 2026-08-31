@@ -1,20 +1,20 @@
 // Configuración de la instancia (SPEC 01).
-// Valores por defecto genéricos; sobrescribibles por instancia vía window.PIREON_CONFIG
+// Valores por defecto genéricos; sobrescribibles por instancia vía window.SYNTRO_CONFIG
 // o en tiempo de build vía la variable de entorno API_BASE_URL (webpack DefinePlugin).
 
 const runtime =
-  (typeof window !== "undefined" && window.PIREON_CONFIG) || {};
+  (typeof window !== "undefined" && window.SYNTRO_CONFIG) || {};
 
 export const appConfig = {
   apiBaseUrl:
     runtime.apiBaseUrl ||
     (typeof __API_BASE_URL__ !== "undefined" ? __API_BASE_URL__ : "http://localhost:5000"),
-  prefix: runtime.prefix || "pireon",
+  prefix: runtime.prefix || "syntro",
   branding: {
-    appName: runtime.appName || "Pireon",
+    appName: runtime.appName || "Syntro",
     theme: {
-      primary: runtime.themePrimary || "#0f766e",
-      secondary: runtime.themeSecondary || "#1D9E75",
+      primary: runtime.themePrimary || "#003366",
+      secondary: runtime.themeSecondary || "#1D4E89",
     },
   },
   display: {

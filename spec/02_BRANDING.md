@@ -26,10 +26,10 @@ Backend (formerly `sotero_map_api`):
 
 ## Required Changes
 
-- Rename the npm package to Pireon.
+- Rename the npm package to Syntro.
 - Set `<title>` and `lang` to generic template values.
-- Replace cookies with `Pireon.Auth` / `Pireon.MfaPending`.
-- Replace the claims namespace with `pireon:*`.
+- Replace cookies with `Syntro.Auth` / `Syntro.MfaPending`.
+- Replace the claims namespace with `syntro:*`.
 - Replace the DataProtection application name and MFA issuer.
 - Replace branding assets with neutral logos.
 - Convert theme colors to CSS variables (single source).

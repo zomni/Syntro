@@ -23,8 +23,8 @@ Frontend:
 Backend:
 
 - Replace client defaults with generic placeholders in `appsettings.json` and `.env.example`.
-- Make the database file name configurable (default `pireon.db`).
-- Make data roots and artifact name prefixes configurable (default `pireon-*`).
+- Make the database file name configurable (default `syntro.db`).
+- Make data roots and artifact name prefixes configurable (default `syntro-*`).
 - Keep environment-variable override precedence over appsettings.
 
 Frontend:
@@ -47,5 +47,5 @@ Frontend:
 ## Decisiones de implementación
 
 - La URL de API del frontend se resuelve desde configuración (módulo `appConfig`, variable de entorno `API_BASE_URL`), no desde el host actual más puerto fijo.
-- El nombre de la DB por defecto pasa a `pireon.db`; la resolución mantiene el patrón existente de `SqliteDatabasePathResolver`.
+- El nombre de la DB por defecto pasa a `syntro.db`; la resolución mantiene el patrón existente de `SqliteDatabasePathResolver`.
 - El prefijo de artefactos (`backups`, `data-package`) se centraliza para no depender de `AdminController` en cada rebrand.

@@ -23,7 +23,7 @@ const edgeColor = (status) => {
   const normalized = String(status || "open").toLowerCase();
   if (normalized === "closed") return "#dc2626";
   if (normalized === "restricted") return "#f59e0b";
-  return "#0f766e";
+  return "#003366";
 };
 
 const activeCampus = () => String(getActiveCampus() || getPrimaryCampusKey() || "").trim();

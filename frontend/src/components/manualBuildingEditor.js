@@ -82,7 +82,7 @@ const redrawPreview = () => {
     points.map((point) =>
       L.circleMarker(point, {
         radius: 5,
-        color: "#0f766e",
+        color: "#003366",
         weight: 2,
         fillColor: "#99f6e4",
         fillOpacity: 0.9,
@@ -92,7 +92,7 @@ const redrawPreview = () => {
 
   if (points.length >= 2) {
     previewLayer = L.polyline(points, {
-      color: "#0f766e",
+      color: "#003366",
       weight: 3,
       dashArray: "6 6",
     }).addTo(map);
@@ -330,11 +330,11 @@ export const syncManualBuildingEditorForSession = (session) => {
   }
 };
 
-window.addEventListener("pireon-session-changed", (event) => {
+window.addEventListener("syntro-session-changed", (event) => {
   syncManualBuildingEditorForSession(event.detail || {});
 });
 
-window.addEventListener("pireon-admin-map-tool-mode", (event) => {
+window.addEventListener("syntro-admin-map-tool-mode", (event) => {
   if (event.detail?.mode !== "manual-building" && isDrawing) {
     stopDrawing({ clearActiveTool: false });
   }

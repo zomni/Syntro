@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const catalogPath = path.join(__dirname, "..", "src", "data", "pireon_buildings_catalog.json");
+const catalogPath = path.join(__dirname, "..", "src", "data", "syntro_buildings_catalog.json");
 const interiorsBasePath = path.join(__dirname, "..", "src", "data", "interiors");
 
 function ensureDir(dirPath) {

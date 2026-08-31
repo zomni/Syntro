@@ -1,13 +1,11 @@
 // Apply instance theme before any UI renders (SPEC 01/02).
 import { applyBrandingTheme } from "./config/appConfig.js";
 
-// Load site configuration from the backend session (multi-tenant), with
+// Load site configuration from the backend session, with
 // fallback to the static campuses.js template.
-import { loadSites } from "./config/siteConfig.js";
+import { loadSites, isAuthenticated, getPrimaryCampusKey } from "./config/siteConfig.js";
 import { identifiers } from "./utils/identifiers.js";
-
-// Add the campus selector component
-import "@app/campusSelector";
+import { goTo, goToFreeMap, setDefaultFloor } from "@app/goToCampus";
 
 // Search for the feature by id/alias in URL
 import "@app/findByUrl";
@@ -55,6 +53,25 @@ window.addEventListener(
 );
 
 loadSites();
+
+let appliedInitialCampus = false;
+
+const applyInitialCampus = () => {
+  if (appliedInitialCampus) {
+    return;
+  }
+  appliedInitialCampus = true;
+
+  const primary = getPrimaryCampusKey();
+  if (primary) {
+    goTo(primary);
+    setDefaultFloor(primary);
+  } else {
+    goToFreeMap();
+  }
+};
+
+window.addEventListener(identifiers.events.sitesLoaded, applyInitialCampus);
 
 initSessionModeBadge();
 initWalkingRouteLayer();

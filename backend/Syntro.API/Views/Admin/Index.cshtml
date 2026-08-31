@@ -1,0 +1,1145 @@
+@model Syntro.API.ViewModels.AdminDashboardViewModel
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+@{
+    ViewData["Title"] = "Dashboard";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var isAdmin = User.IsInRole(Syntro.API.Models.AppRoles.Admin);
+    var totalItems = Math.Max(Model.TotalImportedItems, 1);
+    var assignedPercent = Math.Round(Model.AssignedItems * 100.0 / totalItems, 1);
+    var pendingPercent = Math.Round(Model.PendingAssignmentItems * 100.0 / totalItems, 1);
+    var suggestedPercent = Math.Round(Model.SuggestedItems * 100.0 / totalItems, 1);
+    var assignedAngle = Math.Clamp(Model.AssignedItems * 360.0 / totalItems, 0, 360);
+    var suggestedAngle = Math.Clamp((Model.AssignedItems + Model.SuggestedItems) * 360.0 / totalItems, 0, 360);
+    var maxCategoryCount = Math.Max(Model.CategoryBreakdown.Any() ? Model.CategoryBreakdown.Max(category => category.Count) : 0, 1);
+    var displayTimeZone = Syntro.API.Services.TelemetryTimeSettings.ResolveTimeZone(Config);
+
+    string FormatChileDateTime(DateTime? value, string format = "dd/MM/yyyy HH:mm")
+    {
+        if (!value.HasValue)
+        {
+            return "Sin datos";
+        }
+
+        var utcValue = value.Value.Kind == DateTimeKind.Utc
+            ? value.Value
+            : DateTime.SpecifyKind(value.Value, DateTimeKind.Utc);
+
+        return TimeZoneInfo.ConvertTimeFromUtc(utcValue, displayTimeZone).ToString(format);
+    }
+}
+
+<style>
+    .dashboard-hero {
+        border: 0;
+        border-radius: 22px;
+        background:
+            radial-gradient(circle at top right, rgba(56, 189, 248, 0.22), transparent 34%),
+            linear-gradient(135deg, #0f172a 0%, #1e3a5f 48%, #2d79a0 100%);
+        color: #fff;
+        overflow: hidden;
+    }
+
+    .dashboard-hero .text-muted { color: rgba(255, 255, 255, 0.72) !important; }
+    .transition-hover {
+        transition: transform .28s ease, box-shadow .28s ease;
+    }
+    .transition-hover:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.2);
+    }
+    .dashboard-card {
+        border: 0;
+        border-radius: 18px;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+        transition: transform .28s ease, box-shadow .28s ease;
+    }
+    .dashboard-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+    }
+    .dashboard-card .card-header {
+        border-bottom: 1px solid rgba(226, 232, 240, 0.7);
+        padding: 1rem 1.25rem;
+        position: relative;
+    }
+    .dashboard-card .card-header::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        border-radius: 0 4px 4px 0;
+        background: linear-gradient(180deg, #2d79a0, #38bdf8);
+    }
+    .dashboard-kpi-icon {
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        border-radius: 16px;
+        transition: transform .3s ease, box-shadow .3s ease;
+    }
+    .dashboard-card:hover .dashboard-kpi-icon {
+        transform: scale(1.08);
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    }
+    .assignment-donut {
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: conic-gradient(#0ea5e9 0deg @(assignedAngle.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))deg, #f59e0b @(assignedAngle.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))deg @(suggestedAngle.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))deg, #e2e8f0 @(suggestedAngle.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))deg 360deg);
+        display: grid;
+        place-items: center;
+        margin: 0 auto;
+        box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+        transition: transform .4s ease;
+    }
+    .dashboard-card:hover .assignment-donut {
+        transform: scale(1.03);
+    }
+    .assignment-donut::after {
+        content: "@assignedPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%";
+        width: 118px;
+        height: 118px;
+        border-radius: 50%;
+        background: #fff;
+        display: grid;
+        place-items: center;
+        color: #0f172a;
+        font-size: 1.65rem;
+        font-weight: 800;
+    }
+    .chart-legend-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+    .category-bar-track { height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .category-bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2d79a0, #38bdf8); }
+    .activity-dot { width: 11px; height: 11px; border-radius: 999px; background: #2d79a0; box-shadow: 0 0 0 4px rgba(45, 121, 160, 0.12); }
+
+    .risk-gauge {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
+        overflow: hidden;
+        position: relative;
+    }
+    .risk-gauge-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: #e2e8f0;
+        transition: width .6s ease;
+    }
+    .risk-pulse {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse-dot 2s ease infinite;
+    }
+    @@keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .5; transform: scale(1.4); }
+    }
+
+    .fade-in-up {
+        animation: fadeUp .5s ease both;
+    }
+    .fade-in-up-d1 { animation-delay: .05s; }
+    .fade-in-up-d2 { animation-delay: .1s; }
+    .fade-in-up-d3 { animation-delay: .15s; }
+    .fade-in-up-d4 { animation-delay: .2s; }
+
+    @@keyframes fadeUp {
+        from { opacity: 0; transform: translateY(18px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div class="page-header px-4 py-3 rounded-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
+        <h2 class="fw-bold mb-0 fs-4" style="color: var(--pi-deep);">Dashboard</h2>
+    </div>
+
+</div>
+
+@if (TempData["SuccessMessage"] is string successMessage)
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @successMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] is string errorMessage)
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @errorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+    </div>
+}
+
+<div class="card dashboard-hero shadow-sm mb-4">
+    <div class="card-body p-4 p-lg-5">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-7">
+                <div class="text-uppercase small fw-semibold text-muted mb-2">Vista general</div>
+                <h1 class="fw-bold mb-3">Estado del inventario y mapa</h1>
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="/dashboard/inventory" class="btn btn-light fw-semibold">
+                        <i class="bi bi-list-ul me-1"></i> Revisar inventario
+                    </a>
+                    <a href="/dashboard/locations" class="btn btn-outline-light fw-semibold">
+                        <i class="bi bi-buildings me-1"></i> Ver edificios
+                    </a>
+                    <a href="@Model.FrontendMapUrl" class="btn btn-outline-light fw-semibold js-map-link" target="syntro-map">
+                        <i class="bi bi-map me-1"></i> Abrir mapa
+                    </a>
+                </div>
+            </div>
+            <div class="col-lg-5 fade-in-up fade-in-up-d1">
+                <div class="bg-white bg-opacity-10 rounded-4 p-4 transition-hover">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <span class="text-white-50 small fw-semibold">Progreso de asignacion</span>
+                        <span class="badge bg-info bg-opacity-75 fs-6 fw-bold px-3 py-1">@assignedPercent.ToString("F1")%</span>
+                    </div>
+                    <div class="progress bg-white bg-opacity-25" style="height: 14px;">
+                        <div class="progress-bar bg-info" style="width: @assignedPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                    </div>
+                    <div class="row g-3 mt-3">
+                        <div class="col-4">
+                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
+                                <div class="fs-4 fw-bold text-white">@Model.TotalImportedItems</div>
+                                <div class="small text-white-50">Total</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
+                                <div class="fs-4 fw-bold text-white">@Model.AssignedItems</div>
+                                <div class="small text-white-50">Asignados</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
+                                <div class="fs-4 fw-bold text-warning">@Model.PendingAssignmentItems</div>
+                                <div class="small text-white-50">Pendientes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-3 fade-in-up fade-in-up-d1">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dashboard-kpi-icon bg-primary bg-opacity-10">
+                        <i class="bi bi-buildings text-primary fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Edificios sincronizados</div>
+                        <div class="fs-3 fw-bold">@Model.SyncedBuildings</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 fade-in-up fade-in-up-d2">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dashboard-kpi-icon bg-success bg-opacity-10">
+                        <i class="bi bi-pc-display text-success fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Equipos importados</div>
+                        <div class="fs-3 fw-bold">@Model.TotalImportedItems</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 fade-in-up fade-in-up-d3">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dashboard-kpi-icon bg-info bg-opacity-10">
+                        <i class="bi bi-check2-circle text-info fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Asignados manualmente</div>
+                        <div class="fs-3 fw-bold">@Model.AssignedItems</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 fade-in-up fade-in-up-d4">
+        <div class="card dashboard-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="dashboard-kpi-icon bg-warning bg-opacity-10">
+                        <i class="bi bi-hourglass-split text-warning fs-4"></i>
+                    </div>
+                    <div>
+                        <div class="text-muted small">Pendientes</div>
+                        <div class="fs-3 fw-bold">@Model.PendingAssignmentItems</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-4 fade-in-up fade-in-up-d1">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Asignacion de equipos</div>
+            <div class="card-body">
+                <div class="assignment-donut mb-3"></div>
+                <div class="d-grid gap-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><span class="chart-legend-dot bg-info me-2"></span>Asignados</span>
+                        <strong>@Model.AssignedItems (@assignedPercent.ToString("F1")%)</strong>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><span class="chart-legend-dot bg-warning me-2"></span>Con sugerencia</span>
+                        <strong>@Model.SuggestedItems (@suggestedPercent.ToString("F1")%)</strong>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><span class="chart-legend-dot bg-secondary me-2"></span>Pendientes</span>
+                        <strong>@Model.PendingAssignmentItems (@pendingPercent.ToString("F1")%)</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5 fade-in-up fade-in-up-d2">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Categorias principales</div>
+            <div class="card-body">
+                @if (Model.CategoryBreakdown.Count == 0)
+                {
+                    <div class="text-muted">Todavia no hay equipos importados.</div>
+                }
+                else
+                {
+                    @foreach (var category in Model.CategoryBreakdown)
+                    {
+                        var width = Math.Round(category.Count * 100.0 / maxCategoryCount, 1);
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span class="fw-semibold">@category.Category</span>
+                                <span class="text-muted">@category.Count</span>
+                            </div>
+                            <div class="category-bar-track">
+                                <div class="category-bar-fill" style="width: @width.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 fade-in-up fade-in-up-d3">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Pulso operativo</div>
+            <div class="card-body d-grid gap-3">
+                <div class="d-flex justify-content-between border-bottom pb-2">
+                    <span class="text-muted">Salas</span>
+                    <strong>@Model.SyncedRooms</strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2">
+                    <span class="text-muted">Categorias</span>
+                    <strong>@Model.DistinctImportedCategories</strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2">
+                    <span class="text-muted">Robados</span>
+                    <strong>@Model.StolenItems</strong>
+                </div>
+                <div>
+                    <div class="small text-muted mb-1">BDD actualizada</div>
+                    <div class="fw-semibold">@FormatChileDateTime(Model.DatabaseLastWriteUtc)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-12">
+        <div class="card dashboard-card">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-diagram-3 me-2"></i>Red y riesgo</span>
+                <a href="/dashboard/network-telemetry" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-right me-1"></i> Ver detalle
+                </a>
+            </div>
+            <div class="card-body">
+                @if (Model.HasNetworkTelemetryData)
+                {
+                    var riskTone = Model.LatestNetworkRiskLevel switch
+                    {
+                        "critical" => "danger",
+                        "high" => "danger",
+                        "medium" => "warning",
+                        "low" => "success",
+                        _ => "secondary"
+                    };
+                    var riskLabel = Model.LatestNetworkRiskLevel switch
+                    {
+                        "critical" => "Critico",
+                        "high" => "Alto",
+                        "medium" => "Medio",
+                        "low" => "Bajo",
+                        _ => "Sin datos"
+                    };
+                    var gaugeInvert = Math.Clamp(100 - Model.LatestNetworkRiskScore, 0, 100);
+                    <div class="row g-4 align-items-center">
+                        <div class="col-lg-3 col-md-6">
+                            <div class="d-flex align-items-center gap-3 mb-2">
+                                <div class="risk-pulse bg-@riskTone"></div>
+                                <div>
+                                    <div class="text-muted small">Nivel de riesgo</div>
+                                    <div class="fs-4 fw-bold text-@riskTone">@riskLabel</div>
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted">Puntaje de riesgo</span>
+                                    <span class="fw-semibold">@Model.LatestNetworkRiskScore/100</span>
+                                </div>
+                                <div class="risk-gauge">
+                                    <div class="risk-gauge-fill" style="width: @gaugeInvert%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="dashboard-kpi-icon bg-danger bg-opacity-10">
+                                    <i class="bi bi-shield-exclamation text-danger fs-4"></i>
+                                </div>
+                                <div>
+                                    <div class="text-muted small">Dispositivos de alto riesgo</div>
+                                    <div class="fs-4 fw-bold">@Model.LatestNetworkHighRiskCount</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="dashboard-kpi-icon bg-info bg-opacity-10">
+                                    <i class="bi bi-laptop text-info fs-4"></i>
+                                </div>
+                                <div>
+                                    <div class="text-muted small">Dispositivos detectados</div>
+                                    <div class="fs-4 fw-bold">@Model.LatestNetworkDeviceCount</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="dashboard-kpi-icon bg-secondary bg-opacity-10">
+                                    <i class="bi bi-clock text-secondary fs-4"></i>
+                                </div>
+                                <div>
+                                    <div class="text-muted small">Ultimo escaneo</div>
+                                    <div class="fw-semibold small">@FormatChileDateTime(Model.LatestNetworkScanUtc, "dd/MM/yyyy HH:mm")</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="row g-4 align-items-center">
+                        <div class="col-lg-8">
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="dashboard-kpi-icon bg-secondary bg-opacity-10">
+                                    <i class="bi bi-diagram-3 text-secondary fs-4"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-semibold">Monitoreo de red y riesgo</div>
+                                    <div class="text-muted small mt-1">Escanea tu red para detectar dispositivos conectados, evaluar su nivel de riesgo y mantener un historial de telemetria. Programa escaneos periodicos para mantenerte al dia.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-4 text-lg-end">
+                            <a href="/dashboard/network-telemetry" class="btn btn-primary">
+                                <i class="bi bi-arrow-right me-1"></i> Ir a Red y riesgo
+                            </a>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-6 fade-in-up fade-in-up-d1">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Accesos rapidos</div>
+            <div class="card-body d-flex gap-3 flex-wrap">
+                <a href="/dashboard/inventory" class="btn btn-primary">
+                    <i class="bi bi-list-ul me-1"></i> Revisar inventario
+                </a>
+                <a href="/api/inventory-import/status" class="btn btn-outline-success" target="_blank">
+                    <i class="bi bi-file-earmark-arrow-down me-1"></i> Estado importacion
+                </a>
+                <a href="/api/inventory-import/items" class="btn btn-outline-secondary" target="_blank">
+                    <i class="bi bi-braces me-1"></i> Ver JSON
+                </a>
+                <a href="/swagger" class="btn btn-outline-dark" target="_blank">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Swagger
+                </a>
+                <a href="/dashboard/activity" class="btn btn-outline-primary">
+                    <i class="bi bi-clock-history me-1"></i> Ver actividad
+                </a>
+                <a href="@Model.FrontendMapUrl" class="btn btn-outline-info js-map-link" target="syntro-map">
+                    <i class="bi bi-map me-1"></i> Ir al mapa
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 fade-in-up fade-in-up-d2">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Resumen operativo</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span class="text-muted">Salas sincronizadas</span>
+                    <strong>@Model.SyncedRooms</strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span class="text-muted">Con sugerencia automatica</span>
+                    <strong>@Model.SuggestedItems</strong>
+                </div>
+                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
+                    <span class="text-muted">Marcados como robados</span>
+                    <strong>@Model.StolenItems</strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Categorias detectadas</span>
+                    <strong>@Model.DistinctImportedCategories</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isAdmin)
+{
+    <div class="row g-4 mt-1">
+        <div class="col-12">
+            <div class="card dashboard-card">
+                <div class="card-header bg-white fw-semibold">Base de datos</div>
+                <div class="card-body">
+                    <div class="row g-4 align-items-start">
+                        <div class="col-lg-5">
+                            <div class="small text-muted mb-2">Archivo actual</div>
+                            <div class="fw-semibold">@Model.DatabaseFileName</div>
+                            <div class="text-muted small">Tamano: @(Model.DatabaseFileSizeBytes > 0 ? $"{Model.DatabaseFileSizeBytes / 1024.0 / 1024.0:F2} MB" : "Sin datos")</div>
+                            <div class="text-muted small">Ultima modificacion: @FormatChileDateTime(Model.DatabaseLastWriteUtc, "dd/MM/yyyy HH:mm:ss")</div>
+                            <div class="d-grid gap-2 mt-3">
+                                <a href="/dashboard/database/download" class="btn btn-outline-primary">
+                                    <i class="bi bi-download me-1"></i> Descargar DB
+                                </a>
+                                <a href="/dashboard/project-package/download" class="btn btn-outline-dark">
+                                    <i class="bi bi-box-seam me-1"></i> Descargar paquete completo
+                                </a>
+                            </div>
+                            <div class="form-text mt-2">El paquete completo incluye DB, formularios PDF, claves locales de sesion/MFA y respaldos offline del frontend.</div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="small text-muted mb-2">Restaurar base de datos</div>
+                            <form id="databaseUploadForm" method="post" action="/admin/database/upload" enctype="multipart/form-data" class="row g-3">
+                                @Html.AntiForgeryToken()
+                                <div class="col-md-8">
+                                    <input id="databaseFileInput" type="file" name="databaseFile" class="form-control" accept=".db,.sqlite,.sqlite3" required />
+                                    <div class="form-text">Se crea un respaldo automatico antes de reemplazar la base actual.</div>
+                                </div>
+                                <div class="col-md-4 d-grid">
+                                    <button id="databaseUploadButton" type="submit" class="btn btn-secondary" disabled>
+                                        <i class="bi bi-upload me-1"></i> Subir DB
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div class="small text-muted mt-4 mb-2">Restaurar paquete completo</div>
+                            <form id="projectPackageUploadForm" method="post" action="/dashboard/project-package/upload" enctype="multipart/form-data" class="row g-3">
+                                @Html.AntiForgeryToken()
+                                <div class="col-md-8">
+                                    <input id="projectPackageFileInput" type="file" name="packageFile" class="form-control" accept=".zip" required />
+                                    <div class="form-text">Restaura DB, formularios PDF, claves locales y los respaldos offline del frontend.</div>
+                                </div>
+                                <div class="col-md-4 d-grid">
+                                    <button id="projectPackageUploadButton" type="submit" class="btn btn-secondary" disabled>
+                                        <i class="bi bi-box-arrow-in-up me-1"></i> Subir paquete
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div class="mt-4">
+                                <div class="small text-muted mb-2">Respaldos disponibles</div>
+                                @if (Model.DatabaseBackups.Count == 0)
+                                {
+                                    <div class="text-muted small">Todavia no hay respaldos guardados.</div>
+                                }
+                                else
+                                {
+                                    <div class="table-responsive">
+                                        <table class="table table-sm align-middle mb-0">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Archivo</th>
+                                                    <th>Fecha</th>
+                                                    <th>Tamano</th>
+                                                    <th></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var backup in Model.DatabaseBackups)
+                                                {
+                                                    <tr>
+                                                        <td class="small fw-semibold">@backup.FileName</td>
+                                                        <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                                        <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
+                                                        <td class="text-end">
+                                                            <div class="d-flex gap-2 justify-content-end">
+                                                                <a href="/dashboard/database/backups/@backup.FileName" class="btn btn-sm btn-outline-secondary">
+                                                                    Descargar
+                                                                </a>
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. ¿Continuar?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                                        Restaurar
+                                                                    </button>
+                                                                </form>
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. ¿Continuar?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                        Eliminar
+                                                                    </button>
+                                                                </form>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (isAdmin)
+{
+    <div class="row g-4 mt-1">
+        <div class="col-12">
+            <div class="card dashboard-card">
+                <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-cpu me-2"></i>Machine Learning</span>
+                    <div class="d-flex align-items-center gap-3">
+                        <span id="ml-status-badge" class="badge bg-secondary">Cargando...</span>
+                        <button id="ml-toggle-btn" class="btn btn-sm btn-outline-secondary" onclick="mlToggle()" disabled>
+                            <i class="bi bi-power me-1"></i>Toggle
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <div class="fw-semibold">Clasificacion de inventario</div>
+                                    <div class="text-muted small">SdcaMaximumEntropy con TF-IDF</div>
+                                </div>
+                                <span id="ml-class-status" class="badge bg-secondary">--</span>
+                            </div>
+                            <div class="text-muted small mb-2">
+                                Archivo: <span id="ml-class-file">--</span> |
+                                Tamano: <span id="ml-class-size">--</span> |
+                                Actualizado: <span id="ml-class-date">--</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button id="ml-class-train-btn" class="btn btn-sm btn-primary" onclick="mlTrain('item-classification')" disabled>
+                                    <i class="bi bi-play-circle me-1"></i>Entrenar
+                                </button>
+                                <button id="ml-class-delete-btn" class="btn btn-sm btn-outline-danger" onclick="mlDelete('item-classification')" disabled>
+                                    <i class="bi bi-trash me-1"></i>Eliminar
+                                </button>
+                            </div>
+                            <div class="text-muted small mt-2" id="ml-class-metrics" style="display:none">
+                                Accuracy: <span id="ml-class-accuracy">--</span> |
+                                F1: <span id="ml-class-f1">--</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <div class="fw-semibold">Prediccion de riesgo</div>
+                                    <div class="text-muted small">SdcaLogisticRegression + reglas hibridas</div>
+                                </div>
+                                <span id="ml-risk-status" class="badge bg-secondary">--</span>
+                            </div>
+                            <div class="text-muted small mb-2">
+                                Archivo: <span id="ml-risk-file">--</span> |
+                                Tamano: <span id="ml-risk-size">--</span> |
+                                Actualizado: <span id="ml-risk-date">--</span>
+                            </div>
+                            <div class="text-muted small mb-2" id="ml-weights-row" style="display:none">
+                                Peso ML: <span id="ml-ml-weight">--</span> |
+                                Peso reglas: <span id="ml-rule-weight">--</span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button id="ml-risk-train-btn" class="btn btn-sm btn-primary" onclick="mlTrain('risk-prediction')" disabled>
+                                    <i class="bi bi-play-circle me-1"></i>Entrenar
+                                </button>
+                                <button id="ml-risk-delete-btn" class="btn btn-sm btn-outline-danger" onclick="mlDelete('risk-prediction')" disabled>
+                                    <i class="bi bi-trash me-1"></i>Eliminar
+                                </button>
+                            </div>
+                            <div class="text-muted small mt-2" id="ml-risk-metrics" style="display:none">
+                                Accuracy: <span id="ml-risk-accuracy">--</span> |
+                                F1: <span id="ml-risk-f1">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-muted small mt-3" id="ml-training-data">
+                        Datos de entrenamiento: <span id="ml-items-count">--</span> items importados, <span id="ml-obs-count">--</span> observaciones de red
+                    </div>
+                    <div class="text-muted small mt-1" id="ml-usage-stats" style="display:none">
+                        Uso ML: <span id="ml-classified-items">--</span> items clasificados por ML, <span id="ml-scored-devices">--</span> dispositivos scored por ML
+                    </div>
+                    <div class="text-muted small mt-1" id="ml-last-training" style="display:none">
+                        Ultimo entrenamiento: <span id="ml-last-train-date">--</span> |
+                        Accuracy: <span id="ml-last-train-accuracy">--</span><span id="ml-last-train-acc-std"></span> |
+                        F1: <span id="ml-last-train-f1">--</span><span id="ml-last-train-f1-std"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="card dashboard-card">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span>Ultimos cambios registrados</span>
+                <a href="/dashboard/activity" class="btn btn-sm btn-outline-secondary">Ver completo</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Usuario</th>
+                                <th>Edificio</th>
+                                <th>Resumen</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.RecentActivity.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">Todavia no hay cambios auditados.</td>
+                                </tr>
+                            }
+                            else
+                            {
+                                @foreach (var entry in Model.RecentActivity)
+                                {
+                                    <tr>
+                                        <td class="small text-nowrap">@entry.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                                        <td class="small">@entry.ChangedByUsername</td>
+                                        <td class="small">@entry.BuildingExternalId</td>
+                                        <td>@entry.Summary</td>
+                                        <td class="small text-muted">@entry.Details</td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const fileInput = document.getElementById("databaseFileInput");
+            const uploadButton = document.getElementById("databaseUploadButton");
+            const uploadForm = document.getElementById("databaseUploadForm");
+            const packageFileInput = document.getElementById("projectPackageFileInput");
+            const packageUploadButton = document.getElementById("projectPackageUploadButton");
+            const packageUploadForm = document.getElementById("projectPackageUploadForm");
+
+            if (!fileInput || !uploadButton || !uploadForm) {
+                return;
+            }
+
+            let hasPendingDatabaseFile = false;
+            let hasPendingProjectPackageFile = false;
+
+            const updateUploadState = () => {
+                hasPendingDatabaseFile = Boolean(fileInput.files && fileInput.files.length > 0);
+                uploadButton.disabled = !hasPendingDatabaseFile;
+                uploadButton.classList.toggle("btn-secondary", !hasPendingDatabaseFile);
+                uploadButton.classList.toggle("btn-warning", hasPendingDatabaseFile);
+
+                hasPendingProjectPackageFile = Boolean(packageFileInput?.files && packageFileInput.files.length > 0);
+                if (packageUploadButton) {
+                    packageUploadButton.disabled = !hasPendingProjectPackageFile;
+                    packageUploadButton.classList.toggle("btn-secondary", !hasPendingProjectPackageFile);
+                    packageUploadButton.classList.toggle("btn-dark", hasPendingProjectPackageFile);
+                }
+            };
+
+            const confirmPendingDatabaseNavigation = () => {
+                if (!hasPendingDatabaseFile && !hasPendingProjectPackageFile) {
+                    return true;
+                }
+
+                if (hasPendingDatabaseFile && hasPendingProjectPackageFile) {
+                    return window.confirm("Tienes una base de datos y un paquete completo pendientes por subir. ¿Deseas continuar sin subirlos?");
+                }
+
+                if (hasPendingProjectPackageFile) {
+                    return window.confirm("Tienes un paquete completo pendiente por subir. ¿Deseas continuar sin subirlo?");
+                }
+
+                return window.confirm("Tienes un archivo DB pendiente por subir. ¿Deseas continuar sin subirlo?");
+            };
+
+            fileInput.addEventListener("change", updateUploadState);
+            uploadForm.addEventListener("submit", () => {
+                hasPendingDatabaseFile = false;
+            });
+            packageFileInput?.addEventListener("change", updateUploadState);
+            packageUploadForm?.addEventListener("submit", () => {
+                hasPendingProjectPackageFile = false;
+            });
+
+            document.addEventListener("click", (event) => {
+                const anchor = event.target.closest("a[href]");
+                if (!anchor) {
+                    return;
+                }
+
+                const href = anchor.getAttribute("href");
+                if (!href || href.startsWith("#") || href.startsWith("javascript:")) {
+                    return;
+                }
+
+                const destination = new URL(anchor.href, window.location.href);
+                const current = new URL(window.location.href);
+
+                if (destination.href === current.href) {
+                    return;
+                }
+
+                if (!confirmPendingDatabaseNavigation()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+
+                hasPendingDatabaseFile = false;
+                hasPendingProjectPackageFile = false;
+            }, true);
+
+            document.addEventListener("submit", (event) => {
+                const form = event.target;
+                if (!(form instanceof HTMLFormElement) || form === uploadForm || form === packageUploadForm) {
+                    return;
+                }
+
+                if (!confirmPendingDatabaseNavigation()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+
+                hasPendingDatabaseFile = false;
+                hasPendingProjectPackageFile = false;
+            }, true);
+
+            window.addEventListener("beforeunload", (event) => {
+                if (!hasPendingDatabaseFile && !hasPendingProjectPackageFile) {
+                    return;
+                }
+
+                event.preventDefault();
+                event.returnValue = "";
+            });
+
+            document.querySelectorAll(".js-map-link").forEach((link) => {
+                link.addEventListener("click", (event) => {
+                    event.preventDefault();
+
+                    if (!confirmPendingDatabaseNavigation()) {
+                        return;
+                    }
+
+                    hasPendingDatabaseFile = false;
+                    hasPendingProjectPackageFile = false;
+                    window.open(link.href, "syntro-map");
+                });
+            });
+
+            updateUploadState();
+        })();
+    </script>
+    @if (isAdmin)
+    {
+    <script>
+        const mlStatusBadge = document.getElementById("ml-status-badge");
+        const mlToggleBtn = document.getElementById("ml-toggle-btn");
+        const mlClassStatus = document.getElementById("ml-class-status");
+        const mlClassFile = document.getElementById("ml-class-file");
+        const mlClassSize = document.getElementById("ml-class-size");
+        const mlClassDate = document.getElementById("ml-class-date");
+        const mlClassTrainBtn = document.getElementById("ml-class-train-btn");
+        const mlClassDeleteBtn = document.getElementById("ml-class-delete-btn");
+        const mlRiskStatus = document.getElementById("ml-risk-status");
+        const mlRiskFile = document.getElementById("ml-risk-file");
+        const mlRiskSize = document.getElementById("ml-risk-size");
+        const mlRiskDate = document.getElementById("ml-risk-date");
+        const mlRiskTrainBtn = document.getElementById("ml-risk-train-btn");
+        const mlRiskDeleteBtn = document.getElementById("ml-risk-delete-btn");
+        const mlWeightsRow = document.getElementById("ml-weights-row");
+        const mlMlWeight = document.getElementById("ml-ml-weight");
+        const mlRuleWeight = document.getElementById("ml-rule-weight");
+        const mlItemsCount = document.getElementById("ml-items-count");
+        const mlObsCount = document.getElementById("ml-obs-count");
+        const mlClassMetrics = document.getElementById("ml-class-metrics");
+        const mlClassAccuracy = document.getElementById("ml-class-accuracy");
+        const mlClassF1 = document.getElementById("ml-class-f1");
+        const mlRiskMetrics = document.getElementById("ml-risk-metrics");
+        const mlRiskAccuracy = document.getElementById("ml-risk-accuracy");
+        const mlRiskF1 = document.getElementById("ml-risk-f1");
+        const mlUsageStats = document.getElementById("ml-usage-stats");
+        const mlClassifiedItems = document.getElementById("ml-classified-items");
+        const mlScoredDevices = document.getElementById("ml-scored-devices");
+        const mlLastTraining = document.getElementById("ml-last-training");
+        const mlLastTrainDate = document.getElementById("ml-last-train-date");
+        const mlLastTrainAccuracy = document.getElementById("ml-last-train-accuracy");
+        const mlLastTrainF1 = document.getElementById("ml-last-train-f1");
+        const mlLastTrainAccStd = document.getElementById("ml-last-train-acc-std");
+        const mlLastTrainF1Std = document.getElementById("ml-last-train-f1-std");
+
+        function mlFormatBytes(b) {
+            if (!b) return "--";
+            if (b < 1024) return b + " B";
+            if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+            return (b / 1048576).toFixed(2) + " MB";
+        }
+
+        function mlFormatDate(utc) {
+            if (!utc) return "--";
+            var d = new Date(utc);
+            return d.toLocaleDateString("es-CL") + " " + d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
+        }
+
+        function mlRenderStatus(s) {
+            mlStatusBadge.textContent = s.enabled ? "Activo" : "Inactivo";
+            mlStatusBadge.className = "badge " + (s.enabled ? "bg-success" : "bg-secondary");
+            mlToggleBtn.disabled = false;
+            mlToggleBtn.innerHTML = s.enabled
+                ? '<i class="bi bi-power me-1"></i>Desactivar'
+                : '<i class="bi bi-power me-1"></i>Activar';
+
+            var ic = s.itemClassification;
+            mlClassStatus.textContent = ic.loaded ? "Cargado" : ic.fileExists ? "Disponible" : "Sin modelo";
+            mlClassStatus.className = "badge " + (ic.loaded ? "bg-success" : ic.fileExists ? "bg-info" : "bg-secondary");
+            mlClassFile.textContent = ic.fileExists ? "item-classification.zip" : "--";
+            mlClassSize.textContent = mlFormatBytes(ic.fileSizeBytes);
+            mlClassDate.textContent = mlFormatDate(ic.lastModifiedUtc);
+            mlClassTrainBtn.disabled = false;
+            mlClassDeleteBtn.disabled = !ic.fileExists;
+
+            var rp = s.riskPrediction;
+            mlRiskStatus.textContent = rp.loaded ? "Cargado" : rp.fileExists ? "Disponible" : "Sin modelo";
+            mlRiskStatus.className = "badge " + (rp.loaded ? "bg-success" : rp.fileExists ? "bg-info" : "bg-secondary");
+            mlRiskFile.textContent = rp.fileExists ? "risk-prediction.zip" : "--";
+            mlRiskSize.textContent = mlFormatBytes(rp.fileSizeBytes);
+            mlRiskDate.textContent = mlFormatDate(rp.lastModifiedUtc);
+            mlRiskTrainBtn.disabled = false;
+            mlRiskDeleteBtn.disabled = !rp.fileExists;
+
+            if (rp.mlWeight !== undefined && rp.ruleWeight !== undefined) {
+                mlWeightsRow.style.display = "";
+                mlMlWeight.textContent = (rp.mlWeight * 100).toFixed(0) + "%";
+                mlRuleWeight.textContent = (rp.ruleWeight * 100).toFixed(0) + "%";
+            }
+
+            var td = s.trainingData;
+            mlItemsCount.textContent = td.importedItemsCount;
+            mlObsCount.textContent = td.telemetryObservationsCount;
+
+            if (td.mlClassifiedItems !== undefined) {
+                mlUsageStats.style.display = "";
+                mlClassifiedItems.textContent = td.mlClassifiedItems;
+                mlScoredDevices.textContent = td.mlScoredDevices;
+            }
+
+            var lastClass = ic.lastTraining;
+            var lastRisk = rp.lastTraining;
+            var lastTrain = lastClass || lastRisk;
+            if (lastTrain && lastTrain.createdAtUtc) {
+                mlLastTraining.style.display = "";
+                mlLastTrainDate.textContent = mlFormatDate(lastTrain.createdAtUtc);
+                mlLastTrainAccuracy.textContent = (lastTrain.accuracy * 100).toFixed(1) + "%";
+                mlLastTrainF1.textContent = (lastTrain.f1Score * 100).toFixed(1) + "%";
+                var accStd = lastTrain.accuracyStdDev || lastTrain.accuracyStd || 0;
+                var f1Std = lastTrain.f1ScoreStdDev || lastTrain.f1ScoreStd || 0;
+                mlLastTrainAccStd.textContent = accStd > 0 ? " \u00B1 " + (accStd * 100).toFixed(1) + "%" : "";
+                mlLastTrainF1Std.textContent = f1Std > 0 ? " \u00B1 " + (f1Std * 100).toFixed(1) + "%" : "";
+            }
+        }
+
+        async function mlFetchStatus() {
+            try {
+                var r = await fetch("/api/ml/status");
+                if (!r.ok) return;
+                mlRenderStatus(await r.json());
+            } catch (e) { console.error("ML status error:", e); }
+        }
+
+        async function mlToggle() {
+            mlToggleBtn.disabled = true;
+            try {
+                var badgeText = mlStatusBadge.textContent;
+                var currentlyEnabled = badgeText === "Activo";
+                var r = await fetch("/api/ml/toggle", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ enabled: !currentlyEnabled })
+                });
+                if (r.ok) await mlFetchStatus();
+            } catch (e) { console.error("ML toggle error:", e); }
+            mlToggleBtn.disabled = false;
+        }
+
+        async function mlTrain(modelType) {
+            var btn = modelType === "item-classification" ? mlClassTrainBtn : mlRiskTrainBtn;
+            var orig = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Entrenando...';
+            try {
+                var r = await fetch("/api/ml/train-" + modelType, { method: "POST" });
+                var data = await r.json();
+                if (r.ok) {
+                    var metricsDiv = modelType === "item-classification" ? mlClassMetrics : mlRiskMetrics;
+                    var accSpan = modelType === "item-classification" ? mlClassAccuracy : mlRiskAccuracy;
+                    var f1Span = modelType === "item-classification" ? mlClassF1 : mlRiskF1;
+                    var accText = (data.accuracy * 100).toFixed(1) + "%";
+                    var f1Text = (data.f1Score * 100).toFixed(1) + "%";
+                    if (data.accuracyStdDev > 0) accText += " \u00B1 " + (data.accuracyStdDev * 100).toFixed(1) + "%";
+                    if (data.f1ScoreStdDev > 0) f1Text += " \u00B1 " + (data.f1ScoreStdDev * 100).toFixed(1) + "%";
+                    accSpan.textContent = accText;
+                    f1Span.textContent = f1Text;
+                    metricsDiv.style.display = "";
+                    var rescoredInfo = data.mlRescoredCount !== undefined ? "\nRe-clasificados por ML: " + data.mlRescoredCount + " de " + (data.totalItems || data.totalObservations) : "";
+                    alert("Modelo entrenado con " + data.samples + " muestras.\nAccuracy: " + accText + "\nF1: " + f1Text + rescoredInfo);
+                } else {
+                    alert("Error: " + (data.error || "No se pudo entrenar."));
+                }
+                await mlFetchStatus();
+            } catch (e) { console.error("ML train error:", e); alert("Error de red."); }
+            btn.innerHTML = orig;
+            btn.disabled = false;
+        }
+
+        async function mlDelete(modelType) {
+            if (!confirm("Eliminar el modelo " + modelType + "?")) return;
+            var btn = modelType === "item-classification" ? mlClassDeleteBtn : mlRiskDeleteBtn;
+            btn.disabled = true;
+            try {
+                var r = await fetch("/api/ml/delete-model/" + modelType, { method: "POST" });
+                if (r.ok) await mlFetchStatus();
+                else alert("No se pudo eliminar.");
+            } catch (e) { console.error("ML delete error:", e); }
+            btn.disabled = false;
+        }
+
+        mlFetchStatus();
+    </script>
+    }
+}
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-5 fade-in-up fade-in-up-d1">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Categorias importadas</div>
+            <div class="card-body">
+                @if (Model.CategoryBreakdown.Count == 0)
+                {
+                    <div class="text-muted">Todavia no hay equipos importados.</div>
+                }
+                else
+                {
+                    @foreach (var category in Model.CategoryBreakdown)
+                    {
+                        <div class="d-flex justify-content-between border-bottom py-2">
+                            <span>@category.Category</span>
+                            <span class="fw-semibold">@category.Count</span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7 fade-in-up fade-in-up-d2">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Ultimos registros importados</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipo</th>
+                            <th>Responsable</th>
+                            <th>Unidad</th>
+                            <th>Asignacion</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.RecentItems)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@item.Description</div>
+                                    <div class="small text-muted">@item.InferredStatus</div>
+                                </td>
+                                <td class="small">@item.ResponsibleUser</td>
+                                <td class="small">@item.UnitOrDepartment</td>
+                                <td class="small">
+                                    @(string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId) ? "Pendiente" : item.AssignedBuildingExternalId)
+                                </td>
+                                <td class="text-end">
+                                    <a href="/dashboard/editinventoryitem/@item.Id" class="btn btn-sm btn-outline-primary">
+                                        @(isAdmin ? "Editar" : "Ver")
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

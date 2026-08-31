@@ -1,5 +1,5 @@
 param(
-    [string]$TaskName = "Pireon Network Collector Agent",
+    [string]$TaskName = "Syntro Network Collector Agent",
     [string]$ConfigPath = "",
     [string]$CampusKey = ""
 )
@@ -20,7 +20,7 @@ if ([string]::IsNullOrWhiteSpace($sanitizedCampusKey)) {
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runnerPath = Join-Path $repoRoot "tools\run-network-collector.ps1"
-$collectorDir = Join-Path $repoRoot "tools\Pireon.NetworkCollector"
+$collectorDir = Join-Path $repoRoot "tools\Syntro.NetworkCollector"
 $exampleConfigPath = Join-Path $collectorDir "appsettings.example.json"
 
 if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
@@ -43,7 +43,7 @@ $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
 $isElevated = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $runRegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
-$runRegistryName = "PireonNetworkCollectorAgent"
+$runRegistryName = "SyntroNetworkCollectorAgent"
 
 $escapedRunner = $runnerPath.Replace("'", "''")
 $escapedConfig = $ConfigPath.Replace("'", "''")

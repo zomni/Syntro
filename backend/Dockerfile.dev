@@ -5,7 +5,7 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && apt-get install -y --no-install-recommends libreoffice-writer fonts-dejavu-core fonts-liberation2 fonts-crosextra-carlito fonts-crosextra-caladea \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app/Pireon.API
+WORKDIR /app/Syntro.API
 
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 ENV DOTNET_USE_POLLING_FILE_WATCHER=1
@@ -15,4 +15,4 @@ ENV DOTNET_WATCH_HOT_RELOAD=0
 
 EXPOSE 8080
 
-ENTRYPOINT ["dotnet", "watch", "--project", "/app/Pireon.API/Pireon.API.csproj", "run", "--", "--urls", "http://0.0.0.0:8080", "--contentRoot", "/app/Pireon.API"]
+ENTRYPOINT ["dotnet", "watch", "--project", "/app/Syntro.API/Syntro.API.csproj", "run", "--", "--urls", "http://0.0.0.0:8080", "--contentRoot", "/app/Syntro.API"]

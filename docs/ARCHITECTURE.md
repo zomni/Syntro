@@ -1,16 +1,16 @@
-# Arquitectura de Pireon
+# Arquitectura de Syntro
 
-Pireon es una plantilla white-label de dos aplicaciones que se ejecutan como un solo stack:
+Syntro es una plantilla white-label de dos aplicaciones que se ejecutan como un solo stack:
 
 - **Frontend** (`frontend/`): aplicación de mapa de una página (vanilla JavaScript + Leaflet),
   empaquetada con Webpack y servida como bundle estático (Nginx).
-- **Backend** (`backend/Pireon.API`): API REST ASP.NET Core 8 con panel de administración
+- **Backend** (`backend/Syntro.API`): API REST ASP.NET Core 8 con panel de administración
   Razor, base SQLite (EF Core) y servicios de fondo.
 
 ## Flujo general
 
 ```
-[Mapa web]  --HTTP-->  API REST  --EF Core-->  SQLite (pireon.db)
+[Mapa web]  --HTTP-->  API REST  --EF Core-->  SQLite (syntro.db)
    |                       |
    |  static: data/        +-- panel /dashboard (Razor)
    +-----> index.html      +-- telemetría (ingesta + scanner)
@@ -28,7 +28,7 @@ Pireon es una plantilla white-label de dos aplicaciones que se ejecutan como un 
   - `utils/campusConfig.js` — campus canónico (`data/campuses.js`); deriva nombres de
     archivos de datos, índice de búsqueda y catálogo de edificios.
   - `utils/identifiers.js` — prefijos centralizados de `localStorage`, eventos `CustomEvent`,
-    globals y nombre de ventana (prefijo `pireon-*`).
+    globals y nombre de ventana (prefijo `syntro-*`).
   - `utils/addData.js`, `utils/searchMetadata.js` — carga de GeoJSON por piso, catálogo y
     fusión con metadatos/overrides del backend.
   - `components/routePlanner.js`, `utils/walkingRouteStorage.js` — rutas entre edificios.
@@ -41,16 +41,16 @@ Pireon es una plantilla white-label de dos aplicaciones que se ejecutan como un 
 - **Tolerancia a instalación vacía**: las cargas de datos son *best-effort*: ante un archivo
   ausente o error de red, el mapa se inicializa igualmente.
 
-## Backend (`backend/Pireon.API`)
+## Backend (`backend/Syntro.API`)
 
 - **Hosting**: ASP.NET Core 8; `Program.cs` configura autenticación por cookies, autorización
   por roles, CORS (`FrontendPolicy`), headers de seguridad, Swagger y servicios de fondo.
 - **Base de datos**: SQLite con EF Core. `AppDbContext` con migraciones EF (`InitialCreate`),
-  normalizaciones posteriores en `ExtendedSchemaInitializer`. Archivo `pireon.db` (ruta vía
+  normalizaciones posteriores en `ExtendedSchemaInitializer`. Archivo `syntro.db` (ruta vía
   `SQLITE_DATA_ROOT`). Las bases creadas antes de GUID PK no son migrables automáticamente;
   una instalación nueva crea el esquema desde cero.
 - **Identidad**: autenticación local o LDAP (`AuthSettings`), MFA (Otp.NET), break-glass
-  local, cookies `Pireon.Auth`/`Pireon.MfaPending`, claims `pireon:*`.
+  local, cookies `Syntro.Auth`/`Syntro.MfaPending`, claims `syntro:*`.
 - **Dominio**:
   - Ubicaciones + inventario de equipos (`LocationsController`, `EquipmentsController`).
   - Edificios manuales y sincronizados (`ManualBuildingsController`, sync desde el catálogo
@@ -78,11 +78,11 @@ El campus es **configuración, no código**:
 
 Prefijos de artefactos en `frontend/src/utils/identifiers.js`:
 
-- `localStorage`: `pireon_map_*`, `pireon_network_*`, etc.
-- Eventos: `pireon-map-data-refreshed`, `pireon-session-changed`, `pireon-admin-map-tool-mode`.
-- Ventana/globals: `pireon-dashboard`, `window.pireonAdminMapToolMode`.
-- Cookies/claims: `Pireon.Auth`, `Pireon.MfaPending`, `pireon:*`.
-- Archivos de respaldo: `pireon_buildings_backend_backup.json`, `walking_routes_backup.json`.
+- `localStorage`: `syntro_map_*`, `syntro_network_*`, etc.
+- Eventos: `syntro-map-data-refreshed`, `syntro-session-changed`, `syntro-admin-map-tool-mode`.
+- Ventana/globals: `syntro-dashboard`, `window.syntroAdminMapToolMode`.
+- Cookies/claims: `Syntro.Auth`, `Syntro.MfaPending`, `syntro:*`.
+- Archivos de respaldo: `syntro_buildings_backend_backup.json`, `walking_routes_backup.json`.
 
 ## Despliegue
 
@@ -97,7 +97,7 @@ Variables de entorno y puertos: ver `backend/.env.example` y `docker-compose.yml
 
 - **Backend**: un único `dotnet publish -c Release` produce el deployable
   (`backend/Dockerfile` lo hace dentro del build). El runtime solo necesita el contenido
-  publicado, LibreOffice y una carpeta persistente para `pireon.db` y las claves de
+  publicado, LibreOffice y una carpeta persistente para `syntro.db` y las claves de
   Data Protection (`SQLITE_DATA_ROOT`).
 - **Frontend**: build estático de Webpack servido por Nginx (o copiable a cualquier host
   estático). No requiere Node en el runtime.

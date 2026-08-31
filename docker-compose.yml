@@ -23,7 +23,7 @@ services:
       - AuthSettings__BreakGlassUsernames=${BREAK_GLASS_USERNAMES:-ADMIN}
       - AuthSettings__AutoProvisionLdapUsers=${AUTO_PROVISION_LDAP_USERS:-false}
       - AuthSettings__DefaultLdapRole=${DEFAULT_LDAP_ROLE:-viewer}
-      - MfaSettings__Issuer=${MFA_ISSUER:-Pireon}
+      - MfaSettings__Issuer=${MFA_ISSUER:-Syntro}
       - MfaSettings__RequireForAdmins=${MFA_REQUIRE_FOR_ADMINS:-true}
       - MfaSettings__RequireForNonAdmins=${MFA_REQUIRE_FOR_NON_ADMINS:-false}
       - MfaSettings__PendingMinutes=${MFA_PENDING_MINUTES:-10}
@@ -57,8 +57,8 @@ services:
       - LDAPTLS_REQCERT=${LDAPTLS_REQCERT:-never}
     volumes:
       - ./backend:/app
-      - api_bin:/app/Pireon.API/bin
-      - api_obj:/app/Pireon.API/obj
+      - api_bin:/app/Syntro.API/bin
+      - api_obj:/app/Syntro.API/obj
       - ./backend/data:/app/data
       - ./runtime/network-telemetry-agent:/runtime/network-telemetry-agent
       - ./runtime/network-telemetry-agent:/app/runtime/network-telemetry-agent

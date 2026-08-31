@@ -10,40 +10,37 @@
 /* Import search box style */
 @import url("styles/searchBox.css");
 
-/* Import campus selection style */
-@import url("styles/campusSelection.css?v=20260811d");
-
 /* Import floor buttons style */
 @import url("styles/floorButtons.css");
 
 /* Import footer style */
 @import url("styles/footer.css");
 /* ==========================================================================
-   Pireon design tokens (SPEC 01/02). Single source of truth for theming.
-   Instance override at runtime: window.PIREON_CONFIG.themePrimary /
+   Syntro design tokens (SPEC 01/02). Single source of truth for theming.
+   Instance override at runtime: window.SYNTRO_CONFIG.themePrimary /
    themeSecondary (see src/config/appConfig.js).
    ========================================================================== */
 :root {
     /* Brand */
-    --pi-primary: #0f766e;            /* teal-700 */
-    --pi-primary-rgb: 15, 118, 110;
-    --pi-primary-hover: #115e59;      /* teal-800 */
-    --pi-primary-bright: #14b8a6;     /* teal-500 */
-    --pi-primary-bright-rgb: 20, 184, 166;
-    --pi-primary-deep: #134e4a;       /* teal-900 */
-    --pi-primary-deep-rgb: 19, 78, 74;
-    --pi-primary-deep-hover: #0e5f58;
-    --pi-primary-deepest: #0b4a44;
-    --pi-primary-deepest-rgb: 11, 74, 68;
-    --pi-primary-deepest-hover: #0a3a35;
-    --pi-accent: #1d9e75;             /* secondary brand accent */
+    --pi-primary: #003366;            /* navy-800 */
+    --pi-primary-rgb: 0, 51, 102;
+    --pi-primary-hover: #002855;      /* navy-900 */
+    --pi-primary-bright: #1a56a8;     /* blue-600 */
+    --pi-primary-bright-rgb: 26, 86, 168;
+    --pi-primary-deep: #00254d;       /* navy-950 */
+    --pi-primary-deep-rgb: 0, 37, 77;
+    --pi-primary-deep-hover: #001f40;
+    --pi-primary-deepest: #001b38;
+    --pi-primary-deepest-rgb: 0, 27, 56;
+    --pi-primary-deepest-hover: #00152b;
+    --pi-accent: #1d4e89;             /* secondary brand accent */
 
     /* Brand soft surfaces */
-    --pi-primary-soft: #f0f9f7;
-    --pi-primary-soft-tint: #edfaf7;
-    --pi-primary-soft-active: #e6f5f1;
-    --pi-primary-soft-strong: #d1efe9;
-    --pi-primary-soft-strong2: #e9f7f3;
+    --pi-primary-soft: #eef4fb;
+    --pi-primary-soft-tint: #e8f0f9;
+    --pi-primary-soft-active: #dde9f6;
+    --pi-primary-soft-strong: #c9dcf0;
+    --pi-primary-soft-strong2: #dde9f6;
 
     /* Neutrals (slate) */
     --pi-ink: #0f172a;
@@ -87,10 +84,10 @@
     --pi-orange-soft-2: #ffedd5;
 
     /* Teal accents (routes, walking, selection) */
-    --pi-teal: #0f766e;
-    --pi-teal-rgb: 15, 118, 110;
-    --pi-teal-soft: #ccfbf1;
-    --pi-teal-soft-2: #99f6e4;
+    --pi-teal: #1a56a8;
+    --pi-teal-rgb: 26, 86, 168;
+    --pi-teal-soft: #dbeafe;
+    --pi-teal-soft-2: #bfdbfe;
 }
 
 #top-container {
@@ -117,7 +114,6 @@
     gap: 8px;
 }
 
-#custom-select,
 .dashboard-link,
 .route-planner-toggle,
 .map-equipment-type-filter {
@@ -802,7 +798,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
         gap: 6px;
     }
 
-    #custom-select,
 .dashboard-link,
 .route-planner-toggle,
 .map-equipment-type-filter {

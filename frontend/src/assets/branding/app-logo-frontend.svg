@@ -1,6 +1,6 @@
 <svg id="svg-map" xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">
       <!-- fondo redondeado -->
-      <rect width="160" height="160" rx="36" fill="#0f766e"/>
+      <rect width="160" height="160" rx="36" fill="#003366"/>
       <!-- cuadrícula sutil del mapa -->
       <line x1="0" y1="53" x2="160" y2="53" stroke="white" stroke-width="0.6" opacity="0.12"/>
       <line x1="0" y1="106" x2="160" y2="106" stroke="white" stroke-width="0.6" opacity="0.12"/>

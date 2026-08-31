@@ -90,9 +90,9 @@ const redrawPreview = (latlngs) => {
   }
 
   previewLayer = L.polygon(latlngs, {
-    color: "#0f766e",
+    color: "#003366",
     weight: 3,
-    fillColor: "#0f766e",
+    fillColor: "#003366",
     fillOpacity: 0.22,
     dashArray: "6 6",
   }).addTo(map);
@@ -412,24 +412,24 @@ export const initBuildingGeometryEditor = async () => {
   }
 };
 
-window.addEventListener("pireon-session-changed", (event) => {
+window.addEventListener("syntro-session-changed", (event) => {
   syncBuildingGeometryEditorForSession(event.detail || {});
 });
 
-window.addEventListener("pireon-map-data-refreshed", () => {
+window.addEventListener("syntro-map-data-refreshed", () => {
   window.setTimeout(() => {
     if (document.getElementById(controlsId)) return;
     void initBuildingGeometryEditor();
   }, 80);
 });
 
-window.addEventListener("pireon-admin-map-tool-mode", (event) => {
+window.addEventListener("syntro-admin-map-tool-mode", (event) => {
   if (!["geometry-shape", "geometry-move"].includes(event.detail?.mode) && activeMode) {
     stopGeometryEditor({ clearActiveTool: false });
   }
 });
 
-window.addEventListener("pireon-building-layer-click", (event) => {
+window.addEventListener("syntro-building-layer-click", (event) => {
   if (activeMode === "shape-pending") {
     event.preventDefault();
     event.stopPropagation();

@@ -1,0 +1,524 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
+@{
+    var requestScheme = string.IsNullOrWhiteSpace(Context?.Request?.Scheme) ? "http" : Context.Request.Scheme;
+    var requestHost = Context?.Request?.Host.Host;
+    var configuredFrontendUrl = Configuration["FrontendAppUrl"];
+    var frontendMapUrl = !string.IsNullOrWhiteSpace(configuredFrontendUrl)
+        ? configuredFrontendUrl
+        : (!string.IsNullOrWhiteSpace(requestHost)
+            ? $"{requestScheme}://{requestHost}:8080"
+            : "http://localhost:8080");
+    var sessionMinutesRaw = Configuration["SessionSettings:IdleMinutes"];
+    var warningMinutesRaw = Configuration["SessionSettings:WarningMinutes"];
+    var sessionMinutes = double.TryParse(sessionMinutesRaw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedSessionMinutes)
+        ? parsedSessionMinutes
+        : 15d;
+    var warningMinutes = double.TryParse(warningMinutesRaw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsedWarningMinutes)
+        ? parsedWarningMinutes
+        : 14d;
+}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Syntro Admin</title>
+<link rel="icon" type="image/svg+xml" href="/assets/branding/app-logo-backend.svg?v=20260831" />
+<link rel="apple-touch-icon" href="/assets/branding/app-logo-backend.svg" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        :root {
+            --pi-primary: #003366;
+            --pi-primary-hover: #002855;
+            --pi-primary-soft: #f0f9f7;
+            --pi-deep: #00254d;
+            --pi-sidebar: #0f172a;
+            --pi-surface: #ffffff;
+            --pi-ink: #0f172a;
+            --pi-muted: #64748b;
+        }
+        body { background: #f8fafc; }
+        .app-brand-logo {
+            width: 34px;
+            height: 34px;
+            border-radius: 10px;
+            object-fit: cover;
+            box-shadow: 0 8px 18px rgba(15, 118, 110, 0.22);
+        }
+        .sidebar { min-height: 100vh; background: var(--pi-sidebar); }
+        .admin-shell { display: flex; flex-wrap: nowrap; }
+        .admin-sidebar { width: 220px; flex: 0 0 220px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+        .admin-main { flex: 1 1 auto; min-width: 0; }
+        .admin-container { padding-left: 0; padding-right: 0; }
+        .sidebar .nav-link { color: #94a3b8; padding: 0.6rem 0.75rem; font-size: 0.95rem; border-radius: 8px; }
+        .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #fff; background: #1e293b; }
+        .sidebar .nav-link.active { box-shadow: inset 3px 0 0 var(--pi-primary); background: #1e293b; }
+        .sidebar-brand { color: #2dd4bf !important; font-weight: 700; }
+        .session-card { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .session-card .text-info { color: #2dd4bf !important; }
+        .badge-active { background: #16a34a; }
+        .badge-maintenance { background: #f59e0b; }
+        .badge-inactive { background: #ef4444; }
+        body.session-warning-open { overflow: hidden; }
+        body.session-warning-open .container-fluid { filter: blur(6px); pointer-events: none; user-select: none; }
+        .session-warning-overlay,
+        .session-expired-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.48);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .session-warning-overlay { z-index: 2150; }
+        .session-expired-overlay { z-index: 2200; }
+        .session-warning-card,
+        .session-expired-card {
+            background: #fff;
+            border-radius: 14px;
+            padding: 24px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+            text-align: center;
+        }
+        .session-warning-card { border: 1px solid rgba(245, 158, 11, 0.25); }
+        .btn-primary { background-color: var(--pi-primary); border-color: var(--pi-primary); }
+        .btn-primary:hover, .btn-primary:focus { background-color: var(--pi-primary-hover); border-color: var(--pi-primary-hover); }
+        @@media (max-width: 767.98px) {
+            .admin-shell { flex-wrap: wrap; }
+            .admin-sidebar, .admin-main { width: 100%; flex-basis: 100%; }
+            .admin-sidebar { min-height: auto; position: static; height: auto; overflow-y: visible; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid admin-container">
+        <div class="row g-0 admin-shell">
+            <nav class="sidebar admin-sidebar py-3 px-3">
+                <a class="navbar-brand sidebar-brand d-block mb-4 fs-5" href="/dashboard">
+                    <span class="d-inline-flex align-items-center gap-2">
+                        <img src="/assets/branding/app-logo-backend.svg" alt="Syntro" class="app-brand-logo" />
+                        <span>Syntro</span>
+                    </span>
+                </a>
+                <div class="session-card rounded-3 p-3 mb-4 text-white">
+                    <div class="small text-uppercase text-secondary mb-1">Sesion</div>
+                    <div class="fw-semibold">@(User.Identity?.Name ?? "Sin sesion")</div>
+                    <div class="small text-info">
+                        @{
+                            var roleLabel = User.IsInRole(Syntro.API.Models.AppRoles.Admin)
+                                ? "admin"
+                                : User.IsInRole("editor")
+                                    ? "editor"
+                                    : User.IsInRole("auditor")
+                                        ? "auditor"
+                                        : "viewer";
+                        }
+                        Rol: @roleLabel
+                    </div>
+                </div>
+                <ul class="nav flex-column gap-1">
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")" href="/dashboard">
+                            <i class="bi bi-speedometer2 me-2"></i>Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Location") == true ? "active" : "")" href="/dashboard/locations">
+                            <i class="bi bi-geo-alt me-2"></i>Ubicaciones
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @((ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Inventory") == true || ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Equipment") == true) ? "active" : "")" href="/dashboard/inventory">
+                            <i class="bi bi-pc-display me-2"></i>Inventario
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Activity" ? "active" : "")" href="/dashboard/activity">
+                            <i class="bi bi-clock-history me-2"></i>Actividad
+                        </a>
+                    </li>
+                    @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin) || User.IsInRole(Syntro.API.Models.AppRoles.Auditor))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Compliance" ? "active" : "")" href="/admin/compliance">
+                                <i class="bi bi-shield-check me-2"></i>Cumplimiento
+                            </a>
+                        </li>
+                    }
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "NetworkTelemetry" ? "active" : "")" href="/dashboard/network-telemetry">
+                            <i class="bi bi-diagram-3 me-2"></i>Red y riesgo
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "InventoryMatching" ? "active" : "")" href="/dashboard/network-telemetry/matching">
+                            <i class="bi bi-crosshair me-2"></i>Coincidencias inventario
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString()?.Contains("DeliveryForm") == true ? "active" : "")" href="/dashboard/delivery-form">
+                            <i class="bi bi-file-earmark-text me-2"></i>Formulario
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-info" href="@frontendMapUrl" target="syntro-map" onclick="window.open(this.href, 'syntro-map'); return false;">
+                            <i class="bi bi-map me-2"></i>Mapa
+                        </a>
+                    </li>
+                    <li class="nav-item mt-3">
+                        <a class="nav-link text-info" href="/swagger" target="_blank">
+                            <i class="bi bi-code-slash me-2"></i>API Docs
+                        </a>
+                    </li>
+                </ul>
+                <form method="post" action="/Auth/Logout" class="mt-4">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-outline-light w-100">
+                        <i class="bi bi-box-arrow-left me-2"></i>Cerrar sesion
+                    </button>
+                </form>
+            </nav>
+
+            <main class="admin-main px-4 py-3">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <div id="session-warning-overlay" class="session-warning-overlay" aria-hidden="true">
+        <div id="session-warning" class="session-warning-card" role="dialog" aria-modal="true" aria-labelledby="session-warning-title">
+            <h5 id="session-warning-title" class="fw-bold mb-2">Sesion por caducar</h5>
+            <p class="text-muted mb-3">Tu sesion esta a punto de expirar por inactividad.</p>
+            <div class="small mb-3">Quedan <span id="session-warning-countdown">00:00</span> min.</div>
+            <button type="button" id="session-keep-alive" class="btn btn-warning px-4">Seguir conectado</button>
+        </div>
+    </div>
+
+    <div id="session-expired-overlay" class="session-expired-overlay">
+        <div class="session-expired-card">
+            <h5 class="fw-bold mb-2">Sesion caducada</h5>
+            <p class="text-muted mb-3">Tu sesion expiro por inactividad.</p>
+            <button type="button" id="session-reconnect" class="btn btn-primary">Volver a conectarse</button>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+    window.addEventListener("DOMContentLoaded", () => {
+        if (window.location.pathname.startsWith("/Auth")) {
+            return;
+        }
+
+        const SESSION_MINUTES = @(sessionMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        const WARNING_MINUTES = @(warningMinutes.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        const storageKey = "syntro-admin-last-activity";
+        const warningOverlay = document.getElementById("session-warning-overlay");
+        const warningEl = document.getElementById("session-warning");
+        const countdownEl = document.getElementById("session-warning-countdown");
+        const expiredOverlay = document.getElementById("session-expired-overlay");
+        const reconnectBtn = document.getElementById("session-reconnect");
+        const keepAliveBtn = document.getElementById("session-keep-alive");
+
+        const sessionMs = SESSION_MINUTES * 60 * 1000;
+        const warningAtMs = Math.min(sessionMs, Math.max(0, WARNING_MINUTES * 60 * 1000));
+        let lastActivityUpdate = 0;
+        let warningActive = false;
+        let sessionExpired = false;
+        let keepAliveInFlight = false;
+        let sessionCheckInFlight = false;
+        let lastSessionCheckAt = 0;
+
+        const setLastActivity = (timestamp) => {
+            localStorage.setItem(storageKey, String(timestamp));
+        };
+
+        const getLastActivity = () => {
+            const raw = localStorage.getItem(storageKey);
+            const parsed = Number(raw);
+            return Number.isFinite(parsed) ? parsed : Date.now();
+        };
+
+        const formatRemaining = (remainingMs) => {
+            const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        };
+
+        const registerActivity = (timestamp = Date.now()) => {
+            lastActivityUpdate = timestamp;
+            setLastActivity(timestamp);
+        };
+
+        const isLocallyExpired = () => {
+            const lastActivity = getLastActivity();
+            return Date.now() - lastActivity >= sessionMs;
+        };
+
+        const hideWarning = () => {
+            if (warningOverlay) {
+                warningOverlay.style.display = "none";
+                warningOverlay.setAttribute("aria-hidden", "true");
+            }
+            document.body.classList.remove("session-warning-open");
+            warningActive = false;
+        };
+
+        const showWarning = (remainingMs) => {
+            if (!warningEl || !warningOverlay || sessionExpired) {
+                return;
+            }
+
+            if (countdownEl) {
+                countdownEl.textContent = formatRemaining(remainingMs);
+            }
+
+            warningOverlay.style.display = "flex";
+            warningOverlay.setAttribute("aria-hidden", "false");
+            document.body.classList.add("session-warning-open");
+            warningActive = true;
+            window.setTimeout(() => keepAliveBtn?.focus(), 0);
+        };
+
+        const showExpired = () => {
+            sessionExpired = true;
+            hideWarning();
+            if (expiredOverlay) {
+                expiredOverlay.style.display = "flex";
+            }
+        };
+
+        const hideExpired = () => {
+            sessionExpired = false;
+            if (expiredOverlay) {
+                expiredOverlay.style.display = "none";
+            }
+        };
+
+        const validateSession = async ({ force = false, showWarningWhenNearExpiry = true } = {}) => {
+            if (sessionExpired) {
+                return false;
+            }
+
+            const now = Date.now();
+            if (!force && sessionCheckInFlight) {
+                return !isLocallyExpired();
+            }
+
+            if (!force && now - lastSessionCheckAt < 5000) {
+                const lastActivity = getLastActivity();
+                const idleMs = now - lastActivity;
+                const remainingMs = sessionMs - idleMs;
+
+                if (remainingMs <= 0) {
+                    window.setTimeout(() => validateSession({ force: true }), 0);
+                    return false;
+                }
+
+                if (showWarningWhenNearExpiry && idleMs >= warningAtMs) {
+                    showWarning(remainingMs);
+                }
+
+                return true;
+            }
+
+            sessionCheckInFlight = true;
+
+            try {
+                const response = await fetch("/api/auth/session", {
+                    method: "GET",
+                    headers: { "Accept": "application/json" },
+                    credentials: "same-origin",
+                    cache: "no-store"
+                });
+
+                if (!response.ok) {
+                    showExpired();
+                    return false;
+                }
+
+                const data = await response.json();
+                lastSessionCheckAt = now;
+
+                if (!data?.isAuthenticated) {
+                    showExpired();
+                    return false;
+                }
+
+                // El servidor es la autoridad: con cookie deslizante, una respuesta
+                // positiva renueva la actividad local y descarta timestamps viejos
+                // de localStorage (evita falsos "Sesion caducada" tras ausencias).
+                registerActivity(now);
+                hideWarning();
+                hideExpired();
+                return true;
+            } catch (_) {
+                showExpired();
+                return false;
+            } finally {
+                sessionCheckInFlight = false;
+            }
+        };
+
+        const handlePassiveActivity = () => {
+            if (warningActive || sessionExpired || sessionCheckInFlight || keepAliveInFlight) {
+                return;
+            }
+
+            const now = Date.now();
+            if (now - getLastActivity() >= sessionMs) {
+                validateSession({ force: true });
+                return;
+            }
+
+            if (now - lastActivityUpdate < 4000) {
+                return;
+            }
+
+            registerActivity(now);
+        };
+
+        ["click", "keydown", "scroll", "touchstart"].forEach((evt) => {
+            document.addEventListener(evt, handlePassiveActivity, { passive: true });
+        });
+
+        window.addEventListener("storage", (event) => {
+            if (event.key !== storageKey) {
+                return;
+            }
+
+            const parsed = Number(event.newValue);
+            if (Number.isFinite(parsed)) {
+                lastActivityUpdate = parsed;
+            }
+
+            if (!sessionExpired) {
+                hideWarning();
+            }
+        });
+
+        const guardExpiredInteraction = (event) => {
+            if (sessionExpired || sessionCheckInFlight) {
+                if (expiredOverlay && expiredOverlay.contains(event.target)) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation?.();
+                return;
+            }
+
+            if (isLocallyExpired()) {
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation?.();
+                validateSession({ force: true });
+            }
+        };
+
+        document.addEventListener("click", guardExpiredInteraction, true);
+        document.addEventListener("submit", guardExpiredInteraction, true);
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                return;
+            }
+
+            validateSession({ force: true });
+        });
+        window.addEventListener("focus", () => {
+            validateSession({ force: true });
+        });
+
+        if (keepAliveBtn) {
+            keepAliveBtn.addEventListener("click", async () => {
+                if (keepAliveInFlight || sessionExpired) {
+                    return;
+                }
+
+                keepAliveInFlight = true;
+                keepAliveBtn.disabled = true;
+                keepAliveBtn.textContent = "Confirmando...";
+
+                try {
+                    const response = await fetch("/Auth/KeepAlive", {
+                        method: "GET",
+                        headers: { "Accept": "application/json" },
+                        credentials: "same-origin",
+                        cache: "no-store"
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`KeepAlive fallo con estado ${response.status}`);
+                    }
+
+                    registerActivity(Date.now());
+                    lastSessionCheckAt = Date.now();
+                    hideWarning();
+                    hideExpired();
+                } catch (_) {
+                    showExpired();
+                } finally {
+                    keepAliveInFlight = false;
+                    keepAliveBtn.disabled = false;
+                    keepAliveBtn.textContent = "Seguir conectado";
+                }
+            });
+        }
+
+        if (reconnectBtn) {
+            reconnectBtn.addEventListener("click", () => {
+                const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
+                window.location.href = `/Auth/Login?returnUrl=${returnUrl}`;
+            });
+        }
+
+        const tick = () => {
+            if (sessionExpired) {
+                return;
+            }
+
+            if (keepAliveInFlight) {
+                return;
+            }
+
+            const now = Date.now();
+            const lastActivity = getLastActivity();
+            lastActivityUpdate = Math.max(lastActivityUpdate, lastActivity);
+            const idleMs = now - lastActivity;
+            const remainingMs = sessionMs - idleMs;
+
+            if (remainingMs <= 0) {
+                validateSession({ force: true });
+                return;
+            }
+
+            if (idleMs >= warningAtMs) {
+                showWarning(remainingMs);
+            } else {
+                hideWarning();
+            }
+        };
+
+        if (!localStorage.getItem(storageKey)) {
+            registerActivity(Date.now());
+        } else {
+            lastActivityUpdate = getLastActivity();
+            if (isLocallyExpired()) {
+                validateSession({ force: true });
+            }
+        }
+        tick();
+        window.setInterval(tick, 1000);
+    });
+    </script>
+    @RenderSection("Scripts", required: false)
+</body>
+</html>
+
+

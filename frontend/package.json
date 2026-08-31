@@ -1,5 +1,5 @@
 {
-  "name": "pireon",
+  "name": "syntro",
   "version": "1.0.0",
   "description": "White-label template for indoor mapping, asset inventory and network telemetry",
   "private": true,
@@ -9,7 +9,7 @@
     "dev": "docker compose -f ../docker-compose.yml up -d --build && echo \"\n************************************************\n* Started development stack on localhost:8080 *\n************************************************\n\"",
     "stop-dev": "docker compose -f ../docker-compose.yml down && echo \"\n****************************\n* Ended development stack  *\n****************************\n\""
   },
-  "author": "Pireon contributors",
+  "author": "Syntro contributors",
   "license": "MIT",
   "devDependencies": {
     "webpack": "^5.73.0",

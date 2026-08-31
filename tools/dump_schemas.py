@@ -11,4 +11,4 @@ def dump(path, label):
             print(f"   {col[1]} ({col[2]})" + (" PK" if col[5] else "") + ("" if col[4] == 0 else " NOT NULL"))
 
 dump(r"C:\Users\paolo.vilches\AppData\Local\Temp\opencode\sotero_live.db", "SOTERO SOURCE")
-dump(r"C:\Users\paolo.vilches\Documents\repos\Pireon\backend\data\pireon.db", "PIREON TARGET")
+dump(r"C:\Users\paolo.vilches\Documents\repos\Syntro\backend\data\syntro.db", "SYNTRO TARGET")
