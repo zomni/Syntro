@@ -58,7 +58,6 @@ builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        var sessionMinutes = builder.Configuration.GetValue<double?>("SessionSettings:IdleMinutes") ?? 15;
         options.LoginPath = "/Auth/Login";
         options.AccessDeniedPath = "/Auth/AccessDenied";
         options.Cookie.Name = "Syntro.Auth";
@@ -67,8 +66,8 @@ builder.Services
         options.Cookie.SecurePolicy = ParseCookieSecurePolicy(
             cookieSecurePolicyValue,
             builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always);
-        options.SlidingExpiration = true;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = false;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(30);
         options.Events = new CookieAuthenticationEvents
         {
             OnRedirectToLogin = context =>

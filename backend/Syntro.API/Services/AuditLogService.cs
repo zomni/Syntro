@@ -25,9 +25,12 @@ public class AuditLogService
         var pageSize = NormalizePageSize(request.PageSize);
         var page = Math.Max(1, request.Page);
         var totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy) ? "createdAt" : request.SortBy.Trim().ToLowerInvariant();
+        var sortDirection = string.Equals(request.SortDirection, "asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
+
+        query = ApplySort(query, sortBy, sortDirection);
 
         var items = await query
-            .OrderByDescending(x => x.CreatedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(x => MapItem(x))
@@ -40,11 +43,54 @@ public class AuditLogService
             Page = page,
             PageSize = pageSize,
             TotalPages = totalPages,
+            SortBy = sortBy,
+            SortDirection = sortDirection,
             SuccessCount = await query.CountAsync(x => x.Result == "success", cancellationToken),
             FailureCount = await query.CountAsync(x => x.Result == "failure", cancellationToken),
             CriticalCount = await query.CountAsync(x => x.Severity == "critical", cancellationToken),
             WarningCount = await query.CountAsync(x => x.Severity == "warning", cancellationToken)
         };
+    }
+
+    private static IQueryable<AuditLogEntry> ApplySort(
+        IQueryable<AuditLogEntry> query,
+        string sortBy,
+        string sortDirection)
+    {
+        var ascending = sortDirection == "asc";
+
+        query = sortBy switch
+        {
+            "createdat" => ascending
+                ? query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
+                : query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id),
+            "username" => ascending
+                ? query.OrderBy(x => x.ChangedByUsername).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.ChangedByUsername).ThenByDescending(x => x.CreatedAtUtc),
+            "action" => ascending
+                ? query.OrderBy(x => x.ActionType).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.ActionType).ThenByDescending(x => x.CreatedAtUtc),
+            "resource" => ascending
+                ? query.OrderBy(x => x.Resource).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.Resource).ThenByDescending(x => x.CreatedAtUtc),
+            "result" => ascending
+                ? query.OrderBy(x => x.Result).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.Result).ThenByDescending(x => x.CreatedAtUtc),
+            "severity" => ascending
+                ? query.OrderBy(x => x.Severity).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.Severity).ThenByDescending(x => x.CreatedAtUtc),
+            "building" => ascending
+                ? query.OrderBy(x => x.BuildingExternalId).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.BuildingExternalId).ThenByDescending(x => x.CreatedAtUtc),
+            "summary" => ascending
+                ? query.OrderBy(x => x.Summary).ThenByDescending(x => x.CreatedAtUtc)
+                : query.OrderByDescending(x => x.Summary).ThenByDescending(x => x.CreatedAtUtc),
+            _ => ascending
+                ? query.OrderBy(x => x.CreatedAtUtc).ThenBy(x => x.Id)
+                : query.OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id)
+        };
+
+        return query;
     }
 
     public async Task LogSecurityEventAsync(

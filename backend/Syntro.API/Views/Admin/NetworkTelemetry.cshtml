@@ -488,7 +488,11 @@
         <div class="d-flex align-items-center gap-2 me-3">
             <span class="badge bg-primary bg-opacity-75 rounded-pill fs-6 fw-semibold px-3 py-2">
                 <i class="bi bi-camera-fill me-1"></i>
-                @(Model.IsViewingLatestSnapshot ? "Ultima snapshot" : $"Snapshot #{Model.ActiveSnapshotId}")
+                @(Model.IsViewingLatestSnapshot
+                    ? "Ultima captura"
+                    : Model.ActiveSnapshotRunNumber.HasValue
+                        ? $"Captura #{Model.ActiveSnapshotRunNumber}"
+                        : $"Snapshot {Model.ActiveSnapshotId}")
             </span>
         </div>
         <div class="d-flex flex-wrap align-items-center gap-3 small">
@@ -504,7 +508,7 @@
             <span class="text-secondary fw-lighter">|</span>
             <span class="d-inline-flex align-items-center gap-1 text-secondary">
                 <i class="bi bi-hash text-primary"></i>
-                #@Model.ActiveSnapshotId
+                #@(Model.ActiveSnapshotRunNumber.HasValue ? Model.ActiveSnapshotRunNumber.Value.ToString() : Model.ActiveSnapshotId.ToString())
             </span>
         </div>
         @if (!Model.IsViewingLatestSnapshot && Model.LatestSnapshotId != Guid.Empty)
@@ -617,66 +621,6 @@
     </div>
 </div>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-4 fade-in-up fade-in-up-d1">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="telemetry-kpi bg-primary bg-opacity-10">
-                    <i class="bi bi-broadcast text-primary fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Fuente</div>
-                    <div class="fw-semibold">@((string.IsNullOrWhiteSpace(Model.LatestSourceName) ? "Sin fuente" : Model.LatestSourceName))</div>
-                    <div class="small text-muted">@((string.IsNullOrWhiteSpace(Model.LatestSourceType) ? "Esperando colector" : Model.LatestSourceType))</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4 fade-in-up fade-in-up-d2">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="telemetry-kpi bg-warning bg-opacity-10">
-                    <i class="bi bi-exclamation-triangle text-warning fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Estado</div>
-                    <div class="fw-semibold">@Model.LatestStatus</div>
-                    <div class="small text-muted">Nivel @Model.LatestRiskLevel</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4 fade-in-up fade-in-up-d3">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
-                <div class="telemetry-kpi bg-success bg-opacity-10">
-                    <i class="bi bi-clock-history text-success fs-4"></i>
-                </div>
-                <div>
-                    <div class="text-muted small">Ultima captura</div>
-                    <div class="fw-semibold">@FormatChileTime(Model.LatestObservedAtUtc)</div>
-                    <div class="small @(Model.IsFresh ? "text-success" : "text-warning")">
-                        @if (Model.LatestObservedAtUtc.HasValue)
-                        {
-                            var elapsed = DateTime.UtcNow - Model.LatestObservedAtUtc.Value;
-                            var display = elapsed.TotalSeconds < 0 ? "Ahora"
-                                : elapsed.TotalMinutes < 1 ? "Hace segundos"
-                                : elapsed.TotalMinutes < 120 ? $"Hace {(int)elapsed.TotalMinutes} min"
-                                : elapsed.TotalHours < 48 ? $"Hace {(int)elapsed.TotalHours} h {(int)elapsed.Minutes} min"
-                                : $"Hace {(int)elapsed.TotalDays} d";
-                            <span><i class="bi bi-@(Model.IsFresh ? "check-circle" : "exclamation-circle") me-1"></i>@display</span>
-                        }
-                        else
-                        {
-                            <span>Sin datos</span>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="card telemetry-card mb-4 fade-in-up fade-in-up-d1">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
@@ -695,25 +639,37 @@
             <div class="row g-3">
                 <div class="col-md-3">
                     <div class="p-3 bg-light rounded-3">
-                        <div class="text-muted small">Equipos</div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-pc-display text-primary"></i>
+                            <div class="text-muted small">Equipos</div>
+                        </div>
                         <div class="fs-4 fw-bold">@Model.LatestDeviceCount</div>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 bg-light rounded-3">
-                        <div class="text-muted small">Usuarios</div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-people text-info"></i>
+                            <div class="text-muted small">Usuarios</div>
+                        </div>
                         <div class="fs-4 fw-bold">@Model.LatestConnectedUserCount</div>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 bg-light rounded-3">
-                        <div class="text-muted small">Altos y criticos</div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-shield-exclamation text-danger"></i>
+                            <div class="text-muted small">Altos y criticos</div>
+                        </div>
                         <div class="fs-4 fw-bold">@Model.LatestHighRiskDeviceCount</div>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="p-3 bg-light rounded-3">
-                        <div class="text-muted small">Medios</div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="bi bi-shield-check text-warning"></i>
+                            <div class="text-muted small">Medios</div>
+                        </div>
                         <div class="fs-4 fw-bold">@Model.LatestMediumRiskDeviceCount</div>
                     </div>
                 </div>
@@ -733,8 +689,16 @@
                 <h5 class="mb-1">Equipos observados en red</h5>
                 <div class="text-muted small">Vista principal de recopilacion en vivo.</div>
             </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#telemetry-device-filter-panel" title="Mostrar u ocultar filtros">
+                    <i class="bi bi-funnel me-1"></i>Filtros
+                </button>
+                <button id="telemetry-device-export" type="button" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-filetype-xlsx me-1"></i> Exportar Excel
+                </button>
+            </div>
         </div>
-        <div class="telemetry-filter-panel p-3 mb-3">
+        <div id="telemetry-device-filter-panel" class="telemetry-filter-panel p-3 mb-3 collapse show">
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-xl-4">
                     <label class="form-label small text-muted">Buscar</label>
@@ -814,9 +778,6 @@
                         <button id="telemetry-device-clear" type="button" class="btn btn-outline-secondary">
                             <i class="bi bi-x-circle me-1"></i> Limpiar
                         </button>
-                        <button id="telemetry-device-export" type="button" class="btn btn-outline-success">
-                            <i class="bi bi-filetype-xlsx me-1"></i> Exportar Excel
-                        </button>
                     </div>
                 </div>
             </div>
@@ -828,69 +789,72 @@
     </div>
 </div>
 
-<div class="telemetry-fixed-grid mb-4">
-    <div class="card telemetry-card telemetry-card-static">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">Riesgo por subred</h5>
-                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Resumen compacto de riesgo tecnico por subred en el ultimo snapshot.">
-                    <i class="bi bi-info-lg"></i>
-                </button>
-            </div>
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div id="telemetry-subnet-summary" class="small text-muted"></div>
-                <div class="d-flex align-items-center gap-2">
-                    <label class="form-label small text-muted mb-0" for="telemetry-subnet-page-size">Por pagina</label>
-                    <select id="telemetry-subnet-page-size" class="form-select form-select-sm" style="width:auto;">
-                        <option value="10">10</option>
-                        <option value="20">20</option>
-                        <option value="50">50</option>
-                    </select>
-                </div>
-            </div>
-            @if (Model.SubnetRiskSummaries.Count == 0)
-            {
-                <div class="text-muted">No hay subredes con equipos observados en el ultimo snapshot.</div>
-            }
-            else
-            {
-                <div id="telemetry-subnet-table"></div>
-                <div id="telemetry-subnet-pagination" class="d-flex justify-content-end gap-2 mt-3"></div>
-            }
+<div class="card telemetry-card telemetry-card-static mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Riesgo del ultimo snapshot</h5>
+            <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Resumen de riesgo por subred y de la actividad tecnica en vivo del ultimo snapshot.">
+                <i class="bi bi-info-lg"></i>
+            </button>
         </div>
-    </div>
-
-    <div class="card telemetry-card">
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h5 class="mb-0">Riesgo tecnico en vivo</h5>
-                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Indicadores clave del ultimo snapshot para seguimiento rapido del riesgo tecnico en vivo.">
-                    <i class="bi bi-info-lg"></i>
-                </button>
+        <div class="row g-4">
+            <div class="col-xl-8">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="fw-semibold small mb-0"><i class="bi bi-diagram-3 me-1 text-primary"></i>Riesgo por subred</div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="telemetry-subnet-summary" class="small text-muted"></span>
+                        <label class="form-label small text-muted mb-0" for="telemetry-subnet-page-size">Por pagina</label>
+                        <select id="telemetry-subnet-page-size" class="form-select form-select-sm" style="width:auto;">
+                            <option value="10">10</option>
+                            <option value="20">20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </div>
+                </div>
+                @if (Model.SubnetRiskSummaries.Count == 0)
+                {
+                    <div class="text-muted">No hay subredes con equipos observados en el ultimo snapshot.</div>
+                }
+                else
+                {
+                    <div id="telemetry-subnet-table"></div>
+                    <div id="telemetry-subnet-pagination" class="d-flex justify-content-end gap-2 mt-3"></div>
+                }
             </div>
-            <div class="row g-2 mb-3">
-                <div class="col-6">
-                    <div class="telemetry-mini-stat">
-                        <div class="text-muted small">Conectados</div>
-                        <div class="fs-4 fw-bold">@Model.SessionOverview.ActiveUserCount</div>
+            <div class="col-xl-4">
+                <div class="fw-semibold small mb-3"><i class="bi bi-activity me-1 text-primary"></i>Riesgo tecnico en vivo</div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="telemetry-mini-stat">
+                            <div class="d-flex align-items-center gap-1 text-muted small">
+                                <i class="bi bi-person-check text-success"></i>Conectados
+                            </div>
+                            <div class="fs-4 fw-bold">@Model.SessionOverview.ActiveUserCount</div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-6">
-                    <div class="telemetry-mini-stat">
-                        <div class="text-muted small">Riesgo alto</div>
-                        <div class="fs-4 fw-bold">@Model.SessionOverview.LockedUserCount</div>
+                    <div class="col-6">
+                        <div class="telemetry-mini-stat">
+                            <div class="d-flex align-items-center gap-1 text-muted small">
+                                <i class="bi bi-shield-exclamation text-danger"></i>Riesgo alto
+                            </div>
+                            <div class="fs-4 fw-bold">@Model.SessionOverview.LockedUserCount</div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-6">
-                    <div class="telemetry-mini-stat">
-                        <div class="text-muted small">Identidad incierta</div>
-                        <div class="fs-4 fw-bold">@Model.SessionOverview.PendingMfaUserCount</div>
+                    <div class="col-6">
+                        <div class="telemetry-mini-stat">
+                            <div class="d-flex align-items-center gap-1 text-muted small">
+                                <i class="bi bi-person-x text-warning"></i>Identidad incierta
+                            </div>
+                            <div class="fs-4 fw-bold">@Model.SessionOverview.PendingMfaUserCount</div>
+                        </div>
                     </div>
-                </div>
-                <div class="col-6">
-                    <div class="telemetry-mini-stat">
-                        <div class="text-muted small">Inactivos</div>
-                        <div class="fs-4 fw-bold">@Model.SessionOverview.ExpiredUserCount</div>
+                    <div class="col-6">
+                        <div class="telemetry-mini-stat">
+                            <div class="d-flex align-items-center gap-1 text-muted small">
+                                <i class="bi bi-clock-history text-secondary"></i>Inactivos
+                            </div>
+                            <div class="fs-4 fw-bold">@Model.SessionOverview.ExpiredUserCount</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -902,11 +866,16 @@
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">Endpoints y estado de red</h5>
-            <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Lista de identidades o sesiones detectadas en el ultimo snapshot, con latencia, puertos y cantidad de equipos vinculados.">
-                <i class="bi bi-info-lg"></i>
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#telemetry-session-filter-panel" title="Mostrar u ocultar filtros">
+                    <i class="bi bi-funnel me-1"></i>Filtros
+                </button>
+                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Lista de identidades o sesiones detectadas en el ultimo snapshot, con latencia, puertos y cantidad de equipos vinculados.">
+                    <i class="bi bi-info-lg"></i>
+                </button>
+            </div>
         </div>
-        <div class="telemetry-filter-panel p-3 mb-3">
+        <div id="telemetry-session-filter-panel" class="telemetry-filter-panel p-3 mb-3 collapse show">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-4">
                     <label class="form-label small text-muted">Buscar endpoint</label>
@@ -960,11 +929,16 @@
                 <h5 class="mb-1">Administracion de snapshots</h5>
                 <div class="small text-muted">Historial paginado de capturas manuales, programadas y automaticas</div>
             </div>
-            <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Historial paginado de capturas manuales y automaticas con busqueda, filtros y ordenamiento.">
-                <i class="bi bi-info-lg"></i>
-            </button>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#telemetry-snapshot-filter-panel" title="Mostrar u ocultar filtros">
+                    <i class="bi bi-funnel me-1"></i>Filtros
+                </button>
+                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Historial paginado de capturas manuales y automaticas con busqueda, filtros y ordenamiento.">
+                    <i class="bi bi-info-lg"></i>
+                </button>
+            </div>
         </div>
-        <div class="telemetry-filter-panel p-3 mb-3">
+        <div id="telemetry-snapshot-filter-panel" class="telemetry-filter-panel p-3 mb-3 collapse show">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-4">
                     <label class="form-label small text-muted">Buscar snapshot</label>
@@ -1046,6 +1020,9 @@
                 <div class="small text-muted">Configura horarios de escaneo y revisa el historial automatico</div>
             </div>
             <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#telemetry-scheduled-filter-panel" title="Mostrar u ocultar filtros">
+                    <i class="bi bi-funnel me-1"></i>Filtros
+                </button>
                 @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin))
                 {
                     <button type="button" class="btn btn-sm btn-outline-primary" id="telemetry-schedule-toggle" title="Gestionar horarios">
@@ -1145,7 +1122,7 @@
             </div>
         }
 
-        <div class="telemetry-filter-panel p-3 mb-3">
+        <div id="telemetry-scheduled-filter-panel" class="telemetry-filter-panel p-3 mb-3 collapse show">
             <div class="row g-3 align-items-end">
                 <div class="col-lg-4">
                     <label class="form-label small text-muted">Buscar</label>
@@ -2147,8 +2124,9 @@
             snapshotSummary.textContent = `Mostrando ${items.length} de ${totalCount} snapshots. Pagina ${page} de ${totalPages}.`;
             snapshotTable.innerHTML = items.length === 0
                 ? `<div class="text-muted">No hay snapshots para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
+                : `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
                     <tr>
+                        <td><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</span></td>
                         <td>${formatChileDateTime(item.observedAtUtc)}</td>
                         <td>${formatChileWeekday(item.observedAtUtc)}</td>
                         <td>${formatChileTime(item.observedAtUtc)}</td>
@@ -2157,7 +2135,7 @@
                         <td>${item.connectedUserCount ?? 0}</td>
                         <td>${item.deviceCount ?? 0}</td>
                         <td><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
-                        <td class="text-end text-nowrap">${Number(item.id) === activeSnapshotId ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir esta snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar esta snapshot" data-delete-snapshot="${item.id}"><i class="bi bi-trash3"></i></button></td>
+                        <td class="text-end text-nowrap">${String(item.id) === String(activeSnapshotId) ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir esta snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar esta snapshot" data-delete-snapshot="${item.id}"><i class="bi bi-trash3"></i></button></td>
                     </tr>`).join("")}</tbody></table></div>`;
 
             snapshotTable.querySelectorAll("[data-snapshot-sort]").forEach((button) => {
@@ -2173,7 +2151,7 @@
             snapshotTable.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
                 button.addEventListener("click", () => {
                     const snapshotId = button.getAttribute("data-delete-snapshot");
-                    if (!snapshotId || !confirm(`Â¿Esta seguro de eliminar la snapshot #${snapshotId}? Los datos de observacion asociados tambien se eliminaran.`)) {
+                    if (!snapshotId || !confirm(`Â¿Esta seguro de eliminar ${item.runNumber != null && item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${snapshotId}`}? Los datos de observacion asociados tambien se eliminaran.`)) {
                         return;
                     }
 

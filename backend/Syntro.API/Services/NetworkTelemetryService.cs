@@ -153,6 +153,10 @@ public class NetworkTelemetryService
             : await GetSubnetRiskSummariesAsync(activeSnapshot.Id, null, cancellationToken);
         var sessionOverview = await GetSessionOverviewAsync(activeSnapshot?.Id, null, cancellationToken);
 
+        var runNumbersById = await BuildSnapshotRunNumberLookupAsync(
+            new[] { latest?.Id ?? Guid.Empty, activeSnapshot?.Id ?? Guid.Empty },
+            cancellationToken);
+
         return new NetworkTelemetryDashboardViewModel
         {
             Enabled = enabled,
@@ -174,6 +178,8 @@ public class NetworkTelemetryService
             LatestLowRiskDeviceCount = activeSnapshot?.LowRiskDeviceCount ?? 0,
             LatestSnapshotId = latest?.Id ?? Guid.Empty,
             ActiveSnapshotId = activeSnapshot?.Id ?? Guid.Empty,
+            LatestSnapshotRunNumber = latest is null ? null : runNumbersById.GetValueOrDefault(latest.Id),
+            ActiveSnapshotRunNumber = activeSnapshot is null ? null : runNumbersById.GetValueOrDefault(activeSnapshot.Id),
             IsViewingLatestSnapshot = activeSnapshot?.Id == latest?.Id,
             LatestObservedAtUtc = activeSnapshot?.ObservedAtUtc,
             LatestWindowStartUtc = activeSnapshot?.WindowStartUtc,
@@ -417,19 +423,9 @@ public class NetworkTelemetryService
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        // Numero de captura (#N) asignado por el scheduler: mismo identificador
-        // que muestra la tabla de capturas programadas en Red y riesgo.
-        var snapshotIds = snapshots.Select(snapshot => snapshot.Id).ToList();
-        var runNumbers = snapshotIds.Count == 0
-            ? new Dictionary<Guid, int>()
-            : (await _context.ScheduledScanRuns
-                .AsNoTracking()
-                .Where(run => run.SnapshotId.HasValue && snapshotIds.Contains(run.SnapshotId.Value))
-                .OrderBy(run => run.RunNumber)
-                .Select(run => new { SnapshotKey = run.SnapshotId.Value, run.RunNumber })
-                .ToListAsync(cancellationToken))
-            .GroupBy(pair => pair.SnapshotKey)
-            .ToDictionary(group => group.Key, group => group.First().RunNumber);
+        var runNumbers = await BuildSnapshotRunNumberLookupAsync(
+            snapshots.Select(snapshot => snapshot.Id),
+            cancellationToken);
 
         return snapshots.Select(snapshot =>
         {
@@ -441,6 +437,32 @@ public class NetworkTelemetryService
 
             return viewModel;
         }).ToList();
+    }
+
+    private async Task<Dictionary<Guid, int>> BuildSnapshotRunNumberLookupAsync(
+        IEnumerable<Guid> snapshotIds,
+        CancellationToken cancellationToken)
+    {
+        var ids = snapshotIds
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return new Dictionary<Guid, int>();
+        }
+
+        // Numero de captura (#N) asignado por el scheduler: mismo identificador
+        // que muestra la tabla de capturas programadas en Red y riesgo.
+        return (await _context.ScheduledScanRuns
+                .AsNoTracking()
+                .Where(run => run.SnapshotId.HasValue && ids.Contains(run.SnapshotId.Value))
+                .OrderBy(run => run.RunNumber)
+                .Select(run => new { SnapshotKey = run.SnapshotId.Value, run.RunNumber })
+                .ToListAsync(cancellationToken))
+            .GroupBy(pair => pair.SnapshotKey)
+            .ToDictionary(group => group.Key, group => group.First().RunNumber);
     }
 
     public async Task<NetworkTelemetrySnapshotPageViewModel> GetSnapshotPageAsync(
@@ -554,6 +576,30 @@ public class NetworkTelemetryService
             .Skip((request.Page - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToList();
+
+        var pageSnapshots = items.Select(item => item.Id).ToList();
+        var runNumbers = await BuildSnapshotRunNumberLookupAsync(pageSnapshots, cancellationToken);
+        items = items.Select(item => new SnapshotListItem
+        {
+            Id = item.Id,
+            CampusKey = item.CampusKey,
+            SourceName = item.SourceName,
+            SourceType = item.SourceType,
+            Status = item.Status,
+            RiskLevel = item.RiskLevel,
+            RiskScore = item.RiskScore,
+            DeviceCount = item.DeviceCount,
+            ConnectedUserCount = item.ConnectedUserCount,
+            HighRiskDeviceCount = item.HighRiskDeviceCount,
+            MediumRiskDeviceCount = item.MediumRiskDeviceCount,
+            LowRiskDeviceCount = item.LowRiskDeviceCount,
+            ObservedAtUtc = item.ObservedAtUtc,
+            WindowStartUtc = item.WindowStartUtc,
+            WindowEndUtc = item.WindowEndUtc,
+            Notes = item.Notes,
+            CreatedBy = item.CreatedBy,
+            RunNumber = runNumbers.GetValueOrDefault(item.Id)
+        }).ToList();
 
         postProcessStopwatch.Stop();
         segmentStopwatch.Stop();
@@ -1341,6 +1387,7 @@ public class NetworkTelemetryService
         public DateTime? WindowEndUtc { get; init; }
         public string? Notes { get; init; }
         public string? CreatedBy { get; init; }
+        public int? RunNumber { get; init; }
     }
 
     private static NetworkTelemetrySnapshotViewModel MapSnapshotListItem(SnapshotListItem item)
@@ -1352,6 +1399,7 @@ public class NetworkTelemetryService
             CampusKey = item.CampusKey ?? string.Empty,
             SourceName = item.SourceName ?? string.Empty,
             SourceType = item.SourceType ?? string.Empty,
+            RunNumber = item.RunNumber,
             TriggerType = triggerType,
             TriggerLabel = triggerType switch
             {

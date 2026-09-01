@@ -46,6 +46,10 @@
     var dateTo = GetModelString("DateTo");
     var page = Math.Max(1, GetModelInt("Page", 1));
     var pageSize = GetModelInt("PageSize", 50);
+    var sortBy = GetModelString("SortBy");
+    var sortDirection = GetModelString("SortDirection");
+    if (string.IsNullOrWhiteSpace(sortBy)) { sortBy = "createdAt"; }
+    if (string.IsNullOrWhiteSpace(sortDirection)) { sortDirection = "desc"; }
     var totalCount = GetModelInt("TotalCount", Model.Items.Count);
     var totalPages = Math.Max(1, GetModelInt("TotalPages", 1));
     var successCount = GetModelInt("SuccessCount");
@@ -68,7 +72,7 @@
     if (!string.IsNullOrWhiteSpace(dateTo)) { activeFilters.Add($"Hasta: {dateTo}"); }
     if (pageSize != 50) { activeFilters.Add($"Por pagina: {pageSize}"); }
 
-    List<KeyValuePair<string, string?>> BuildActivityQuery(int? pageOverride = null, int? pageSizeOverride = null)
+    List<KeyValuePair<string, string?>> BuildActivityQuery(int? pageOverride = null, int? pageSizeOverride = null, string? sortByOverride = null, string? sortDirectionOverride = null)
     {
         var query = new List<KeyValuePair<string, string?>>();
 
@@ -91,16 +95,62 @@
         Add("userAgent", userAgent);
         Add("from", dateFrom);
         Add("to", dateTo);
+        Add("sortBy", sortByOverride ?? sortBy);
+        Add("sortDirection", sortDirectionOverride ?? sortDirection);
 
         query.Add(new KeyValuePair<string, string?>("page", (pageOverride ?? 1).ToString()));
         query.Add(new KeyValuePair<string, string?>("pageSize", (pageSizeOverride ?? pageSize).ToString()));
         return query;
     }
 
-    string BuildActivityUrl(int? pageOverride = null, int? pageSizeOverride = null)
+    string BuildActivityUrl(int? pageOverride = null, int? pageSizeOverride = null, string? sortByOverride = null, string? sortDirectionOverride = null)
         => Microsoft.AspNetCore.WebUtilities.QueryHelpers.AddQueryString(
             "/admin/activity",
-            BuildActivityQuery(pageOverride, pageSizeOverride));
+            BuildActivityQuery(pageOverride, pageSizeOverride, sortByOverride, sortDirectionOverride));
+
+    string NextSortDirection(string column) => sortBy == column && sortDirection == "asc" ? "desc" : "asc";
+    string SortArrow(string column) => sortBy != column ? "bi bi-dash-lg" : (sortDirection == "asc" ? "bi bi-chevron-down" : "bi bi-chevron-up");
+    string SortUrl(string column) => BuildActivityUrl(1, null, column, NextSortDirection(column));
+
+    string TranslateAction(string action)
+    {
+        return action.Trim().ToLowerInvariant() switch
+        {
+            "login-success" => "Inicio de sesion exitoso",
+            "login-failed" => "Inicio de sesion fallido",
+            "logout" => "Cierre de sesion",
+            "access-denied" => "Acceso denegado",
+            "mfa-verified" => "MFA verificado",
+            "create" => "Creacion",
+            "update" => "Actualizacion",
+            "delete" => "Eliminacion",
+            "import" => "Importacion",
+            "export" => "Exportacion",
+            "download" => "Descarga",
+            "upload" => "Subida",
+            "restore" => "Restauracion",
+            "backup" => "Respaldo",
+            "assign" => "Asignacion",
+            "unassign" => "Desasignacion",
+            "print" => "Impresion",
+            "verify" => "Verificacion",
+            "train" => "Entrenamiento",
+            _ => action
+        };
+    }
+
+    string ResourceIcon(string resource)
+    {
+        var r = resource.Trim().ToLowerInvariant();
+        if (r.Contains("inventory") || r.Contains("equipo") || r.Contains("equipment") || r.Contains("item")) return "bi-laptop";
+        if (r.Contains("building") || r.Contains("edificio") || r.Contains("location") || r.Contains("mapa") || r.Contains("sala") || r.Contains("room")) return "bi-geo-alt";
+        if (r.Contains("user") || r.Contains("usuario")) return "bi-person";
+        if (r.Contains("backup") || r.Contains("database") || r.Contains("db") || r.Contains("paquete") || r.Contains("package")) return "bi-database";
+        if (r.Contains("auth") || r.Contains("login") || r.Contains("session") || r.Contains("sesion")) return "bi-shield-lock";
+        if (r.Contains("network") || r.Contains("snapshot") || r.Contains("telemetry") || r.Contains("red")) return "bi-diagram-3";
+        if (r.Contains("pdf") || r.Contains("form")) return "bi-file-earmark-pdf";
+        return "bi-activity";
+    }
 }
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -109,8 +159,8 @@
     </div>
 </div>
 
-<div class="row g-4 mb-4">
-    <div class="col-md-3 fade-in-up fade-in-up-d1">
+<div class="row g-3 mb-4">
+    <div class="col fade-in-up fade-in-up-d1">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -125,7 +175,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d2">
+    <div class="col fade-in-up fade-in-up-d2">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -140,7 +190,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d3">
+    <div class="col fade-in-up fade-in-up-d3">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -155,7 +205,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d4">
+    <div class="col fade-in-up fade-in-up-d4">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -170,7 +220,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d5">
+    <div class="col fade-in-up fade-in-up-d5">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -221,6 +271,25 @@
     @@keyframes fadeUp {
         from { opacity: 0; transform: translateY(18px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+
+    .table-sort-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        color: inherit;
+        text-decoration: none;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+    .table-sort-link:hover {
+        color: inherit;
+        text-decoration: none;
+    }
+    .table-sort-link .sort-icon {
+        font-size: 0.72rem;
+        line-height: 1;
+        flex: 0 0 auto;
     }
 
     .inventory-filter-panel {
@@ -411,14 +480,14 @@
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th>Fecha</th>
-                        <th>Usuario</th>
-                        <th>Accion</th>
-                        <th>Recurso</th>
-                        <th>Resultado</th>
-                        <th>Severidad</th>
-                        <th>Edificio</th>
-                        <th>Resumen</th>
+                        <th><a href='@SortUrl("createdAt")' class="table-sort-link"><span>Fecha</span><i class='@SortArrow("createdAt") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("username")' class="table-sort-link"><span>Usuario</span><i class='@SortArrow("username") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("action")' class="table-sort-link"><span>Accion</span><i class='@SortArrow("action") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("resource")' class="table-sort-link"><span>Recurso</span><i class='@SortArrow("resource") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("result")' class="table-sort-link"><span>Resultado</span><i class='@SortArrow("result") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("severity")' class="table-sort-link"><span>Severidad</span><i class='@SortArrow("severity") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("building")' class="table-sort-link"><span>Edificio</span><i class='@SortArrow("building") sort-icon' aria-hidden="true"></i></a></th>
+                        <th><a href='@SortUrl("summary")' class="table-sort-link"><span>Resumen</span><i class='@SortArrow("summary") sort-icon' aria-hidden="true"></i></a></th>
                         <th>Previo</th>
                         <th>Nuevo</th>
                         <th>IP</th>
@@ -439,8 +508,15 @@
                             <tr>
                                 <td class="small text-nowrap">@(DateTime.TryParse(GetItemString(item, "CreatedAtUtc"), out var createdAt) ? createdAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "")</td>
                                 <td class="small">@GetItemString(item, "ChangedByUsername")</td>
-                                <td><span class="badge bg-secondary">@GetItemString(item, "ActionType")</span></td>
-                                <td class="small">@GetItemString(item, "Resource")</td>
+                                <td>
+                                    <span class="badge bg-secondary"><i class="bi bi-lightning-charge-fill me-1"></i>@TranslateAction(GetItemString(item, "ActionType"))</span>
+                                </td>
+                                <td class="small">
+                                    <span class="d-inline-flex align-items-center gap-1">
+                                        <i class="bi @ResourceIcon(GetItemString(item, "Resource")) text-primary"></i>
+                                        @GetItemString(item, "Resource")
+                                    </span>
+                                </td>
                                 <td class="small">
                                     @{
                                         var itemResult = GetItemString(item, "Result");

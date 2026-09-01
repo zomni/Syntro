@@ -15,6 +15,8 @@ public class AuditLogQueryRequest
     public string DateTo { get; set; } = string.Empty;
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
+    public string SortBy { get; set; } = string.Empty;
+    public string SortDirection { get; set; } = string.Empty;
 }
 
 public class AuditLogQueryResultViewModel
@@ -28,4 +30,6 @@ public class AuditLogQueryResultViewModel
     public int FailureCount { get; set; }
     public int CriticalCount { get; set; }
     public int WarningCount { get; set; }
+    public string SortBy { get; set; } = string.Empty;
+    public string SortDirection { get; set; } = string.Empty;
 }

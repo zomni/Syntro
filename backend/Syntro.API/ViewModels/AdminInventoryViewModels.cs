@@ -197,6 +197,8 @@ public class AdminActivityViewModel
     public string DateTo { get; set; } = string.Empty;
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 50;
+    public string SortBy { get; set; } = string.Empty;
+    public string SortDirection { get; set; } = string.Empty;
     public int TotalCount { get; set; }
     public int TotalPages { get; set; }
     public int SuccessCount { get; set; }

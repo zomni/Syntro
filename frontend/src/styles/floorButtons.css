@@ -66,6 +66,50 @@
     box-shadow: 0 0 0 5px rgba(var(--pi-primary-bright-rgb), 0.2);
 }
 
+#bLoc {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-color: var(--pi-primary);
+    background-color: var(--pi-primary);
+    color: white;
+}
+
+.location-button-icon {
+    position: relative;
+    display: block;
+    width: 15px;
+    height: 15px;
+    box-sizing: border-box;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+}
+
+.location-button-icon::before,
+.location-button-icon::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background: currentColor;
+    content: "";
+    transform: translate(-50%, -50%);
+}
+
+.location-button-icon::before {
+    width: 25px;
+    height: 2px;
+}
+
+.location-button-icon::after {
+    width: 2px;
+    height: 25px;
+}
+
+#bLoc .location-button-icon {
+    z-index: 1;
+    background: var(--pi-primary);
+}
+
 #bLoc.locationTrackingError {
     border-color: var(--pi-danger-strong);
     color: var(--pi-danger-strong);

@@ -230,7 +230,7 @@ public class AdminController : Controller
             new() { Title = "Backup", Detail = backupEnabled ? (backupHealthy ? "Respaldo reciente disponible" : "Habilitado, pero sin respaldo reciente") : "Deshabilitado", Status = backupEnabled && backupHealthy ? "ok" : "warning", IconClass = "bi bi-hdd-stack" },
             new() { Title = "LDAPS", Detail = ldapsConfigured ? "Configurado sobre 636" : "Revisar configuracion", Status = ldapsConfigured ? "ok" : "warning", IconClass = "bi bi-plug" },
             new() { Title = "Integridad", Detail = dataIntegrityHealthy ? "Sin alertas criticas" : "Hay elementos por revisar", Status = dataIntegrityHealthy ? "ok" : "critical", IconClass = "bi bi-heart-pulse" }
-        };
+        }.Take(4).ToList();
 
         var summaryCards = new List<ComplianceSummaryCardViewModel>
         {
@@ -1116,10 +1116,14 @@ public class AdminController : Controller
         string? from,
         string? to,
         int page = 1,
-        int pageSize = 50)
+        int pageSize = 50,
+        string? sortBy = null,
+        string? sortDirection = null)
     {
         page = Math.Max(1, page);
         pageSize = NormalizePageSize(pageSize);
+        sortBy = NormalizeActivitySortBy(sortBy);
+        sortDirection = NormalizeSortDirection(sortDirection);
 
         var queryResult = await _auditLogService.QueryAsync(new AuditLogQueryRequest
         {
@@ -1135,7 +1139,9 @@ public class AdminController : Controller
             DateFrom = from ?? string.Empty,
             DateTo = to ?? string.Empty,
             Page = page,
-            PageSize = pageSize
+            PageSize = pageSize,
+            SortBy = sortBy,
+            SortDirection = sortDirection
         });
 
         var model = new AdminActivityViewModel
@@ -1153,6 +1159,8 @@ public class AdminController : Controller
             DateTo = to ?? string.Empty,
             Page = queryResult.Page,
             PageSize = queryResult.PageSize,
+            SortBy = queryResult.SortBy,
+            SortDirection = queryResult.SortDirection,
             TotalCount = queryResult.TotalCount,
             TotalPages = queryResult.TotalPages,
             SuccessCount = queryResult.SuccessCount,
@@ -3964,6 +3972,22 @@ public class AdminController : Controller
     private static string NormalizeSortDirection(string? sortDirection)
     {
         return string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+    }
+
+    private static string NormalizeActivitySortBy(string? sortBy)
+    {
+        return sortBy?.Trim().ToLowerInvariant() switch
+        {
+            "createdat" => "createdAt",
+            "username" => "username",
+            "action" => "action",
+            "resource" => "resource",
+            "result" => "result",
+            "severity" => "severity",
+            "building" => "building",
+            "summary" => "summary",
+            _ => "createdAt"
+        };
     }
 
     private static string NormalizeInventorySortBy(string? sortBy)

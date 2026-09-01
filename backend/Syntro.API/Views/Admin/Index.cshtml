@@ -1,4 +1,4 @@
-@model Syntro.API.ViewModels.AdminDashboardViewModel
+﻿@model Syntro.API.ViewModels.AdminDashboardViewModel
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @{
     ViewData["Title"] = "Dashboard";
@@ -25,6 +25,25 @@
             : DateTime.SpecifyKind(value.Value, DateTimeKind.Utc);
 
         return TimeZoneInfo.ConvertTimeFromUtc(utcValue, displayTimeZone).ToString(format);
+    }
+
+    string TranslateCategory(string? category)
+    {
+        var raw = (category ?? string.Empty).Trim();
+        var translated = raw.ToLowerInvariant() switch
+        {
+            "pc" => "Pc",
+            "printer" => "Impresora",
+            "other" => "Otro",
+            _ => raw
+        };
+
+        if (string.IsNullOrWhiteSpace(translated))
+        {
+            return translated;
+        }
+
+        return char.ToUpperInvariant(translated[0]) + translated.Substring(1);
     }
 }
 
@@ -119,14 +138,14 @@
         width: 100%;
         height: 10px;
         border-radius: 999px;
-        background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
+        background: #e2e8f0;
         overflow: hidden;
         position: relative;
     }
     .risk-gauge-fill {
         height: 100%;
         border-radius: 999px;
-        background: #e2e8f0;
+        background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
         transition: width .6s ease;
     }
     .risk-pulse {
@@ -317,7 +336,7 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-5 fade-in-up fade-in-up-d2">
+    <div class="col-lg-3 fade-in-up fade-in-up-d2">
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold">Categorias principales</div>
             <div class="card-body">
@@ -332,7 +351,7 @@
                         var width = Math.Round(category.Count * 100.0 / maxCategoryCount, 1);
                         <div class="mb-3">
                             <div class="d-flex justify-content-between small mb-1">
-                                <span class="fw-semibold">@category.Category</span>
+                                <span class="fw-semibold">@TranslateCategory(category.Category)</span>
                                 <span class="text-muted">@category.Count</span>
                             </div>
                             <div class="category-bar-track">
@@ -397,7 +416,7 @@
                         "low" => "Bajo",
                         _ => "Sin datos"
                     };
-                    var gaugeInvert = Math.Clamp(100 - Model.LatestNetworkRiskScore, 0, 100);
+                    var gaugeFill = Math.Clamp(Model.LatestNetworkRiskScore, 0, 100);
                     <div class="row g-4 align-items-center">
                         <div class="col-lg-3 col-md-6">
                             <div class="d-flex align-items-center gap-3 mb-2">
@@ -413,7 +432,7 @@
                                     <span class="fw-semibold">@Model.LatestNetworkRiskScore/100</span>
                                 </div>
                                 <div class="risk-gauge">
-                                    <div class="risk-gauge-fill" style="width: @gaugeInvert%"></div>
+                                    <div class="risk-gauge-fill" style="width: @gaugeFill%"></div>
                                 </div>
                             </div>
                         </div>
@@ -479,31 +498,6 @@
 </div>
 
 <div class="row g-4">
-    <div class="col-md-6 fade-in-up fade-in-up-d1">
-        <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Accesos rapidos</div>
-            <div class="card-body d-flex gap-3 flex-wrap">
-                <a href="/dashboard/inventory" class="btn btn-primary">
-                    <i class="bi bi-list-ul me-1"></i> Revisar inventario
-                </a>
-                <a href="/api/inventory-import/status" class="btn btn-outline-success" target="_blank">
-                    <i class="bi bi-file-earmark-arrow-down me-1"></i> Estado importacion
-                </a>
-                <a href="/api/inventory-import/items" class="btn btn-outline-secondary" target="_blank">
-                    <i class="bi bi-braces me-1"></i> Ver JSON
-                </a>
-                <a href="/swagger" class="btn btn-outline-dark" target="_blank">
-                    <i class="bi bi-box-arrow-up-right me-1"></i> Swagger
-                </a>
-                <a href="/dashboard/activity" class="btn btn-outline-primary">
-                    <i class="bi bi-clock-history me-1"></i> Ver actividad
-                </a>
-                <a href="@Model.FrontendMapUrl" class="btn btn-outline-info js-map-link" target="syntro-map">
-                    <i class="bi bi-map me-1"></i> Ir al mapa
-                </a>
-            </div>
-        </div>
-    </div>
     <div class="col-md-6 fade-in-up fade-in-up-d2">
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold">Resumen operativo</div>
@@ -538,14 +532,9 @@
                 <div class="card-body">
                     <div class="row g-4 align-items-start">
                         <div class="col-lg-5">
-                            <div class="small text-muted mb-2">Archivo actual</div>
-                            <div class="fw-semibold">@Model.DatabaseFileName</div>
-                            <div class="text-muted small">Tamano: @(Model.DatabaseFileSizeBytes > 0 ? $"{Model.DatabaseFileSizeBytes / 1024.0 / 1024.0:F2} MB" : "Sin datos")</div>
-                            <div class="text-muted small">Ultima modificacion: @FormatChileDateTime(Model.DatabaseLastWriteUtc, "dd/MM/yyyy HH:mm:ss")</div>
-                            <div class="d-grid gap-2 mt-3">
-                                <a href="/dashboard/database/download" class="btn btn-outline-primary">
-                                    <i class="bi bi-download me-1"></i> Descargar DB
-                                </a>
+                            <div class="fw-semibold mb-1">Paquete completo</div>
+                            <div class="form-text mb-3">Descarga el paquete con todos los datos y restaura la aplicacion completa con un solo archivo.</div>
+                            <div class="d-grid gap-2">
                                 <a href="/dashboard/project-package/download" class="btn btn-outline-dark">
                                     <i class="bi bi-box-seam me-1"></i> Descargar paquete completo
                                 </a>
@@ -553,21 +542,7 @@
                             <div class="form-text mt-2">El paquete completo incluye DB, formularios PDF, claves locales de sesion/MFA y respaldos offline del frontend.</div>
                         </div>
                         <div class="col-lg-7">
-                            <div class="small text-muted mb-2">Restaurar base de datos</div>
-                            <form id="databaseUploadForm" method="post" action="/admin/database/upload" enctype="multipart/form-data" class="row g-3">
-                                @Html.AntiForgeryToken()
-                                <div class="col-md-8">
-                                    <input id="databaseFileInput" type="file" name="databaseFile" class="form-control" accept=".db,.sqlite,.sqlite3" required />
-                                    <div class="form-text">Se crea un respaldo automatico antes de reemplazar la base actual.</div>
-                                </div>
-                                <div class="col-md-4 d-grid">
-                                    <button id="databaseUploadButton" type="submit" class="btn btn-secondary" disabled>
-                                        <i class="bi bi-upload me-1"></i> Subir DB
-                                    </button>
-                                </div>
-                            </form>
-
-                            <div class="small text-muted mt-4 mb-2">Restaurar paquete completo</div>
+                            <div class="small text-muted mb-2">Restaurar paquete completo</div>
                             <form id="projectPackageUploadForm" method="post" action="/dashboard/project-package/upload" enctype="multipart/form-data" class="row g-3">
                                 @Html.AntiForgeryToken()
                                 <div class="col-md-8">
@@ -611,13 +586,13 @@
                                                                 <a href="/dashboard/database/backups/@backup.FileName" class="btn btn-sm btn-outline-secondary">
                                                                     Descargar
                                                                 </a>
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. ¿Continuar?');">
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-warning">
                                                                         Restaurar
                                                                     </button>
                                                                 </form>
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. ¿Continuar?');">
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                                                         Eliminar
@@ -773,6 +748,41 @@
                     </table>
                 </div>
             </div>
+            <div class="card-header bg-white fw-semibold border-top">Ultimos registros importados</div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Equipo</th>
+                            <th>Responsable</th>
+                            <th>Unidad</th>
+                            <th>Asignacion</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in Model.RecentItems)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@item.Description</div>
+                                    <div class="small text-muted">@item.InferredStatus</div>
+                                </td>
+                                <td class="small">@item.ResponsibleUser</td>
+                                <td class="small">@item.UnitOrDepartment</td>
+                                <td class="small">
+                                    @(string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId) ? "Pendiente" : item.AssignedBuildingExternalId)
+                                </td>
+                                <td class="text-end">
+                                    <a href="/dashboard/editinventoryitem/@item.Id" class="btn btn-sm btn-outline-primary">
+                                        @(isAdmin ? "Editar" : "Ver")
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -780,56 +790,32 @@
 @section Scripts {
     <script>
         (() => {
-            const fileInput = document.getElementById("databaseFileInput");
-            const uploadButton = document.getElementById("databaseUploadButton");
-            const uploadForm = document.getElementById("databaseUploadForm");
             const packageFileInput = document.getElementById("projectPackageFileInput");
             const packageUploadButton = document.getElementById("projectPackageUploadButton");
             const packageUploadForm = document.getElementById("projectPackageUploadForm");
 
-            if (!fileInput || !uploadButton || !uploadForm) {
+            if (!packageFileInput || !packageUploadButton || !packageUploadForm) {
                 return;
             }
 
-            let hasPendingDatabaseFile = false;
             let hasPendingProjectPackageFile = false;
 
             const updateUploadState = () => {
-                hasPendingDatabaseFile = Boolean(fileInput.files && fileInput.files.length > 0);
-                uploadButton.disabled = !hasPendingDatabaseFile;
-                uploadButton.classList.toggle("btn-secondary", !hasPendingDatabaseFile);
-                uploadButton.classList.toggle("btn-warning", hasPendingDatabaseFile);
-
-                hasPendingProjectPackageFile = Boolean(packageFileInput?.files && packageFileInput.files.length > 0);
-                if (packageUploadButton) {
-                    packageUploadButton.disabled = !hasPendingProjectPackageFile;
-                    packageUploadButton.classList.toggle("btn-secondary", !hasPendingProjectPackageFile);
-                    packageUploadButton.classList.toggle("btn-dark", hasPendingProjectPackageFile);
-                }
+                hasPendingProjectPackageFile = Boolean(packageFileInput.files && packageFileInput.files.length > 0);
+                packageUploadButton.disabled = !hasPendingProjectPackageFile;
+                packageUploadButton.classList.toggle("btn-secondary", !hasPendingProjectPackageFile);
+                packageUploadButton.classList.toggle("btn-dark", hasPendingProjectPackageFile);
             };
 
-            const confirmPendingDatabaseNavigation = () => {
-                if (!hasPendingDatabaseFile && !hasPendingProjectPackageFile) {
+            const confirmPendingNavigation = () => {
+                if (!hasPendingProjectPackageFile) {
                     return true;
                 }
-
-                if (hasPendingDatabaseFile && hasPendingProjectPackageFile) {
-                    return window.confirm("Tienes una base de datos y un paquete completo pendientes por subir. ¿Deseas continuar sin subirlos?");
-                }
-
-                if (hasPendingProjectPackageFile) {
-                    return window.confirm("Tienes un paquete completo pendiente por subir. ¿Deseas continuar sin subirlo?");
-                }
-
-                return window.confirm("Tienes un archivo DB pendiente por subir. ¿Deseas continuar sin subirlo?");
+                return window.confirm("Tienes un paquete completo pendiente por subir. \u00bfDeseas continuar sin subirlo?");
             };
 
-            fileInput.addEventListener("change", updateUploadState);
-            uploadForm.addEventListener("submit", () => {
-                hasPendingDatabaseFile = false;
-            });
-            packageFileInput?.addEventListener("change", updateUploadState);
-            packageUploadForm?.addEventListener("submit", () => {
+            packageFileInput.addEventListener("change", updateUploadState);
+            packageUploadForm.addEventListener("submit", () => {
                 hasPendingProjectPackageFile = false;
             });
 
@@ -851,34 +837,32 @@
                     return;
                 }
 
-                if (!confirmPendingDatabaseNavigation()) {
+                if (!confirmPendingNavigation()) {
                     event.preventDefault();
                     event.stopPropagation();
                     return;
                 }
 
-                hasPendingDatabaseFile = false;
                 hasPendingProjectPackageFile = false;
             }, true);
 
             document.addEventListener("submit", (event) => {
                 const form = event.target;
-                if (!(form instanceof HTMLFormElement) || form === uploadForm || form === packageUploadForm) {
+                if (!(form instanceof HTMLFormElement) || form === packageUploadForm) {
                     return;
                 }
 
-                if (!confirmPendingDatabaseNavigation()) {
+                if (!confirmPendingNavigation()) {
                     event.preventDefault();
                     event.stopPropagation();
                     return;
                 }
 
-                hasPendingDatabaseFile = false;
                 hasPendingProjectPackageFile = false;
             }, true);
 
             window.addEventListener("beforeunload", (event) => {
-                if (!hasPendingDatabaseFile && !hasPendingProjectPackageFile) {
+                if (!hasPendingProjectPackageFile) {
                     return;
                 }
 
@@ -890,11 +874,10 @@
                 link.addEventListener("click", (event) => {
                     event.preventDefault();
 
-                    if (!confirmPendingDatabaseNavigation()) {
+                    if (!confirmPendingNavigation()) {
                         return;
                     }
 
-                    hasPendingDatabaseFile = false;
                     hasPendingProjectPackageFile = false;
                     window.open(link.href, "syntro-map");
                 });
@@ -1081,65 +1064,3 @@
     }
 }
 
-<div class="row g-4 mt-1">
-    <div class="col-lg-5 fade-in-up fade-in-up-d1">
-        <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Categorias importadas</div>
-            <div class="card-body">
-                @if (Model.CategoryBreakdown.Count == 0)
-                {
-                    <div class="text-muted">Todavia no hay equipos importados.</div>
-                }
-                else
-                {
-                    @foreach (var category in Model.CategoryBreakdown)
-                    {
-                        <div class="d-flex justify-content-between border-bottom py-2">
-                            <span>@category.Category</span>
-                            <span class="fw-semibold">@category.Count</span>
-                        </div>
-                    }
-                }
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-7 fade-in-up fade-in-up-d2">
-        <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Ultimos registros importados</div>
-            <div class="card-body p-0">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Equipo</th>
-                            <th>Responsable</th>
-                            <th>Unidad</th>
-                            <th>Asignacion</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var item in Model.RecentItems)
-                        {
-                            <tr>
-                                <td>
-                                    <div class="fw-semibold">@item.Description</div>
-                                    <div class="small text-muted">@item.InferredStatus</div>
-                                </td>
-                                <td class="small">@item.ResponsibleUser</td>
-                                <td class="small">@item.UnitOrDepartment</td>
-                                <td class="small">
-                                    @(string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId) ? "Pendiente" : item.AssignedBuildingExternalId)
-                                </td>
-                                <td class="text-end">
-                                    <a href="/dashboard/editinventoryitem/@item.Id" class="btn btn-sm btn-outline-primary">
-                                        @(isAdmin ? "Editar" : "Ver")
-                                    </a>
-                                </td>
-                            </tr>
-                        }
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>

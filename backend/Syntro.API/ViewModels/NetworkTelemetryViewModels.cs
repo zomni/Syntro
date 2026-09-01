@@ -21,6 +21,8 @@ public class NetworkTelemetryDashboardViewModel
     public int LatestLowRiskDeviceCount { get; set; }
     public Guid LatestSnapshotId { get; set; }
     public Guid ActiveSnapshotId { get; set; }
+    public int? LatestSnapshotRunNumber { get; set; }
+    public int? ActiveSnapshotRunNumber { get; set; }
     public bool IsViewingLatestSnapshot { get; set; } = true;
     public DateTime? LatestObservedAtUtc { get; set; }
     public DateTime? LatestWindowStartUtc { get; set; }
