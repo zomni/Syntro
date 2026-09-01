@@ -1,3 +1,4 @@
+@using Syntro.API.Infrastructure
 @inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @model Syntro.API.ViewModels.AdminInventoryListViewModel
 @{
@@ -173,25 +174,6 @@
     string PageUrl(int targetPage) => BuildInventoryUrl(targetPage);
     string InconsistencyTypeUrl(string value) => BuildInventoryUrl(1, null, null, value);
     string RemoveColumnFilterUrl(int index) => BuildInventoryUrl(1, null, null, null, null, index);
-
-    string CategoryLabel(string? raw) => raw?.ToLowerInvariant() switch
-    {
-        "pc" => "PC",
-        "printer" => "Impresora",
-        "scanner" => "Escáner",
-        "other" => "Otros",
-        _ => raw ?? ""
-    };
-    string StatusLabel(string? raw) => raw?.ToLowerInvariant() switch
-    {
-        "active" => "Activo",
-        "maintenance" => "Mantenimiento",
-        "inactive" => "Inactivo",
-        "stolen" => "Robado",
-        "gap" => "Brecha",
-        "retired" => "Baja",
-        _ => raw ?? ""
-    };
 
     var buildingCentroids = Model.Buildings
         .Where(b => b.CentroidLatitude.HasValue && b.CentroidLongitude.HasValue
@@ -473,7 +455,7 @@
             }
             @if (isAdmin)
             {
-                <a href="/admin/inventory/create" class="btn btn-sm btn-primary ms-auto">
+                <a href="/admin/inventory/create" class="btn btn-sm btn-primary">
                     <i class="bi bi-plus-lg me-1"></i> Agregar equipo
                 </a>
             }
@@ -531,7 +513,7 @@
                                 <option value="">Todas</option>
                                 @foreach (var option in Model.Categories)
                                 {
-                                    <option value="@option" selected="@(Model.Category == option)">@CategoryLabel(option)</option>
+                                    <option value="@option" selected="@(Model.Category == option)">@InventoryDisplayLabels.Category(option)</option>
                                 }
                             </select>
                         </div>
@@ -543,7 +525,7 @@
                                 <option value="">Todos</option>
                                 @foreach (var option in Model.Statuses)
                                 {
-                                    <option value="@option" selected="@(Model.Status == option)">@StatusLabel(option)</option>
+                                    <option value="@option" selected="@(Model.Status == option)">@InventoryDisplayLabels.Status(option)</option>
                                 }
                             </select>
                         </div>
@@ -680,17 +662,7 @@
                             </td>
                             <td class="small font-monospace">@item.IpAddress</td>
                             <td>
-                                @{
-                                    var categoryLabel = item.InferredCategory?.ToLowerInvariant() switch
-                                    {
-                                        "pc" => "PC",
-                                        "printer" => "IMPRESORA",
-                                        "scanner" => "ESCANER",
-                                        "other" => "OTROS",
-                                        _ => item.InferredCategory?.ToUpperInvariant() ?? ""
-                                    };
-                                }
-                                <span class="badge bg-secondary">@categoryLabel</span>
+                                <span class="badge bg-secondary">@InventoryDisplayLabels.Category(item.InferredCategory)</span>
                             </td>
                             <td>
                                 <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="Ver detalle de clasificacion"
@@ -707,16 +679,6 @@
                             </td>
                             <td>
                                 @{
-                                    var statusLabel = item.InferredStatus?.ToLowerInvariant() switch
-                                    {
-                                        "active" => "ACTIVO",
-                                        "maintenance" => "MANTENIMIENTO",
-                                        "inactive" => "INACTIVO",
-                                        "stolen" => "ROBADO",
-                                        "gap" => "BRECHA",
-                                        "retired" => "BAJA",
-                                        _ => item.InferredStatus?.ToUpperInvariant() ?? ""
-                                    };
                                     var statusExplanation = item.InferredStatus?.ToLowerInvariant() switch
                                     {
                                         "active" => "Equipo en operacion normal",
@@ -736,7 +698,7 @@
                                 }
                                 <span class="badge @badgeClass"
                                       @(statusExplanation != "" ? $"data-bs-toggle=tooltip data-bs-placement=top title={statusExplanation}" : "")>
-                                    @statusLabel
+                                    @InventoryDisplayLabels.Status(item.InferredStatus).ToUpperInvariant()
                                 </span>
                             </td>
                             <td class="small">

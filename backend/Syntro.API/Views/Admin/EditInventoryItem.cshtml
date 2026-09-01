@@ -1,3 +1,4 @@
+@using Syntro.API.Infrastructure
 @model Syntro.API.ViewModels.EditInventoryItemViewModel
 @{
     ViewData["Title"] = "Editar inventario";
@@ -116,11 +117,11 @@
                     </div>
                     <div class="col-md-3">
                         <label class="form-label text-muted">Categoria actual</label>
-                        <input class="form-control" value="@item.InferredCategory" readonly />
+                        <input class="form-control" value="@InventoryDisplayLabels.Category(item.InferredCategory)" readonly />
                     </div>
                     <div class="col-md-3">
                         <label class="form-label text-muted">Estado actual</label>
-                        <input class="form-control" value="@item.InferredStatus" readonly />
+                        <input class="form-control" value="@InventoryDisplayLabels.Status(item.InferredStatus)" readonly />
                     </div>
                 </div>
                 <div class="row g-3 mt-1">
@@ -162,7 +163,7 @@
                                 <select class="form-select" name="inferredCategory">
                                     @foreach (var category in Model.Categories)
                                     {
-                                        <option value="@category" selected="@(item.InferredCategory == category)">@category</option>
+                                        <option value="@category" selected="@(item.InferredCategory == category)">@InventoryDisplayLabels.Category(category)</option>
                                     }
                                 </select>
                             </div>
@@ -171,7 +172,7 @@
                                 <select class="form-select" name="inferredStatus">
                                     @foreach (var status in Model.Statuses)
                                     {
-                                        <option value="@status" selected="@(item.InferredStatus == status)">@status</option>
+                                        <option value="@status" selected="@(item.InferredStatus == status)">@InventoryDisplayLabels.Status(status)</option>
                                     }
                                 </select>
                             </div>

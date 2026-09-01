@@ -17,6 +17,7 @@ public class AuditLogQueryRequest
     public int PageSize { get; set; } = 50;
     public string SortBy { get; set; } = string.Empty;
     public string SortDirection { get; set; } = string.Empty;
+    public bool AccessOnly { get; set; }
 }
 
 public class AuditLogQueryResultViewModel

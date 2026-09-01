@@ -183,7 +183,7 @@ public class AdminController : Controller
             (entry.ActionType == "login-success" || entry.ActionType == "login-failed" || entry.ActionType == "logout" || entry.ActionType == "access-denied" || entry.ActionType == "mfa-verified") &&
             entry.CreatedAtUtc >= recentWindow);
 
-        var latestBackups = await _databaseBackupService.GetLatestBackupsAsync(10);
+        var latestBackups = await _databaseBackupService.GetLatestBackupsAsync(4);
         var latestSuccessfulBackup = latestBackups.FirstOrDefault(backup => backup.Status == "success");
         var backupEnabled = _databaseBackupService.IsEnabled();
         var backupHealthy = backupEnabled && latestSuccessfulBackup is not null && latestSuccessfulBackup.CreatedAtUtc >= recentDayWindow;
@@ -257,13 +257,9 @@ public class AdminController : Controller
             .AsNoTracking()
             .Where(entry => (entry.ActionType == "login-success" || entry.ActionType == "login-failed" || entry.ActionType == "logout" || entry.ActionType == "access-denied" || entry.ActionType == "mfa-verified") && entry.CreatedAtUtc >= recentWindow)
             .OrderByDescending(entry => entry.CreatedAtUtc)
-            .Take(10)
+            .Take(4)
             .Select(entry => new ComplianceEventViewModel
             {
-                Title = $"{entry.ActionType} - {entry.ChangedByUsername}",
-                Detail = $"{entry.Resource} | {entry.Result} | {entry.ClientIp}",
-                Badge = entry.Severity,
-                BadgeClass = entry.Severity == "critical" ? "bg-danger" : entry.Severity == "warning" ? "bg-warning text-dark" : "bg-info text-dark",
                 TimeLabel = entry.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
             })
             .ToListAsync();
@@ -272,7 +268,7 @@ public class AdminController : Controller
             .AsNoTracking()
             .Where(entry => entry.Severity == "critical" && entry.CreatedAtUtc >= recentWindow)
             .OrderByDescending(entry => entry.CreatedAtUtc)
-            .Take(10)
+            .Take(4)
             .Select(entry => new ComplianceEventViewModel
             {
                 Title = $"{entry.ActionType} - {entry.ChangedByUsername}",
@@ -981,6 +977,7 @@ public class AdminController : Controller
 
             CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
             CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
+            CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
             CopyDirectoryIfExists(GetDatabaseBackupDirectory(), Path.Combine(backendStaging, "backups"));
             CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
 
@@ -1000,6 +997,7 @@ public class AdminController : Controller
                 {
                     database = System.IO.File.Exists(GetDatabaseFilePath()),
                     inventoryForms = Directory.Exists(GetInventoryFormPdfDirectory()),
+                    inventoryDocuments = Directory.Exists(GetInventoryDocumentsDirectory()),
                     backups = Directory.Exists(GetDatabaseBackupDirectory()),
                     dataProtectionKeys = Directory.Exists(GetDataProtectionKeysDirectory()),
                     frontendBackups = new[]
@@ -1118,12 +1116,15 @@ public class AdminController : Controller
         int page = 1,
         int pageSize = 50,
         string? sortBy = null,
-        string? sortDirection = null)
+        string? sortDirection = null,
+        string? eventGroup = null)
     {
         page = Math.Max(1, page);
         pageSize = NormalizePageSize(pageSize);
         sortBy = NormalizeActivitySortBy(sortBy);
         sortDirection = NormalizeSortDirection(sortDirection);
+
+        var accessOnly = string.Equals(eventGroup, "access", StringComparison.OrdinalIgnoreCase);
 
         var queryResult = await _auditLogService.QueryAsync(new AuditLogQueryRequest
         {
@@ -1141,7 +1142,8 @@ public class AdminController : Controller
             Page = page,
             PageSize = pageSize,
             SortBy = sortBy,
-            SortDirection = sortDirection
+            SortDirection = sortDirection,
+            AccessOnly = accessOnly
         });
 
         var model = new AdminActivityViewModel
@@ -1161,6 +1163,7 @@ public class AdminController : Controller
             PageSize = queryResult.PageSize,
             SortBy = queryResult.SortBy,
             SortDirection = queryResult.SortDirection,
+            EventGroup = eventGroup ?? string.Empty,
             TotalCount = queryResult.TotalCount,
             TotalPages = queryResult.TotalPages,
             SuccessCount = queryResult.SuccessCount,
@@ -4530,6 +4533,7 @@ public class AdminController : Controller
         await RestoreDatabaseFromFileAsync(dbSource);
 
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-forms"), GetInventoryFormPdfDirectory(), overwrite: true);
+        CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-documents"), GetInventoryDocumentsDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "backups"), GetDatabaseBackupDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
 

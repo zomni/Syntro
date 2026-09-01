@@ -46,28 +46,19 @@ const getRankIcon = (index) => {
 const renderSummary = (panel, telemetry) => {
   if (!panel) return;
 
-  const sourceLabel =
-    telemetry?.source === "api" ? "API" :
-    telemetry?.source === "backup" ? "Respaldo local" :
-    telemetry?.source === "static-backup" ? "Respaldo estatico" :
-    telemetry?.source === "empty" ? "Sin datos" :
-    "Desconocido";
-
   const observedAt = telemetry?.latestObservedAtUtc
     ? new Date(telemetry.latestObservedAtUtc).toLocaleString(DISPLAY_LOCALE, { dateStyle: "short", timeStyle: "short", timeZone: DISPLAY_TIME_ZONE })
     : "Sin datos";
 
   panel.summary.innerHTML = `
     <div class="network-telemetry-summary-grid">
-      <div><span>Fuente</span><strong>${sourceLabel}</strong></div>
       <div><span>Estado</span><strong>${telemetry?.healthLabel || "Sin datos"}</strong></div>
-      <div><span>Captura</span><strong>${observedAt}</strong></div>
+      <div class="network-telemetry-summary-capture"><span>Captura</span><strong>${observedAt}</strong></div>
       <div><span>Riesgo</span><strong>${getRiskLabel(telemetry?.latestRiskScore, telemetry?.latestRiskLevel)}</strong></div>
       <div><span>Equipos</span><strong>${Number(telemetry?.latestDeviceCount) || 0}</strong></div>
-      <div><span>Usuarios</span><strong>${Number(telemetry?.latestConnectedUserCount) || 0}</strong></div>
+      <div class="network-telemetry-summary-users"><span>Usuarios</span><strong>${Number(telemetry?.latestConnectedUserCount) || 0}</strong></div>
       ${telemetry?.mlScoredDeviceCount ? `<div><span>ML</span><strong>${telemetry.mlScoredDeviceCount} equipos</strong></div>` : ""}
     </div>
-    ${telemetry?.notes ? `<div class="network-telemetry-summary-notes">${telemetry.notes}</div>` : ""}
   `;
 
   const topObservations = Array.isArray(telemetry?.topRiskObservations) ? telemetry.topRiskObservations : [];
@@ -77,27 +68,26 @@ const renderSummary = (panel, telemetry) => {
   }
 
   panel.list.innerHTML = `
-    <div class="network-telemetry-top-header">Top Riesgos</div>
-    ${topObservations
-      .slice(0, 10)
-      .map((observation, index) => {
-        const reasons = Array.isArray(observation?.riskReasons) ? observation.riskReasons.join(", ") : "";
-        const riskClass = String(observation?.riskLevel || "low").toLowerCase();
-        return `
-          <div class="network-telemetry-item">
-            <div class="network-telemetry-item-rank ${riskClass}">${getRankIcon(index)}</div>
-            <div class="network-telemetry-item-content">
-              <div class="network-telemetry-item-header">
-                <strong>${observation?.deviceName || observation?.externalKey || "Elemento"}</strong>
-                <span class="network-telemetry-risk ${riskClass}">${getRiskLabel(observation?.riskScore, observation?.riskLevel)}</span>
+    <details class="network-telemetry-top-risks">
+      <summary class="route-planner-toggle network-telemetry-top-header">Top Riesgos</summary>
+      <div class="network-telemetry-top-risks-content">
+        ${topObservations
+          .slice(0, 10)
+          .map((observation) => {
+            return `
+              <div class="network-telemetry-item">
+                <div class="network-telemetry-item-content">
+                  <div class="network-telemetry-item-header">
+                    <strong>${observation?.ipAddress || "sin IP"}</strong>
+                    <span class="network-telemetry-risk network-telemetry-risk-score">${Number(observation?.riskScore) || 0}</span>
+                  </div>
+                </div>
               </div>
-              <div class="network-telemetry-item-meta">${observation?.observationType || "device"} · ${observation?.username || "sin usuario"} · ${observation?.ipAddress || "sin IP"}${observation?.scoringSource === "ml-hybrid" ? ` · <span style="color:#16a34a;font-weight:600">ML ${((observation?.mlProbability || 0) * 100).toFixed(0)}%</span>` : ""}</div>
-              ${reasons ? `<div class="network-telemetry-item-reasons">${reasons}</div>` : ""}
-            </div>
-          </div>
-        `;
-      })
-      .join("")}
+            `;
+          })
+          .join("")}
+      </div>
+    </details>
   `;
 };
 
@@ -199,11 +189,24 @@ const initTelemetryPanel = () => {
   }
 
   let toggle = document.getElementById(TOGGLE_ID);
+  let group = document.getElementById("network-telemetry-group");
+  if (!group) {
+    group = document.createElement("div");
+    group.id = "network-telemetry-group";
+    group.className = "map-control-card network-telemetry-group";
+    const routeCard = document.getElementById("route-planner-card");
+    if (routeCard) {
+      routeCard.insertAdjacentElement("afterend", group);
+    } else {
+      topActions.appendChild(group);
+    }
+  }
+
   if (!toggle) {
     toggle = document.createElement("button");
     toggle.id = TOGGLE_ID;
     toggle.type = "button";
-    toggle.className = "dashboard-link network-telemetry-toggle is-muted";
+    toggle.className = "dashboard-link route-planner-toggle network-telemetry-toggle is-muted";
     toggle.setAttribute("aria-expanded", "false");
     toggle.innerHTML = `<span class="map-tool-button-icon" aria-hidden="true">⌁</span><span>Red y riesgo</span>`;
     toggle.addEventListener("click", (event) => {
@@ -212,15 +215,7 @@ const initTelemetryPanel = () => {
       void togglePanel();
     });
 
-    const routePanel = document.getElementById("route-planner-panel");
-    const routeToggle = document.getElementById("route-planner-toggle");
-    if (routePanel) {
-      routePanel.insertAdjacentElement("afterend", toggle);
-    } else if (routeToggle) {
-      routeToggle.insertAdjacentElement("afterend", toggle);
-    } else {
-      topActions.appendChild(toggle);
-    }
+    group.appendChild(toggle);
   }
 
   let panel = document.getElementById(PANEL_ID);
@@ -229,7 +224,7 @@ const initTelemetryPanel = () => {
     panel.id = PANEL_ID;
     panel.className = "network-telemetry-panel";
     panel.hidden = true;
-    toggle.insertAdjacentElement("afterend", panel);
+    group.appendChild(panel);
   }
 
   const panelElements = getPanel();

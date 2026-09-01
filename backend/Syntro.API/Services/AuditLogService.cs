@@ -30,6 +30,19 @@ public class AuditLogService
 
         query = ApplySort(query, sortBy, sortDirection);
 
+        var canonicalSortBy = sortBy switch
+        {
+            "createdat" => "createdAt",
+            "username" => "username",
+            "action" => "action",
+            "resource" => "resource",
+            "result" => "result",
+            "severity" => "severity",
+            "building" => "building",
+            "summary" => "summary",
+            _ => "createdAt"
+        };
+
         var items = await query
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -43,7 +56,7 @@ public class AuditLogService
             Page = page,
             PageSize = pageSize,
             TotalPages = totalPages,
-            SortBy = sortBy,
+            SortBy = canonicalSortBy,
             SortDirection = sortDirection,
             SuccessCount = await query.CountAsync(x => x.Result == "success", cancellationToken),
             FailureCount = await query.CountAsync(x => x.Result == "failure", cancellationToken),
@@ -335,6 +348,16 @@ public class AuditLogService
         if (DateTime.TryParse(request.DateTo, out var toDate))
         {
             query = query.Where(x => x.CreatedAtUtc < toDate.AddDays(1));
+        }
+
+        if (request.AccessOnly)
+        {
+            query = query.Where(x =>
+                x.ActionType == "login-success" ||
+                x.ActionType == "login-failed" ||
+                x.ActionType == "logout" ||
+                x.ActionType == "access-denied" ||
+                x.ActionType == "mfa-verified");
         }
 
         return query;

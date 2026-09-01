@@ -67,6 +67,10 @@
 }
 
 #bLoc {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: 1400;
     display: inline-flex;
     align-items: center;
     justify-content: center;

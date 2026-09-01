@@ -8,6 +8,17 @@ const inventoryLinkId = "session-inventory-link";
 const sessionPollMs = 10000;
 let lastSessionKey = "";
 let pollHandle = null;
+let minimalMapMode = false;
+
+const updateMinimalMapMode = () => {
+  document.body.classList.toggle("map-ui-minimal", minimalMapMode);
+  const button = document.querySelector(".session-mode-visibility");
+  if (!button) return;
+  button.setAttribute("aria-pressed", String(minimalMapMode));
+  button.title = minimalMapMode ? "Mostrar controles del mapa" : "Ocultar controles del mapa";
+  button.setAttribute("aria-label", button.title);
+  button.classList.toggle("is-active", minimalMapMode);
+};
 
 const loadSession = async () => {
   try {
@@ -79,7 +90,12 @@ const renderBadge = (badge, session) => {
 
   badge.innerHTML = `
     <div class="session-mode-info">
-      <span class="session-mode-label">${buildLabel(session)}</span>
+      <div class="session-mode-heading">
+        <span class="session-mode-label">${buildLabel(session)}</span>
+        <button type="button" class="session-mode-visibility" aria-pressed="false" title="Ocultar controles del mapa" aria-label="Ocultar controles del mapa">
+          <span class="session-mode-eye-icon" aria-hidden="true"></span>
+        </button>
+      </div>
       ${userLabel}
     </div>
     ${
@@ -99,6 +115,14 @@ const renderBadge = (badge, session) => {
     event.stopPropagation();
     logout();
   });
+
+  badge.querySelector(".session-mode-visibility")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    minimalMapMode = !minimalMapMode;
+    updateMinimalMapMode();
+  });
+  updateMinimalMapMode();
 };
 
 const ensureBadge = () => {

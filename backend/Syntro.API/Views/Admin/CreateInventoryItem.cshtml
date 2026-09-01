@@ -1,3 +1,4 @@
+@using Syntro.API.Infrastructure
 @model Syntro.API.ViewModels.CreateInventoryItemViewModel
 @{
     ViewData["Title"] = "Agregar equipo";
@@ -48,7 +49,7 @@
                                 <select asp-for="Form.InferredCategory" class="form-select">
                                     @foreach (var category in Model.Categories)
                                     {
-                                        <option value="@category">@category</option>
+                                        <option value="@category">@InventoryDisplayLabels.Category(category)</option>
                                     }
                                 </select>
                                 <span asp-validation-for="Form.InferredCategory" class="text-danger small"></span>
@@ -58,7 +59,7 @@
                                 <select asp-for="Form.InferredStatus" class="form-select">
                                     @foreach (var status in Model.Statuses)
                                     {
-                                        <option value="@status">@status</option>
+                                        <option value="@status">@InventoryDisplayLabels.Status(status)</option>
                                     }
                                 </select>
                                 <span asp-validation-for="Form.InferredStatus" class="text-danger small"></span>

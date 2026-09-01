@@ -527,7 +527,7 @@
 {
     <div class="row g-4 mt-1">
         <div class="col-12">
-            <div class="card dashboard-card">
+            <div class="card dashboard-card" id="database-card">
                 <div class="card-header bg-white fw-semibold">Base de datos</div>
                 <div class="card-body">
                     <div class="row g-4 align-items-start">
@@ -535,11 +535,11 @@
                             <div class="fw-semibold mb-1">Paquete completo</div>
                             <div class="form-text mb-3">Descarga el paquete con todos los datos y restaura la aplicacion completa con un solo archivo.</div>
                             <div class="d-grid gap-2">
-                                <a href="/dashboard/project-package/download" class="btn btn-outline-dark">
+                                <a href="/dashboard/project-package/download" class="btn btn-outline-dark" id="projectPackageDownloadButton">
                                     <i class="bi bi-box-seam me-1"></i> Descargar paquete completo
                                 </a>
                             </div>
-                            <div class="form-text mt-2">El paquete completo incluye DB, formularios PDF, claves locales de sesion/MFA y respaldos offline del frontend.</div>
+                            <div class="form-text mt-2">El paquete completo incluye DB, formularios PDF, documentos de equipos, claves locales de sesion/MFA y respaldos offline del frontend.</div>
                         </div>
                         <div class="col-lg-7">
                             <div class="small text-muted mb-2">Restaurar paquete completo</div>
@@ -706,8 +706,8 @@
 }
 
 <div class="row g-4 mt-1">
-    <div class="col-12">
-        <div class="card dashboard-card">
+    <div class="col-lg-6">
+        <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
                 <span>Ultimos cambios registrados</span>
                 <a href="/dashboard/activity" class="btn btn-sm btn-outline-secondary">Ver completo</a>
@@ -748,7 +748,12 @@
                     </table>
                 </div>
             </div>
-            <div class="card-header bg-white fw-semibold border-top">Ultimos registros importados</div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card dashboard-card h-100">
+            <div class="card-header bg-white fw-semibold">Ultimos registros importados</div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
@@ -818,6 +823,22 @@
             packageUploadForm.addEventListener("submit", () => {
                 hasPendingProjectPackageFile = false;
             });
+
+            const packageDownloadButton = document.getElementById("projectPackageDownloadButton");
+            if (packageDownloadButton) {
+                packageDownloadButton.addEventListener("click", function () {
+                    var btn = this;
+                    btn.dataset.origHtml = btn.innerHTML;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Generando paquete...';
+                    btn.classList.add("disabled");
+                    btn.setAttribute("aria-disabled", "true");
+                    setTimeout(function () {
+                        btn.innerHTML = btn.dataset.origHtml;
+                        btn.classList.remove("disabled");
+                        btn.removeAttribute("aria-disabled");
+                    }, 30000);
+                });
+            }
 
             document.addEventListener("click", (event) => {
                 const anchor = event.target.closest("a[href]");
