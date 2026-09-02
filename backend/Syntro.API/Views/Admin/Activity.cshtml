@@ -57,6 +57,7 @@
     var criticalCount = GetModelInt("CriticalCount");
     var warningCount = GetModelInt("WarningCount");
     var items = GetModelItems();
+    var eventGroup = GetModelString("EventGroup");
 
     var activeFilters = new List<string>();
     if (!string.IsNullOrWhiteSpace(buildingExternalId)) { activeFilters.Add($"Edificio: {buildingExternalId}"); }
@@ -70,6 +71,7 @@
     if (!string.IsNullOrWhiteSpace(userAgent)) { activeFilters.Add($"Agente: {userAgent}"); }
     if (!string.IsNullOrWhiteSpace(dateFrom)) { activeFilters.Add($"Desde: {dateFrom}"); }
     if (!string.IsNullOrWhiteSpace(dateTo)) { activeFilters.Add($"Hasta: {dateTo}"); }
+    if (!string.IsNullOrWhiteSpace(eventGroup)) { activeFilters.Add($"Grupo: {eventGroup}"); }
     if (pageSize != 50) { activeFilters.Add($"Por pagina: {pageSize}"); }
 
     List<KeyValuePair<string, string?>> BuildActivityQuery(int? pageOverride = null, int? pageSizeOverride = null, string? sortByOverride = null, string? sortDirectionOverride = null)
@@ -95,6 +97,7 @@
         Add("userAgent", userAgent);
         Add("from", dateFrom);
         Add("to", dateTo);
+        Add("eventGroup", eventGroup);
         Add("sortBy", sortByOverride ?? sortBy);
         Add("sortDirection", sortDirectionOverride ?? sortDirection);
 
