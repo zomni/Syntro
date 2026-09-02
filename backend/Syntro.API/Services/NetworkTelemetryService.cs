@@ -19,6 +19,7 @@ public class NetworkTelemetryService
     private readonly AuditLogService _auditLogService;
     private readonly RiskPredictionService _riskPredictionService;
     private readonly MlSettingsService _mlSettings;
+    private readonly MlAutoTrainService _autoTrainService;
     private readonly ILogger<NetworkTelemetryService> _logger;
     private readonly TimeZoneInfo _displayTimeZone;
     private readonly CultureInfo _displayCulture;
@@ -29,6 +30,7 @@ public class NetworkTelemetryService
         AuditLogService auditLogService,
         RiskPredictionService riskPredictionService,
         MlSettingsService mlSettings,
+        MlAutoTrainService autoTrainService,
         ILogger<NetworkTelemetryService> logger)
     {
         _context = context;
@@ -36,6 +38,7 @@ public class NetworkTelemetryService
         _auditLogService = auditLogService;
         _riskPredictionService = riskPredictionService;
         _mlSettings = mlSettings;
+        _autoTrainService = autoTrainService;
         _logger = logger;
         _displayTimeZone = TelemetryTimeSettings.ResolveTimeZone(configuration);
         _displayCulture = TelemetryTimeSettings.ResolveCulture(configuration);
@@ -889,6 +892,11 @@ public class NetworkTelemetryService
             {
                 _logger.LogWarning(ex, "No se pudo actualizar el ScheduledScanRun asociado al ingesta programada.");
             }
+        }
+
+        if (deviceObservations.Count > 0 && _mlSettings.IsEnabled)
+        {
+            _ = Task.Run(() => _autoTrainService.TrainRiskAsync(cancellationToken), cancellationToken);
         }
 
         return new NetworkTelemetryIngestResultViewModel

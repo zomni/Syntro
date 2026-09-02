@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.IO;
 using System.Reflection;
 using Syntro.API.Data;
 using Syntro.API.Models;
@@ -15,11 +16,13 @@ public class InventoryImportController : ControllerBase
 {
     private readonly ExcelInventoryImportService _importService;
     private readonly AppDbContext _context;
+    private readonly IConfiguration _configuration;
 
-    public InventoryImportController(ExcelInventoryImportService importService, AppDbContext context)
+    public InventoryImportController(ExcelInventoryImportService importService, AppDbContext context, IConfiguration configuration)
     {
         _importService = importService;
         _context = context;
+        _configuration = configuration;
     }
 
     [HttpGet("status")]
@@ -129,6 +132,42 @@ public class InventoryImportController : ControllerBase
         CancellationToken cancellationToken = default)
     {
         var result = await _importService.ImportAsync(fileName, sheetName, merge, cancellationToken);
+        return Ok(result);
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("upload")]
+    public async Task<IActionResult> Upload(
+        IFormFile file,
+        [FromQuery] bool merge = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { error = "No se proporciono un archivo." });
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (ext != ".xlsx" && ext != ".csv")
+        {
+            return BadRequest(new { error = "Formato no soportado. Use .xlsx o .csv." });
+        }
+
+        var importRoot = _configuration["ExcelImportRoot"];
+        if (string.IsNullOrWhiteSpace(importRoot))
+        {
+            return StatusCode(500, new { error = "ExcelImportRoot no esta configurado." });
+        }
+
+        Directory.CreateDirectory(importRoot);
+        var safeFileName = Path.GetFileName(file.FileName);
+        var destinationPath = Path.Combine(importRoot, safeFileName);
+
+        await using var stream = new FileStream(destinationPath, FileMode.Create);
+        await file.CopyToAsync(stream, cancellationToken);
+        await stream.FlushAsync(cancellationToken);
+
+        var result = await _importService.ImportAsync(safeFileName, null, merge, cancellationToken);
         return Ok(result);
     }
 

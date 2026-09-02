@@ -330,6 +330,78 @@
     }
 </style>
 
+@if (isAdmin)
+{
+    <div class="card dashboard-card mb-4 fade-in-up">
+        <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-upload me-2"></i>Subir archivo de inventario</span>
+            <span class="text-muted small">Formatos soportados: .xlsx, .csv</span>
+        </div>
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-3">
+                <input type="file" id="import-file-input" accept=".xlsx,.csv" class="form-control" style="max-width: 400px;" />
+                <button type="button" id="import-upload-btn" class="btn btn-primary" onclick="uploadImportFile()" disabled>
+                    <i class="bi bi-cloud-upload me-1"></i>Subir e importar
+                </button>
+                <span id="import-upload-status" class="text-muted small"></span>
+            </div>
+        </div>
+    </div>
+    <script>
+        const importFileInput = document.getElementById("import-file-input");
+        const importUploadBtn = document.getElementById("import-upload-btn");
+        const importUploadStatus = document.getElementById("import-upload-status");
+
+        importFileInput.addEventListener("change", () => {
+            importUploadBtn.disabled = !importFileInput.files.length;
+        });
+
+        async function uploadImportFile() {
+            const file = importFileInput.files[0];
+            if (!file) return;
+
+            const ext = file.name.split(".").pop().toLowerCase();
+            if (ext !== "xlsx" && ext !== "csv") {
+                alert("Formato no soportado. Use .xlsx o .csv.");
+                return;
+            }
+
+            importUploadBtn.disabled = true;
+            importUploadStatus.textContent = "Subiendo e importando...";
+            importUploadStatus.className = "text-muted small";
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const r = await fetch("/api/inventory-import/upload?merge=false", {
+                    method: "POST",
+                    body: formData,
+                    credentials: "same-origin"
+                });
+
+                if (r.ok) {
+                    const data = await r.json();
+                    const imported = data.importedItemsCount ?? 0;
+                    const merged = data.mergedItemsCount ?? 0;
+                    importUploadStatus.textContent = `Importado: ${imported} items${merged > 0 ? `, ${merged} fusionados` : ""}`;
+                    importUploadStatus.className = "text-success small";
+                    importFileInput.value = "";
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    const err = await r.json().catch(() => ({ error: "Error desconocido" }));
+                    importUploadStatus.textContent = `Error: ${err.error || "No se pudo importar."}`;
+                    importUploadStatus.className = "text-danger small";
+                    importUploadBtn.disabled = false;
+                }
+            } catch (e) {
+                importUploadStatus.textContent = "Error de red.";
+                importUploadStatus.className = "text-danger small";
+                importUploadBtn.disabled = false;
+            }
+        }
+    </script>
+}
 
 <div class="row g-4 mb-4">
     <div class="col-xl col-md-6 fade-in-up fade-in-up-d1">

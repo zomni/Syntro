@@ -16,6 +16,7 @@ public class ExcelInventoryImportService
     private readonly IConfiguration _configuration;
     private readonly ItemClassificationService _classificationService;
     private readonly MlSettingsService _mlSettings;
+    private readonly MlAutoTrainService _autoTrainService;
 
     private static readonly XNamespace SpreadsheetNs = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private static readonly XNamespace OfficeRelNs = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -25,12 +26,14 @@ public class ExcelInventoryImportService
         AppDbContext context,
         IConfiguration configuration,
         ItemClassificationService classificationService,
-        MlSettingsService mlSettings)
+        MlSettingsService mlSettings,
+        MlAutoTrainService autoTrainService)
     {
         _context = context;
         _configuration = configuration;
         _classificationService = classificationService;
         _mlSettings = mlSettings;
+        _autoTrainService = autoTrainService;
     }
 
     public async Task<ExcelImportStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -58,10 +61,11 @@ public class ExcelInventoryImportService
         var excelPath = ResolveExcelPath(fileName);
         if (!File.Exists(excelPath))
         {
-            throw new FileNotFoundException("No se encontro el Excel de inventario en la ruta configurada.", excelPath);
+            throw new FileNotFoundException("No se encontro el archivo de inventario en la ruta configurada.", excelPath);
         }
 
-        var rows = ParseWorksheet(excelPath, sheetName);
+        var isCsv = excelPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
+        var rows = isCsv ? ParseCsv(excelPath) : ParseWorksheet(excelPath, sheetName);
         var importedAt = DateTime.UtcNow;
         var baseSourceFile = Path.GetFileName(excelPath);
         var sourceFile = string.IsNullOrWhiteSpace(sheetName)
@@ -164,6 +168,11 @@ public class ExcelInventoryImportService
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        if (insertedItems.Count > 0 && _mlSettings.IsEnabled)
+        {
+            _ = Task.Run(() => _autoTrainService.TrainClassificationAsync(cancellationToken), cancellationToken);
+        }
+
         return new ExcelImportResult
         {
             ExcelPath = excelPath,
@@ -225,6 +234,118 @@ public class ExcelInventoryImportService
                 !string.IsNullOrWhiteSpace(r.Get("PL_LOTE")) ||
                 !string.IsNullOrWhiteSpace(r.Get("S_N")))
             .ToList();
+    }
+
+    private static List<ParsedRow> ParseCsv(string path)
+    {
+        var lines = File.ReadAllLines(path, Encoding.UTF8);
+        if (lines.Length < 2)
+        {
+            throw new InvalidOperationException("El archivo CSV debe tener al menos una fila de encabezados y una de datos.");
+        }
+
+        var delimiter = DetectDelimiter(lines[0]);
+        var headerCells = ParseCsvLine(lines[0], delimiter);
+        var headers = headerCells.Select(NormalizeHeader).ToList();
+        var rows = new List<ParsedRow>();
+
+        for (int i = 1; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var cells = ParseCsvLine(line, delimiter);
+            var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int j = 0; j < Math.Min(headers.Count, cells.Count); j++)
+            {
+                if (!string.IsNullOrWhiteSpace(headers[j]))
+                {
+                    values[headers[j]] = NormalizeValue(headers[j], cells[j]);
+                }
+            }
+
+            var row = new ParsedRow(i + 1, values);
+            if (!string.IsNullOrWhiteSpace(row.Get("ITE_DESCRIPCION")) ||
+                !string.IsNullOrWhiteSpace(row.Get("PL_LOTE")) ||
+                !string.IsNullOrWhiteSpace(row.Get("S_N")))
+            {
+                rows.Add(row);
+            }
+        }
+
+        return rows;
+    }
+
+    private static char DetectDelimiter(string headerLine)
+    {
+        int commaCount = 0, semicolonCount = 0, tabCount = 0;
+        bool inQuotes = false;
+
+        foreach (var c in headerLine)
+        {
+            if (c == '"') { inQuotes = !inQuotes; continue; }
+            if (inQuotes) continue;
+            if (c == ',') commaCount++;
+            else if (c == ';') semicolonCount++;
+            else if (c == '\t') tabCount++;
+        }
+
+        if (semicolonCount > commaCount && semicolonCount > tabCount) return ';';
+        if (tabCount > commaCount) return '\t';
+        return ',';
+    }
+
+    private static List<string> ParseCsvLine(string line, char delimiter)
+    {
+        var result = new List<string>();
+        var current = new StringBuilder();
+        bool inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == delimiter)
+                {
+                    result.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+        }
+
+        result.Add(current.ToString());
+        return result;
     }
 
     private static XDocument LoadWorksheet(ZipArchive zip, string? sheetName)

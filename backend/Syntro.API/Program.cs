@@ -176,6 +176,7 @@ builder.Services.AddScoped<NetworkTelemetryAgentBridgeService>();
 builder.Services.AddSingleton<MlSettingsService>();
 builder.Services.AddSingleton<ItemClassificationService>();
 builder.Services.AddSingleton<RiskPredictionService>();
+builder.Services.AddScoped<MlAutoTrainService>();
 builder.Services.AddHostedService<NetworkTelemetryLiveScanHostedService>();
 
 // CORS para que el frontend (syntro) pueda consumir la API

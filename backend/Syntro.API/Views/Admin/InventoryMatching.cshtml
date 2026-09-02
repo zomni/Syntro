@@ -202,7 +202,7 @@
 </div>
 
 <div class="row g-3 mb-3">
-    <div class="col-lg-5">
+    <div class="col-lg-4">
         <div class="card telemetry-card h-100">
             <div class="card-header">
                 <h6 class="mb-0 fw-semibold">Metodo de coincidencia</h6>
@@ -214,7 +214,7 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-7">
+    <div class="col-lg-8">
         <div class="card telemetry-card h-100">
             <div class="card-header">
                 <h6 class="mb-0 fw-semibold">Riesgo por estado de cruce</h6>
@@ -355,18 +355,43 @@ window.addEventListener("DOMContentLoaded", () => {
         const matchedByRisk = summary.matchedByRiskLevel || {};
         const unmatchedByRisk = summary.unmatchedByRiskLevel || {};
         const riskArea = document.getElementById("risk-breakdown-area");
-        riskArea.innerHTML = ["critical", "high", "medium", "low"].map((level) => {
-            const m = matchedByRisk[level] ?? 0;
-            const u = unmatchedByRisk[level] ?? 0;
-            return `
-                <div class="border rounded p-2 flex-fill" style="min-width: 140px;">
-                    <div class="small text-muted text-uppercase">${level}</div>
-                    <div class="d-flex justify-content-between gap-2 small">
-                        <span class="text-success fw-semibold"><i class="bi bi-check2 me-1"></i>${m}</span>
-                        <span class="text-danger fw-semibold"><i class="bi bi-x me-1"></i>${u}</span>
+        const riskLevels = [
+            { key: "critical", label: "Critico", cls: "text-danger" },
+            { key: "high",     label: "Alto",    cls: "text-warning" },
+            { key: "medium",   label: "Medio",   cls: "text-info" },
+            { key: "low",      label: "Bajo",    cls: "text-success" }
+        ];
+        const rows = riskLevels.map(({ key, label, cls }) => {
+            const m = matchedByRisk[key] ?? 0;
+            const u = unmatchedByRisk[key] ?? 0;
+            const total = m + u;
+            const pct = total > 0 ? Math.round((m / total) * 100) : 0;
+            return `<tr>
+                <td class="fw-semibold ${cls}">${label}</td>
+                <td class="text-center">${m}</td>
+                <td class="text-center">${u}</td>
+                <td style="width:40%">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="flex-grow-1" style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
+                            <div style="width:${pct}%;height:100%;background:${cls === "text-danger" ? "#ef4444" : cls === "text-warning" ? "#f59e0b" : cls === "text-info" ? "#0ea5e9" : "#22c55e"};border-radius:4px;"></div>
+                        </div>
+                        <span class="small text-muted" style="min-width:32px;text-align:right;">${pct}%</span>
                     </div>
-                </div>`;
+                </td>
+            </tr>`;
         }).join("");
+        riskArea.innerHTML = `
+            <table class="table table-sm align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th class="text-center">Coincididos</th>
+                        <th class="text-center">Sin coincidir</th>
+                        <th>Proporcion</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
 
         const topUnmatched = Array.isArray(summary.topUnmatched) ? summary.topUnmatched : [];
         const topArea = document.getElementById("top-unmatched-area");

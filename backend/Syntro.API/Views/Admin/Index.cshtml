@@ -630,12 +630,7 @@
             <div class="card dashboard-card">
                 <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
                     <span><i class="bi bi-cpu me-2"></i>Machine Learning</span>
-                    <div class="d-flex align-items-center gap-3">
-                        <span id="ml-status-badge" class="badge bg-secondary">Cargando...</span>
-                        <button id="ml-toggle-btn" class="btn btn-sm btn-outline-secondary" onclick="mlToggle()" disabled>
-                            <i class="bi bi-power me-1"></i>Toggle
-                        </button>
-                    </div>
+                    <span id="ml-status-badge" class="badge bg-secondary">Cargando...</span>
                 </div>
                 <div class="card-body">
                     <div class="row g-4">
@@ -651,14 +646,6 @@
                                 Archivo: <span id="ml-class-file">--</span> |
                                 Tamano: <span id="ml-class-size">--</span> |
                                 Actualizado: <span id="ml-class-date">--</span>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button id="ml-class-train-btn" class="btn btn-sm btn-primary" onclick="mlTrain('item-classification')" disabled>
-                                    <i class="bi bi-play-circle me-1"></i>Entrenar
-                                </button>
-                                <button id="ml-class-delete-btn" class="btn btn-sm btn-outline-danger" onclick="mlDelete('item-classification')" disabled>
-                                    <i class="bi bi-trash me-1"></i>Eliminar
-                                </button>
                             </div>
                             <div class="text-muted small mt-2" id="ml-class-metrics" style="display:none">
                                 Accuracy: <span id="ml-class-accuracy">--</span> |
@@ -681,14 +668,6 @@
                             <div class="text-muted small mb-2" id="ml-weights-row" style="display:none">
                                 Peso ML: <span id="ml-ml-weight">--</span> |
                                 Peso reglas: <span id="ml-rule-weight">--</span>
-                            </div>
-                            <div class="d-flex gap-2">
-                                <button id="ml-risk-train-btn" class="btn btn-sm btn-primary" onclick="mlTrain('risk-prediction')" disabled>
-                                    <i class="bi bi-play-circle me-1"></i>Entrenar
-                                </button>
-                                <button id="ml-risk-delete-btn" class="btn btn-sm btn-outline-danger" onclick="mlDelete('risk-prediction')" disabled>
-                                    <i class="bi bi-trash me-1"></i>Eliminar
-                                </button>
                             </div>
                             <div class="text-muted small mt-2" id="ml-risk-metrics" style="display:none">
                                 Accuracy: <span id="ml-risk-accuracy">--</span> |
@@ -964,19 +943,14 @@
     {
     <script>
         const mlStatusBadge = document.getElementById("ml-status-badge");
-        const mlToggleBtn = document.getElementById("ml-toggle-btn");
         const mlClassStatus = document.getElementById("ml-class-status");
         const mlClassFile = document.getElementById("ml-class-file");
         const mlClassSize = document.getElementById("ml-class-size");
         const mlClassDate = document.getElementById("ml-class-date");
-        const mlClassTrainBtn = document.getElementById("ml-class-train-btn");
-        const mlClassDeleteBtn = document.getElementById("ml-class-delete-btn");
         const mlRiskStatus = document.getElementById("ml-risk-status");
         const mlRiskFile = document.getElementById("ml-risk-file");
         const mlRiskSize = document.getElementById("ml-risk-size");
         const mlRiskDate = document.getElementById("ml-risk-date");
-        const mlRiskTrainBtn = document.getElementById("ml-risk-train-btn");
-        const mlRiskDeleteBtn = document.getElementById("ml-risk-delete-btn");
         const mlWeightsRow = document.getElementById("ml-weights-row");
         const mlMlWeight = document.getElementById("ml-ml-weight");
         const mlRuleWeight = document.getElementById("ml-rule-weight");
@@ -1014,10 +988,6 @@
         function mlRenderStatus(s) {
             mlStatusBadge.textContent = s.enabled ? "Activo" : "Inactivo";
             mlStatusBadge.className = "badge " + (s.enabled ? "bg-success" : "bg-secondary");
-            mlToggleBtn.disabled = false;
-            mlToggleBtn.innerHTML = s.enabled
-                ? '<i class="bi bi-power me-1"></i>Desactivar'
-                : '<i class="bi bi-power me-1"></i>Activar';
 
             var ic = s.itemClassification;
             mlClassStatus.textContent = ic.loaded ? "Cargado" : ic.fileExists ? "Disponible" : "Sin modelo";
@@ -1025,8 +995,6 @@
             mlClassFile.textContent = ic.fileExists ? "item-classification.zip" : "--";
             mlClassSize.textContent = mlFormatBytes(ic.fileSizeBytes);
             mlClassDate.textContent = mlFormatDate(ic.lastModifiedUtc);
-            mlClassTrainBtn.disabled = false;
-            mlClassDeleteBtn.disabled = !ic.fileExists;
 
             var rp = s.riskPrediction;
             mlRiskStatus.textContent = rp.loaded ? "Cargado" : rp.fileExists ? "Disponible" : "Sin modelo";
@@ -1034,8 +1002,6 @@
             mlRiskFile.textContent = rp.fileExists ? "risk-prediction.zip" : "--";
             mlRiskSize.textContent = mlFormatBytes(rp.fileSizeBytes);
             mlRiskDate.textContent = mlFormatDate(rp.lastModifiedUtc);
-            mlRiskTrainBtn.disabled = false;
-            mlRiskDeleteBtn.disabled = !rp.fileExists;
 
             if (rp.mlWeight !== undefined && rp.ruleWeight !== undefined) {
                 mlWeightsRow.style.display = "";
@@ -1074,63 +1040,6 @@
                 if (!r.ok) return;
                 mlRenderStatus(await r.json());
             } catch (e) { console.error("ML status error:", e); }
-        }
-
-        async function mlToggle() {
-            mlToggleBtn.disabled = true;
-            try {
-                var badgeText = mlStatusBadge.textContent;
-                var currentlyEnabled = badgeText === "Activo";
-                var r = await fetch("/api/ml/toggle", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ enabled: !currentlyEnabled })
-                });
-                if (r.ok) await mlFetchStatus();
-            } catch (e) { console.error("ML toggle error:", e); }
-            mlToggleBtn.disabled = false;
-        }
-
-        async function mlTrain(modelType) {
-            var btn = modelType === "item-classification" ? mlClassTrainBtn : mlRiskTrainBtn;
-            var orig = btn.innerHTML;
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Entrenando...';
-            try {
-                var r = await fetch("/api/ml/train-" + modelType, { method: "POST" });
-                var data = await r.json();
-                if (r.ok) {
-                    var metricsDiv = modelType === "item-classification" ? mlClassMetrics : mlRiskMetrics;
-                    var accSpan = modelType === "item-classification" ? mlClassAccuracy : mlRiskAccuracy;
-                    var f1Span = modelType === "item-classification" ? mlClassF1 : mlRiskF1;
-                    var accText = (data.accuracy * 100).toFixed(1) + "%";
-                    var f1Text = (data.f1Score * 100).toFixed(1) + "%";
-                    if (data.accuracyStdDev > 0) accText += " \u00B1 " + (data.accuracyStdDev * 100).toFixed(1) + "%";
-                    if (data.f1ScoreStdDev > 0) f1Text += " \u00B1 " + (data.f1ScoreStdDev * 100).toFixed(1) + "%";
-                    accSpan.textContent = accText;
-                    f1Span.textContent = f1Text;
-                    metricsDiv.style.display = "";
-                    var rescoredInfo = data.mlRescoredCount !== undefined ? "\nRe-clasificados por ML: " + data.mlRescoredCount + " de " + (data.totalItems || data.totalObservations) : "";
-                    alert("Modelo entrenado con " + data.samples + " muestras.\nAccuracy: " + accText + "\nF1: " + f1Text + rescoredInfo);
-                } else {
-                    alert("Error: " + (data.error || "No se pudo entrenar."));
-                }
-                await mlFetchStatus();
-            } catch (e) { console.error("ML train error:", e); alert("Error de red."); }
-            btn.innerHTML = orig;
-            btn.disabled = false;
-        }
-
-        async function mlDelete(modelType) {
-            if (!confirm("Eliminar el modelo " + modelType + "?")) return;
-            var btn = modelType === "item-classification" ? mlClassDeleteBtn : mlRiskDeleteBtn;
-            btn.disabled = true;
-            try {
-                var r = await fetch("/api/ml/delete-model/" + modelType, { method: "POST" });
-                if (r.ok) await mlFetchStatus();
-                else alert("No se pudo eliminar.");
-            } catch (e) { console.error("ML delete error:", e); }
-            btn.disabled = false;
         }
 
         mlFetchStatus();
