@@ -1,6 +1,7 @@
 import { BACKEND_API_URL, map } from "../views/map.js";
 import {
-  getAdminMapToolsButtons,
+  getAdminMapToolSection,
+  getAdminMapToolsFooter,
   removeAdminMapToolsPanelIfEmpty,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
@@ -41,6 +42,7 @@ let routeNetworkCache = null;
 let routeEdgeLayers = new Map();
 let lastRouteUndoSnapshot = null;
 let lastRouteUndoActionType = "";
+let lastBuildingUndo = null;
 let selectedBuildingConnectNode = null;
 
 const setStatus = (message) => setAdminMapToolsStatus(message);
@@ -369,17 +371,40 @@ const cloneNetwork = (network) => ({
 const updateUndoButtonState = () => {
   const button = getUndoButton();
   if (!button) return;
-  button.disabled = !lastRouteUndoSnapshot;
-  button.classList.toggle("is-muted", !lastRouteUndoSnapshot);
+  const hasUndo = Boolean(lastRouteUndoSnapshot || lastBuildingUndo);
+  button.disabled = !hasUndo;
+  button.classList.toggle("is-muted", !hasUndo);
+  button.title = hasUndo
+    ? `Deshacer: ${lastBuildingUndo?.label || lastRouteUndoActionType || "ultima accion"}`
+    : "Deshacer ultima accion";
+  button.setAttribute("aria-label", button.title);
 };
 
 const captureRouteUndoSnapshot = async (actionType = "route") => {
   lastRouteUndoSnapshot = cloneNetwork(await loadRoutes());
   lastRouteUndoActionType = actionType;
+  lastBuildingUndo = null;
+  updateUndoButtonState();
+};
+
+export const registerBuildingUndo = ({ label, restore }) => {
+  if (typeof restore !== "function") return;
+  lastRouteUndoSnapshot = null;
+  lastRouteUndoActionType = "";
+  lastBuildingUndo = { label: label || "edificio", restore };
   updateUndoButtonState();
 };
 
 const restoreRouteUndoSnapshot = async () => {
+  if (lastBuildingUndo) {
+    const pending = lastBuildingUndo;
+    await pending.restore();
+    lastBuildingUndo = null;
+    updateUndoButtonState();
+    setStatus(`Se deshizo: ${pending.label}.`);
+    return;
+  }
+
   if (!lastRouteUndoSnapshot) {
     setStatus("No hay acciones de rutas para deshacer.");
     return;
@@ -407,6 +432,7 @@ const restoreRouteUndoSnapshot = async () => {
   const actionType = lastRouteUndoActionType;
   lastRouteUndoSnapshot = null;
   lastRouteUndoActionType = "";
+  lastBuildingUndo = null;
   updateUndoButtonState();
   await syncRoutesBackupAfterMutation();
   resetRoutesCache();
@@ -932,10 +958,12 @@ const buildActionButtons = () => {
   const wrapper = document.createElement("div");
   wrapper.className = `${activeActionsClass} building-geometry-active-actions`;
   wrapper.innerHTML = `
-    <button type="button" class="dashboard-link is-icon-only" data-route-free-draw aria-pressed="false" title="Dibujo libre" aria-label="Dibujo libre"><span class="map-tool-button-icon" aria-hidden="true">↝</span></button>
-    <button type="button" class="dashboard-link manual-building-editor-button is-icon-only" data-route-save title="Guardar ruta" aria-label="Guardar ruta"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
-    <button type="button" class="dashboard-link is-icon-only" data-route-cancel title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
+    <button type="button" class="dashboard-link route-tool-button is-icon-only" data-route-free-draw aria-pressed="false" title="Dibujo libre" aria-label="Dibujo libre"><span class="map-tool-button-icon" aria-hidden="true">↝</span></button>
+    <button type="button" class="dashboard-link manual-building-editor-button route-tool-button action-save-button is-icon-only" data-route-save title="Guardar ruta" aria-label="Guardar ruta"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
+    <button type="button" class="dashboard-link action-cancel-button is-icon-only" data-route-cancel title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
   `;
+  wrapper.querySelector("[data-route-free-draw]")?.classList.remove("route-tool-button");
+  wrapper.querySelector("[data-route-save]")?.classList.remove("route-tool-button");
 
   wrapper.querySelector("[data-route-save]")?.addEventListener("click", (event) => {
     stopEvent(event);
@@ -963,12 +991,7 @@ const setActiveControls = () => {
   const controls = getEditorControls();
   if (!controls || controls.querySelector(`.${activeActionsClass}`)) return;
   const actionButtons = buildActionButtons();
-  const undoButton = getUndoButton();
-  if (undoButton?.parentElement === controls) {
-    controls.insertBefore(actionButtons, undoButton);
-  } else {
-    controls.appendChild(actionButtons);
-  }
+  controls.appendChild(actionButtons);
 };
 
 const stopDrawing = ({ clearActiveTool = true } = {}) => {
@@ -1157,8 +1180,8 @@ const toggleBuildingConnectMode = () => {
 };
 
 const createEditorControls = () => {
-  const buttons = getAdminMapToolsButtons();
-  if (!buttons || getEditorButton()) return;
+  const sectionBody = getAdminMapToolSection("routes");
+  if (!sectionBody || getEditorButton()) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = controlsId;
@@ -1166,9 +1189,11 @@ const createEditorControls = () => {
 
   const button = document.createElement("button");
   button.id = editorButtonId;
-  button.className = "dashboard-link manual-building-editor-button";
+  button.className = "dashboard-link manual-building-editor-button route-tool-button";
   button.type = "button";
-  setToolButtonContent(button, "⌁", "Editar rutas");
+  setToolButtonContent(button, "&#8764;");
+  button.title = "Editar rutas";
+  button.setAttribute("aria-label", button.title);
   button.addEventListener("click", (event) => {
     stopEvent(event);
     toggleDrawing();
@@ -1176,9 +1201,11 @@ const createEditorControls = () => {
 
   const deleteButton = document.createElement("button");
   deleteButton.id = deleteButtonId;
-  deleteButton.className = "dashboard-link manual-building-editor-button";
+  deleteButton.className = "dashboard-link manual-building-editor-button route-tool-button";
   deleteButton.type = "button";
-  setToolButtonContent(deleteButton, "−", "Eliminar ruta");
+  setToolButtonContent(deleteButton, "&#10005;");
+  deleteButton.title = "Eliminar ruta";
+  deleteButton.setAttribute("aria-label", deleteButton.title);
   deleteButton.addEventListener("click", (event) => {
     stopEvent(event);
     toggleDeleteMode();
@@ -1186,9 +1213,11 @@ const createEditorControls = () => {
 
   const splitButton = document.createElement("button");
   splitButton.id = splitButtonId;
-  splitButton.className = "dashboard-link manual-building-editor-button";
+  splitButton.className = "dashboard-link manual-building-editor-button route-tool-button";
   splitButton.type = "button";
-  setToolButtonContent(splitButton, "⌯", "Separar vértice");
+  setToolButtonContent(splitButton, "&#9585;");
+  splitButton.title = "Separar vertice";
+  splitButton.setAttribute("aria-label", splitButton.title);
   splitButton.addEventListener("click", (event) => {
     stopEvent(event);
     toggleSplitMode();
@@ -1196,9 +1225,11 @@ const createEditorControls = () => {
 
   const buildingConnectButton = document.createElement("button");
   buildingConnectButton.id = buildingConnectButtonId;
-  buildingConnectButton.className = "dashboard-link manual-building-editor-button";
+  buildingConnectButton.className = "dashboard-link manual-building-editor-button route-tool-button";
   buildingConnectButton.type = "button";
-  setToolButtonContent(buildingConnectButton, "⌂", "Conectar edificio");
+  setToolButtonContent(buildingConnectButton, "&#9673;");
+  buildingConnectButton.title = "Conectar edificio";
+  buildingConnectButton.setAttribute("aria-label", buildingConnectButton.title);
   buildingConnectButton.addEventListener("click", (event) => {
     stopEvent(event);
     toggleBuildingConnectMode();
@@ -1208,10 +1239,10 @@ const createEditorControls = () => {
   undoButton.id = undoButtonId;
   undoButton.className = "dashboard-link manual-building-editor-button route-undo-button is-muted";
   undoButton.type = "button";
-  undoButton.title = "Deshacer ultima accion de rutas";
-  undoButton.setAttribute("aria-label", "Deshacer ultima accion de rutas");
+  undoButton.title = "Deshacer ultima accion";
+  undoButton.setAttribute("aria-label", "Deshacer ultima accion");
   setToolButtonContent(undoButton, "↶");
-  undoButton.disabled = !lastRouteUndoSnapshot;
+  undoButton.disabled = !(lastRouteUndoSnapshot || lastBuildingUndo);
   undoButton.addEventListener("click", async (event) => {
     stopEvent(event);
     try {
@@ -1225,9 +1256,10 @@ const createEditorControls = () => {
   wrapper.appendChild(deleteButton);
   wrapper.appendChild(splitButton);
   wrapper.appendChild(buildingConnectButton);
-  wrapper.appendChild(undoButton);
+  const footer = getAdminMapToolsFooter();
+  footer?.appendChild(undoButton);
   updateUndoButtonState();
-  buttons.appendChild(wrapper);
+  sectionBody.appendChild(wrapper);
 };
 
 const removeEditorControls = () => {

@@ -360,6 +360,54 @@
     background: var(--pi-primary-hover);
 }
 
+.admin-map-tools-panel .building-tool-button {
+    border-color: var(--pi-primary);
+    background: var(--pi-primary);
+    color: var(--pi-surface);
+}
+
+.admin-map-tools-panel .building-tool-button:hover,
+.admin-map-tools-panel .building-tool-button.is-active {
+    background: var(--pi-primary-hover);
+}
+
+.admin-map-tools-panel .route-tool-button {
+    border-color: var(--pi-teal);
+    background: var(--pi-teal);
+    color: var(--pi-surface);
+}
+
+.admin-map-tools-panel .route-tool-button:hover,
+.admin-map-tools-panel .route-tool-button.is-active {
+    border-color: var(--pi-teal);
+    background: var(--pi-teal-dark, #0f766e);
+}
+
+.admin-map-tools-panel .building-tool-button .map-tool-button-icon,
+.admin-map-tools-panel .route-tool-button .map-tool-button-icon {
+    font-size: 0;
+}
+
+.admin-map-tools-panel .building-tool-button .map-tool-button-icon::after,
+.admin-map-tools-panel .route-tool-button .map-tool-button-icon::after {
+    font-size: 20px;
+    line-height: 1;
+}
+
+.admin-map-tools-panel .building-tool-button .map-tool-button-icon::after {
+    content: "⌂";
+}
+
+.admin-map-tools-panel .route-tool-button .map-tool-button-icon::after {
+    content: "⌁";
+}
+
+.admin-map-tools-panel .route-tool-button.is-working {
+    border-color: var(--pi-teal);
+    background: var(--pi-teal-dark, #0f766e);
+    box-shadow: 0 12px 28px rgba(var(--pi-teal-rgb), 0.32), inset 4px 0 0 var(--pi-surface);
+}
+
 .building-geometry-active-actions .manual-building-editor-button,
 .manual-building-primary {
     border-color: var(--pi-primary-deepest);
@@ -445,6 +493,129 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+}
+
+.admin-map-tool-section {
+    width: 100%;
+    overflow: hidden;
+    border: 1px solid rgba(var(--pi-ink-rgb), 0.12);
+    border-radius: 12px;
+    background: rgba(var(--pi-surface-rgb), 0.96);
+}
+
+.admin-map-tool-section-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 0;
+    background: var(--pi-primary);
+    color: var(--pi-surface);
+    font: 700 12px/1.1 sans-serif;
+    text-align: left;
+    cursor: pointer;
+}
+
+.admin-map-tool-section-toggle:hover,
+.admin-map-tool-section.is-expanded .admin-map-tool-section-toggle {
+    background: var(--pi-primary-hover);
+    color: var(--pi-surface);
+}
+
+.admin-map-tool-section[data-admin-tool-section="dimensions"] .admin-map-tool-section-toggle {
+    background: var(--pi-surface);
+    color: var(--pi-primary-deep);
+    border: 1px solid rgba(var(--pi-primary-rgb), 0.28);
+}
+
+.admin-map-tool-section[data-admin-tool-section="dimensions"] .admin-map-tool-section-toggle:hover,
+.admin-map-tool-section[data-admin-tool-section="dimensions"].is-expanded .admin-map-tool-section-toggle {
+    background: var(--pi-surface);
+    color: var(--pi-primary-deep);
+    box-shadow: inset 0 -2px 0 var(--pi-primary);
+}
+
+.admin-map-tool-section[data-admin-tool-section="buildings"].is-expanded .admin-map-tool-section-toggle {
+    background: var(--pi-primary-deep);
+    color: var(--pi-surface);
+}
+
+.admin-map-tool-section[data-admin-tool-section="routes"] .admin-map-tool-section-toggle {
+    background: var(--pi-teal);
+}
+
+.admin-map-tool-section[data-admin-tool-section="routes"] .admin-map-tool-section-toggle:hover,
+.admin-map-tool-section[data-admin-tool-section="routes"].is-expanded .admin-map-tool-section-toggle {
+    background: var(--pi-teal-dark, #0f766e);
+}
+
+.admin-map-tool-section-icon {
+    display: inline-flex;
+    width: 18px;
+    justify-content: center;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.admin-map-tool-section-body {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    padding: 6px;
+    border-top: 1px solid rgba(var(--pi-ink-rgb), 0.09);
+}
+
+.admin-map-tool-section-body[hidden] {
+    display: none;
+}
+
+.admin-map-tool-section-body > .admin-map-tools-group {
+    display: contents;
+}
+
+.admin-map-tool-section-body > .site-viewport-controls,
+.admin-map-tool-section-body .building-geometry-active-actions,
+.admin-map-tool-section-body .walking-route-active-actions {
+    grid-column: 1 / -1;
+}
+
+.admin-map-tool-section-body .dashboard-link {
+    min-width: 0;
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+}
+
+.admin-map-tool-section-body .building-geometry-active-actions,
+.admin-map-tool-section-body .walking-route-active-actions {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+}
+
+.admin-map-tools-footer {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.admin-map-tools-footer .route-undo-button {
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+}
+
+.admin-map-tools-panel .building-tool-button .map-tool-button-icon,
+.admin-map-tools-panel .route-tool-button .map-tool-button-icon {
+    font-size: 20px !important;
+    line-height: 1;
+}
+
+.admin-map-tools-panel .building-tool-button .map-tool-button-icon::after,
+.admin-map-tools-panel .route-tool-button .map-tool-button-icon::after {
+    content: none !important;
 }
 
 #navigation-panel-group {
@@ -557,6 +728,17 @@
     font: inherit;
 }
 
+.site-viewport-controls .site-viewport-fields {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+}
+
+.site-viewport-controls .site-viewport-fields .site-viewport-field {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
 .site-viewport-controls .site-viewport-field input {
     width: 76px;
     box-sizing: border-box;
@@ -573,6 +755,57 @@
     flex-direction: column;
     gap: 6px;
     margin-top: 6px;
+}
+
+.site-viewport-controls .site-viewport-current-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+}
+
+.site-viewport-controls .site-viewport-actions .dashboard-link {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-right: 6px;
+    padding-left: 6px;
+    white-space: nowrap;
+}
+
+.site-viewport-controls .site-viewport-save {
+    width: 100%;
+}
+
+.site-viewport-controls .site-viewport-boundary-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.site-viewport-controls .site-viewport-boundary-actions .dashboard-link {
+    flex: 1 1 calc(50% - 3px);
+    min-width: 0;
+}
+
+.site-boundary-vertex-marker {
+    border: 3px solid #1d4ed8;
+    border-radius: 50%;
+    background: #dbeafe;
+    box-shadow: 0 1px 5px rgba(15, 23, 42, 0.45);
+}
+
+.site-boundary-side-marker {
+    width: 14px !important;
+    height: 14px !important;
+    border: 3px solid #1d4ed8;
+    border-radius: 4px;
+    background: #eff6ff;
+    box-shadow: 0 1px 5px rgba(15, 23, 42, 0.45);
+    cursor: grab;
+}
+
+.site-boundary-side-marker:active {
+    cursor: grabbing;
 }
 
 .site-viewport-controls .site-viewport-status {
@@ -595,7 +828,7 @@
     justify-content: center;
     margin-right: 0.45rem;
     border-radius: 999px;
-    background: rgba(var(--pi-surface-rgb), 0.2);
+    background: transparent;
     font-size: 18px;
     font-weight: 800;
     line-height: 1;
@@ -623,10 +856,50 @@
 
 .building-geometry-active-actions {
     display: flex;
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
     width: 100%;
+    order: 99;
+}
+
+.admin-map-tools-footer .map-tool-button-icon {
+    background: rgba(var(--pi-surface-rgb), 0.2);
+}
+
+.building-geometry-active-actions .dashboard-link {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+}
+
+.admin-map-tool-section-body .building-geometry-active-actions {
+    justify-content: center;
+}
+
+.site-viewport-controls {
+    font-size: 11px;
+}
+
+.admin-map-tools-panel .action-save-button {
+    border-color: #15803d;
+    background: #15803d;
+    color: var(--pi-surface);
+}
+
+.admin-map-tools-panel .action-save-button:hover {
+    background: #15803d;
+}
+
+.admin-map-tools-panel .action-cancel-button {
+    border-color: var(--pi-danger-dark);
+    background: var(--pi-danger-dark);
+    color: var(--pi-surface);
+}
+
+.admin-map-tools-panel .action-cancel-button:hover {
+    background: var(--pi-danger-dark);
 }
 
 .building-geometry-active-actions .dashboard-link.is-active {
@@ -690,7 +963,13 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .route-undo-button {
+    align-self: center;
     min-height: 34px;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    flex: 0 0 34px !important;
+    padding: 0 !important;
     font-size: 20px !important;
     line-height: 1 !important;
 }

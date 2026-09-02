@@ -71,7 +71,7 @@ const applySyntroBounds = (campusInfo, preserveView = false) => {
   }
 
   const bounds = L.latLngBounds(campusInfo.bounds);
-  map.setMaxBounds(bounds.pad(0.02));
+  map.setMaxBounds(bounds);
   map.options.maxBoundsViscosity = 1.0;
   applySiteZoomRange(campusInfo);
 
@@ -137,6 +137,11 @@ export const applyCampusZoomRange = (campus) => {
     return;
   }
   applySiteZoomRange(getSite(campus));
+};
+
+export const applyCampusBounds = (campus, preserveView = true) => {
+  if (!hasCampus(campus)) return;
+  applySyntroBounds(getSite(campus), preserveView);
 };
 
 export const goTo = (campus, options = {}) => {

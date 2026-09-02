@@ -314,7 +314,7 @@
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-lg-4 fade-in-up fade-in-up-d1">
+    <div class="col-lg-5 fade-in-up fade-in-up-d1">
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold">Asignacion de equipos</div>
             <div class="card-body">
@@ -336,7 +336,7 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-3 fade-in-up fade-in-up-d2">
+    <div class="col-lg-4 fade-in-up fade-in-up-d2">
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold">Categorias principales</div>
             <div class="card-body">
@@ -497,32 +497,6 @@
     </div>
 </div>
 
-<div class="row g-4">
-    <div class="col-md-6 fade-in-up fade-in-up-d2">
-        <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Resumen operativo</div>
-            <div class="card-body">
-                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                    <span class="text-muted">Salas sincronizadas</span>
-                    <strong>@Model.SyncedRooms</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                    <span class="text-muted">Con sugerencia automatica</span>
-                    <strong>@Model.SuggestedItems</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom pb-2 mb-2">
-                    <span class="text-muted">Marcados como robados</span>
-                    <strong>@Model.StolenItems</strong>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span class="text-muted">Categorias detectadas</span>
-                    <strong>@Model.DistinctImportedCategories</strong>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
 @if (isAdmin)
 {
     <div class="row g-4 mt-1">
@@ -564,46 +538,69 @@
                                 }
                                 else
                                 {
-                                    <div class="table-responsive">
-                                        <table class="table table-sm align-middle mb-0">
-                                            <thead class="table-light">
-                                                <tr>
-                                                    <th>Archivo</th>
-                                                    <th>Fecha</th>
-                                                    <th>Tamano</th>
-                                                    <th></th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var backup in Model.DatabaseBackups)
-                                                {
+                                    var allBackups = Model.DatabaseBackups.ToList();
+                                    var hasMoreBackups = allBackups.Count > 3;
+                                    <div class="d-flex gap-3 align-items-start">
+                                        <div class="table-responsive flex-grow-1">
+                                            <table class="table table-sm align-middle mb-0" id="backups-table">
+                                                <thead class="table-light">
                                                     <tr>
-                                                        <td class="small fw-semibold">@backup.FileName</td>
-                                                        <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                                        <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
-                                                        <td class="text-end">
-                                                            <div class="d-flex gap-2 justify-content-end">
-                                                                <a href="/dashboard/database/backups/@backup.FileName" class="btn btn-sm btn-outline-secondary">
-                                                                    Descargar
-                                                                </a>
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
-                                                                    @Html.AntiForgeryToken()
-                                                                    <button type="submit" class="btn btn-sm btn-outline-warning">
-                                                                        Restaurar
-                                                                    </button>
-                                                                </form>
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
-                                                                    @Html.AntiForgeryToken()
-                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                                        Eliminar
-                                                                    </button>
-                                                                </form>
-                                                            </div>
-                                                        </td>
+                                                        <th>Archivo</th>
+                                                        <th>Fecha</th>
+                                                        <th>Tamano</th>
+                                                        <th></th>
                                                     </tr>
-                                                }
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody id="backups-tbody">
+                                                    @for (var i = 0; i < allBackups.Count; i++)
+                                                    {
+                                                        var backup = allBackups[i];
+                                                        var hidden = i >= 3 ? "style=\"display:none\"" : "";
+                                                        <tr class="backup-row" @Html.Raw(hidden) data-index="@i">
+                                                            <td class="small fw-semibold">@backup.FileName</td>
+                                                            <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                                            <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
+                                                            <td class="text-end">
+                                                                <div class="d-flex gap-2 justify-content-end">
+                                                                    <a href="/dashboard/database/backups/@backup.FileName" class="btn btn-sm btn-outline-secondary">
+                                                                        Descargar
+                                                                    </a>
+                                                                    <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
+                                                                        @Html.AntiForgeryToken()
+                                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                                            Restaurar
+                                                                        </button>
+                                                                    </form>
+                                                                    <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
+                                                                        @Html.AntiForgeryToken()
+                                                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                            Eliminar
+                                                                        </button>
+                                                                    </form>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        @if (hasMoreBackups)
+                                        {
+                                            <div class="d-flex flex-column align-items-center gap-2" style="flex-shrink:0;">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-toggle-btn" onclick="toggleBackups()">
+                                                    <i class="bi bi-chevron-down me-1"></i>Ver todos (<span id="backups-total-count">@allBackups.Count</span>)
+                                                </button>
+                                                <div id="backups-pagination" class="d-flex align-items-center gap-1" style="display:none !important">
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-prev-btn" onclick="backupsPage(-1)" disabled>
+                                                        <i class="bi bi-chevron-left"></i>
+                                                    </button>
+                                                    <span class="small text-muted" id="backups-page-info"></span>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-next-btn" onclick="backupsPage(1)">
+                                                        <i class="bi bi-chevron-right"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
                                     </div>
                                 }
                             </div>
@@ -906,6 +903,46 @@
 
             updateUploadState();
         })();
+
+        let backupsExpanded = false;
+        let backupsPageIndex = 0;
+        const BACKUPS_PER_PAGE = 10;
+        function toggleBackups() {
+            var btn = document.getElementById("backups-toggle-btn");
+            var rows = document.querySelectorAll(".backup-row");
+            var pagination = document.getElementById("backups-pagination");
+            if (!btn || !rows.length) return;
+            backupsExpanded = !backupsExpanded;
+            if (backupsExpanded) {
+                backupsPageIndex = 0;
+                renderBackupsPage();
+                if (pagination) pagination.style.display = "flex";
+                btn.innerHTML = '<i class="bi bi-chevron-up me-1"></i>Mostrar menos';
+            } else {
+                rows.forEach(function(row, i) { row.style.display = i < 3 ? "" : "none"; });
+                if (pagination) pagination.style.display = "none";
+                btn.innerHTML = '<i class="bi bi-chevron-down me-1"></i>Ver todos (<span id="backups-total-count">' + rows.length + '</span>)';
+            }
+        }
+        function backupsPage(dir) {
+            var rows = document.querySelectorAll(".backup-row");
+            var totalPages = Math.ceil(rows.length / BACKUPS_PER_PAGE);
+            backupsPageIndex = Math.max(0, Math.min(totalPages - 1, backupsPageIndex + dir));
+            renderBackupsPage();
+        }
+        function renderBackupsPage() {
+            var rows = document.querySelectorAll(".backup-row");
+            var totalPages = Math.ceil(rows.length / BACKUPS_PER_PAGE);
+            var start = backupsPageIndex * BACKUPS_PER_PAGE;
+            var end = start + BACKUPS_PER_PAGE;
+            rows.forEach(function(row, i) { row.style.display = (i >= start && i < end) ? "" : "none"; });
+            var info = document.getElementById("backups-page-info");
+            var prevBtn = document.getElementById("backups-prev-btn");
+            var nextBtn = document.getElementById("backups-next-btn");
+            if (info) info.textContent = "Pagina " + (backupsPageIndex + 1) + " de " + totalPages;
+            if (prevBtn) prevBtn.disabled = backupsPageIndex === 0;
+            if (nextBtn) nextBtn.disabled = backupsPageIndex >= totalPages - 1;
+        }
     </script>
     @if (isAdmin)
     {

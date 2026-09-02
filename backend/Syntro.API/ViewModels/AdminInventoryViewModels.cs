@@ -149,6 +149,8 @@ public class AdminLocationsViewModel
     public int BuildingsWithInteriorMap { get; set; }
     public int TotalRooms { get; set; }
     public int AssignedInventoryItems { get; set; }
+    public int TotalWalkingRoutes { get; set; }
+    public double TotalRouteMeters { get; set; }
     public string NewFilterField { get; set; } = string.Empty;
     public string NewFilterValue { get; set; } = string.Empty;
     public IReadOnlyList<FilterOptionViewModel> AvailableColumnFilters { get; set; } = [];

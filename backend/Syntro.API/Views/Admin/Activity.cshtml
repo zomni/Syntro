@@ -112,7 +112,7 @@
             BuildActivityQuery(pageOverride, pageSizeOverride, sortByOverride, sortDirectionOverride));
 
     string NextSortDirection(string column) => sortBy == column && sortDirection == "asc" ? "desc" : "asc";
-    string SortArrow(string column) => sortBy != column ? "bi bi-dash-lg" : (sortDirection == "asc" ? "bi bi-chevron-down" : "bi bi-chevron-up");
+    string SortArrow(string column) => column == "createdAt" ? "bi bi-dash-lg" : (sortBy != column ? "bi bi-dash-lg" : (sortDirection == "asc" ? "bi bi-chevron-down" : "bi bi-chevron-up"));
     string SortUrl(string column) => BuildActivityUrl(1, null, column, NextSortDirection(column));
 
     string TranslateAction(string action)

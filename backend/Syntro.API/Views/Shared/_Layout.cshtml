@@ -99,7 +99,7 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link @((ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Inventory") == true || ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Equipment") == true) ? "active" : "")" href="/dashboard/inventory">
+                        <a class="nav-link @((ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Inventory") == true && ViewContext.RouteData.Values["action"]?.ToString() != "InventoryMatching" || ViewContext.RouteData.Values["action"]?.ToString()?.Contains("Equipment") == true) ? "active" : "")" href="/dashboard/inventory">
                             <i class="bi bi-pc-display me-2"></i>Inventario
                         </a>
                     </li>

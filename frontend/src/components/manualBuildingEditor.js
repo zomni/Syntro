@@ -4,12 +4,13 @@ import { refreshCurrentMapData } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import {
-  getAdminMapToolsButtons,
+  getAdminMapToolSection,
   removeAdminMapToolsPanelIfEmpty,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
   setAdminMapToolsStatus,
 } from "@app/adminMapToolsPanel";
+import { registerBuildingUndo } from "@app/walkingRouteEditor";
 
 let isDrawing = false;
 let points = [];
@@ -42,9 +43,10 @@ const buildActionButtons = () => {
   const wrapper = document.createElement("div");
   wrapper.className = `${activeActionsClass} building-geometry-active-actions`;
   wrapper.innerHTML = `
-    <button type="button" class="dashboard-link manual-building-editor-button is-icon-only" data-manual-building-save-shape title="Guardar forma" aria-label="Guardar forma"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
-    <button type="button" class="dashboard-link is-icon-only" data-manual-building-cancel-shape title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
+    <button type="button" class="dashboard-link manual-building-editor-button building-tool-button action-save-button is-icon-only" data-manual-building-save-shape title="Guardar forma" aria-label="Guardar forma"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
+    <button type="button" class="dashboard-link action-cancel-button is-icon-only" data-manual-building-cancel-shape title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
   `;
+  wrapper.querySelector("[data-manual-building-save-shape]")?.classList.remove("building-tool-button");
 
   wrapper.querySelector("[data-manual-building-save-shape]")?.addEventListener("click", finishPolygon);
   wrapper.querySelector("[data-manual-building-cancel-shape]")?.addEventListener("click", (event) => {
@@ -58,9 +60,9 @@ const buildActionButtons = () => {
 };
 
 const setActiveControls = () => {
-  const buttons = getAdminMapToolsButtons();
-  if (!buttons || buttons.querySelector(`.${activeActionsClass}`)) return;
-  buttons.appendChild(buildActionButtons());
+  const controls = getEditorControls();
+  if (!controls || controls.querySelector(`.${activeActionsClass}`)) return;
+  controls.appendChild(buildActionButtons());
 };
 
 const clearPreview = () => {
@@ -144,6 +146,21 @@ const submitManualBuildingForm = async (form) => {
       const error = await response.json().catch(() => ({}));
       throw new Error(error?.message || "No se pudo guardar el edificio manual.");
     }
+
+    registerBuildingUndo({
+      label: "crear edificio",
+      restore: async () => {
+        const undoResponse = await fetch(`${BACKEND_API_URL}/api/manual-buildings/${encodeURIComponent(externalId)}`, {
+          method: "DELETE",
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!undoResponse.ok) throw new Error("No se pudo deshacer la creación del edificio.");
+        resetSearchMetadataCaches();
+        resetBuildingsCatalogCache();
+        await refreshCurrentMapData();
+      },
+    });
 
     removeModal();
     stopDrawing();
@@ -275,8 +292,8 @@ const toggleDrawing = () => {
 };
 
 const createEditorControls = () => {
-  const buttons = getAdminMapToolsButtons();
-  if (!buttons || getEditorButton()) return;
+  const sectionBody = getAdminMapToolSection("buildings");
+  if (!sectionBody || getEditorButton()) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = "manual-building-editor-controls";
@@ -284,9 +301,11 @@ const createEditorControls = () => {
 
   const button = document.createElement("button");
   button.id = editorButtonId;
-  button.className = "dashboard-link manual-building-editor-button";
+  button.className = "dashboard-link manual-building-editor-button building-tool-button";
   button.type = "button";
-  setToolButtonContent(button, "+", "Agregar edificio");
+  setToolButtonContent(button, "+");
+  button.title = "Agregar edificio";
+  button.setAttribute("aria-label", button.title);
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -294,7 +313,7 @@ const createEditorControls = () => {
   });
 
   wrapper.appendChild(button);
-  buttons.appendChild(wrapper);
+  sectionBody.appendChild(wrapper);
 };
 
 const removeEditorControls = () => {

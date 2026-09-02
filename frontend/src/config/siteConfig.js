@@ -35,6 +35,7 @@ let sitesSource = "static";
 let sitesLoadedPromise = null;
 let isBackendAuthenticated = null;
 const viewportStorageKey = "syntro-site-viewport-overrides";
+const boundsStorageKey = "syntro-site-bounds-overrides";
 
 const readViewportOverrides = () => {
   if (typeof window === "undefined") return {};
@@ -58,6 +59,28 @@ const writeViewportOverride = (campusKey, minZoom, maxZoom) => {
   }
 };
 
+const readBoundsOverrides = () => {
+  if (typeof window === "undefined") return {};
+  try {
+    const stored = window.localStorage.getItem(boundsStorageKey);
+    const parsed = stored ? JSON.parse(stored) : {};
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeBoundsOverride = (campusKey, bounds) => {
+  if (typeof window === "undefined") return;
+  try {
+    const overrides = readBoundsOverrides();
+    overrides[campusKey] = bounds;
+    window.localStorage.setItem(boundsStorageKey, JSON.stringify(overrides));
+  } catch {
+    // La persistencia local no debe impedir usar el mapa.
+  }
+};
+
 const applyViewportOverrides = (siteMap) => {
   const overrides = readViewportOverrides();
   Object.entries(overrides).forEach(([campusKey, viewport]) => {
@@ -67,6 +90,13 @@ const applyViewportOverrides = (siteMap) => {
     if (site && Number.isInteger(minZoom) && Number.isInteger(maxZoom)) {
       site.minZoom = minZoom;
       site.maxZoom = maxZoom;
+    }
+  });
+  const boundsOverrides = readBoundsOverrides();
+  Object.entries(boundsOverrides).forEach(([campusKey, bounds]) => {
+    const site = siteMap[campusKey];
+    if (site && Array.isArray(bounds) && bounds.length >= 2) {
+      site.bounds = bounds;
     }
   });
   return siteMap;
@@ -139,6 +169,27 @@ export const updateSiteViewport = (campusKey, viewport) => {
   site.minZoom = minZoom;
   site.maxZoom = maxZoom;
   writeViewportOverride(campusKey, minZoom, maxZoom);
+  return true;
+};
+
+export const updateSiteBounds = (campusKey, bounds) => {
+  const site = sites[campusKey];
+  if (!site || !Array.isArray(bounds) || bounds.length < 3) return false;
+  site.bounds = bounds.map((point) => [Number(point[0]), Number(point[1])]);
+  writeBoundsOverride(campusKey, site.bounds);
+  return true;
+};
+
+export const resetSiteBounds = (campusKey) => {
+  const site = sites[campusKey];
+  const original = campuses[campusKey];
+  if (!site || !original || !Array.isArray(original.bounds)) return false;
+  site.bounds = original.bounds.map((point) => [Number(point[0]), Number(point[1])]);
+  const overrides = readBoundsOverrides();
+  delete overrides[campusKey];
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(boundsStorageKey, JSON.stringify(overrides));
+  }
   return true;
 };
 

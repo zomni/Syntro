@@ -65,10 +65,17 @@
         padding: .45rem .8rem;
         border-radius: 999px;
         font-weight: 700;
+        transition: transform .28s ease, box-shadow .28s ease;
     }
     .status-ok { background: rgba(34, 197, 94, .12); color: #15803d; }
     .status-warning { background: rgba(245, 158, 11, .14); color: #b45309; }
     .status-critical { background: rgba(239, 68, 68, .12); color: #b91c1c; }
+    .status-active.status-ok { background: #22c55e; color: #fff; transform: scale(1.15); box-shadow: 0 0 0 3px rgba(34,197,94,0.35); }
+    .status-active.status-warning { background: #f59e0b; color: #fff; transform: scale(1.15); box-shadow: 0 0 0 3px rgba(245,158,11,0.35); }
+    .status-active.status-critical { background: #ef4444; color: #fff; transform: scale(1.15); box-shadow: 0 0 0 3px rgba(239,68,68,0.35); }
+    .status-active.status-ok:hover { transform: scale(1.15) translateY(-3px); box-shadow: 0 0 0 3px rgba(34,197,94,0.35), 0 12px 30px rgba(0,0,0,0.2); }
+    .status-active.status-warning:hover { transform: scale(1.15) translateY(-3px); box-shadow: 0 0 0 3px rgba(245,158,11,0.35), 0 12px 30px rgba(0,0,0,0.2); }
+    .status-active.status-critical:hover { transform: scale(1.15) translateY(-3px); box-shadow: 0 0 0 3px rgba(239,68,68,0.35), 0 12px 30px rgba(0,0,0,0.2); }
 
     .transition-hover {
         transition: transform .28s ease, box-shadow .28s ease;
@@ -93,18 +100,6 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div class="page-header px-4 py-3 rounded-3 d-flex align-items-center gap-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
         <h2 class="fw-bold mb-0 fs-4" style="color: var(--pi-deep);">Gestion</h2>
-        @if (overallStatus == "OK")
-        {
-            <i class="bi bi-check-circle-fill text-success fs-5" title="OK - Todo funciona correctamente"></i>
-        }
-        else if (overallStatus == "Critico")
-        {
-            <i class="bi bi-x-circle-fill text-danger fs-5" title="Critico - Se requiere atencion inmediata"></i>
-        }
-        else
-        {
-            <i class="bi bi-exclamation-triangle-fill text-warning fs-5" title="Advertencia - Hay elementos por revisar"></i>
-        }
     </div>
 </div>
 
@@ -118,9 +113,9 @@
                     El panel consolida los controles clave de la plataforma y te muestra si el entorno esta listo para uso interno.
                 </p>
                 <div class="d-flex gap-2 flex-wrap">
-                    <span class="status-pill status-ok" title="OK - Todo funciona correctamente"><i class="bi bi-check-circle"></i></span>
-                    <span class="status-pill status-warning" title="Advertencia - Hay elementos por revisar"><i class="bi bi-exclamation-circle"></i></span>
-                    <span class="status-pill status-critical" title="Critico - Se requiere atencion inmediata"><i class="bi bi-x-circle"></i></span>
+                    <span class="status-pill status-ok @(overallStatus != "OK" ? "opacity-35" : "status-active")" title="OK - Todo funciona correctamente"><i class="bi bi-check-circle"></i></span>
+                    <span class="status-pill status-warning @(overallStatus != "Advertencia" ? "opacity-35" : "status-active")" title="Advertencia - Hay elementos por revisar"><i class="bi bi-exclamation-circle"></i></span>
+                    <span class="status-pill status-critical @(overallStatus != "Critico" ? "opacity-35" : "status-active")" title="Critico - Se requiere atencion inmediata"><i class="bi bi-x-circle"></i></span>
                 </div>
             </div>
             <div class="col-lg-5">
@@ -172,19 +167,19 @@
         };
         var animDelay = (checkIndex % 4) + 1;
         checkIndex++;
-        <div class="col-md-6 col-xl-4 fade-in-up fade-in-up-d@(animDelay)">
+        <div class="col-md-3 fade-in-up fade-in-up-d@(animDelay)">
             <div class="card compliance-card h-100">
                 <div class="card-body">
-                    <div class="d-flex align-items-start gap-3">
-                        <div class="dashboard-kpi-icon bg-primary bg-opacity-10">
-                            <i class="@check.IconClass text-primary fs-4"></i>
+                    <div class="d-flex align-items-start gap-2">
+                        <div class="dashboard-kpi-icon bg-primary bg-opacity-10" style="width:40px;height:40px;border-radius:12px;">
+                            <i class="@check.IconClass text-primary" style="font-size:1.1rem;"></i>
                         </div>
                         <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
-                                <div class="fw-semibold">@check.Title</div>
-                                <span class="badge @checkClass">@check.Status</span>
+                            <div class="d-flex justify-content-between align-items-start gap-1 mb-1">
+                                <div class="fw-semibold" style="font-size:0.88rem;">@check.Title</div>
+                                <span class="badge @checkClass" style="font-size:0.65rem;">@check.Status</span>
                             </div>
-                            <div class="text-muted small">@check.Detail</div>
+                            <div class="text-muted" style="font-size:0.78rem;">@check.Detail</div>
                         </div>
                     </div>
                 </div>

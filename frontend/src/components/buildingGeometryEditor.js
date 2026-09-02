@@ -7,12 +7,13 @@ import { refreshCurrentMapData } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import {
-  getAdminMapToolsButtons,
+  getAdminMapToolSection,
   removeAdminMapToolsPanelIfEmpty,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
   setAdminMapToolsStatus,
 } from "@app/adminMapToolsPanel";
+import { registerBuildingUndo } from "@app/walkingRouteEditor";
 
 const controlsId = "building-geometry-editor-controls";
 const editButtonId = "building-shape-editor-button";
@@ -121,6 +122,9 @@ const saveGeometry = async () => {
   }
 
   try {
+    const undoCoordinates = latLngsToCoordinates(originalLatLngs);
+    const undoBuildingId = activeBuildingId;
+    const undoActionLabel = activeMode === "move" ? "mover edificio" : "editar forma del edificio";
     const response = await fetch(`${BACKEND_API_URL}/api/building-geometry-overrides`, {
       method: "POST",
       credentials: "include",
@@ -139,6 +143,23 @@ const saveGeometry = async () => {
       throw new Error(error?.message || "No se pudo guardar la geometria.");
     }
 
+    registerBuildingUndo({
+      label: undoActionLabel,
+      restore: async () => {
+        const undoResponse = await fetch(`${BACKEND_API_URL}/api/building-geometry-overrides`, {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ buildingExternalId: undoBuildingId, coordinates: undoCoordinates }),
+        });
+        if (!undoResponse.ok) throw new Error("No se pudo restaurar la forma anterior del edificio.");
+        resetSearchMetadataCaches();
+        resetBuildingsCatalogCache();
+        await refreshCurrentMapData();
+      },
+    });
+
     resetSearchMetadataCaches();
     resetBuildingsCatalogCache();
     stopGeometryEditor();
@@ -152,9 +173,10 @@ const buildActionButtons = () => {
   const wrapper = document.createElement("div");
   wrapper.className = `${activeActionsClass} building-geometry-active-actions`;
   wrapper.innerHTML = `
-    <button type="button" class="dashboard-link manual-building-editor-button is-icon-only" data-geometry-save title="Guardar forma" aria-label="Guardar forma"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
-    <button type="button" class="dashboard-link is-icon-only" data-geometry-cancel title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
+    <button type="button" class="dashboard-link manual-building-editor-button building-tool-button action-save-button is-icon-only" data-geometry-save title="Guardar forma" aria-label="Guardar forma"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
+    <button type="button" class="dashboard-link action-cancel-button is-icon-only" data-geometry-cancel title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
   `;
+  wrapper.querySelector("[data-geometry-save]")?.classList.remove("building-tool-button");
 
   wrapper.querySelector("[data-geometry-save]")?.addEventListener("click", (event) => {
     event.preventDefault();
@@ -172,17 +194,11 @@ const buildActionButtons = () => {
 };
 
 const setActiveControls = () => {
-  const routeControls = document.getElementById("walking-route-editor-controls");
-  const undoButton = document.getElementById("walking-route-undo-toggle");
-  const target = undoButton?.parentElement === routeControls ? routeControls : document.getElementById(controlsId);
+  const target = document.getElementById(controlsId);
   if (!target) return;
 
   const actionButtons = document.querySelector(`.${activeActionsClass}`) || buildActionButtons();
-  if (undoButton?.parentElement === target) {
-    target.insertBefore(actionButtons, undoButton);
-  } else {
-    target.appendChild(actionButtons);
-  }
+  target.appendChild(actionButtons);
 };
 
 const removeActiveControls = () => {
@@ -351,8 +367,8 @@ const startMoveEdit = () => {
 };
 
 const createGeometryControls = () => {
-  const buttons = getAdminMapToolsButtons();
-  if (!buttons || document.getElementById(controlsId)) return;
+  const sectionBody = getAdminMapToolSection("buildings");
+  if (!sectionBody || document.getElementById(controlsId)) return;
 
   const wrapper = document.createElement("div");
   wrapper.id = controlsId;
@@ -360,9 +376,11 @@ const createGeometryControls = () => {
 
   const editButton = document.createElement("button");
   editButton.id = editButtonId;
-  editButton.className = "dashboard-link manual-building-editor-button";
+  editButton.className = "dashboard-link manual-building-editor-button building-tool-button";
   editButton.type = "button";
-  setToolButtonContent(editButton, "▱", "Editar forma");
+  setToolButtonContent(editButton, "&#9998;");
+  editButton.title = "Editar forma";
+  editButton.setAttribute("aria-label", editButton.title);
   editButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -371,9 +389,11 @@ const createGeometryControls = () => {
 
   const moveButton = document.createElement("button");
   moveButton.id = moveButtonId;
-  moveButton.className = "dashboard-link manual-building-editor-button";
+  moveButton.className = "dashboard-link manual-building-editor-button building-tool-button";
   moveButton.type = "button";
-  setToolButtonContent(moveButton, "↕", "Mover edificio");
+  setToolButtonContent(moveButton, "&#8645;");
+  moveButton.title = "Mover edificio";
+  moveButton.setAttribute("aria-label", moveButton.title);
   moveButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -382,7 +402,7 @@ const createGeometryControls = () => {
 
   wrapper.appendChild(editButton);
   wrapper.appendChild(moveButton);
-  buttons.appendChild(wrapper);
+  sectionBody.appendChild(wrapper);
 };
 
 const removeGeometryControls = () => {

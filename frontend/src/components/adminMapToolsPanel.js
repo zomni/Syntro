@@ -4,6 +4,12 @@ const panelId = "admin-map-tools-panel";
 const buttonsId = "admin-map-tools-buttons";
 const statusId = "admin-map-tools-status";
 const toggleId = "admin-map-tools-toggle";
+const footerId = "admin-map-tools-footer";
+const sectionDefinitions = {
+  dimensions: ["Dimensiones", "&#9638;"],
+  buildings: ["Edificios", "&#9634;"],
+  routes: ["Rutas", "&#8734;"],
+};
 const activeModes = new Map([
   ["manual-building", "manual-building-editor-toggle"],
   ["geometry-shape", "building-shape-editor-button"],
@@ -37,6 +43,11 @@ export const ensureAdminMapToolsPanel = () => {
     event.stopPropagation();
     const toggle = event.currentTarget;
     const expanded = toggle.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      requestAdminMapToolMode(null);
+      setAdminMapToolsStatus("");
+      window.dispatchEvent(new CustomEvent("adminMapToolsHidden"));
+    }
     toggle.setAttribute("aria-expanded", String(!expanded));
     const buttons = panel.querySelector(`#${buttonsId}`);
     if (buttons) buttons.hidden = expanded;
@@ -91,6 +102,64 @@ export const setAdminMapToolsStatus = (message) => {
   if (!status) return;
   status.textContent = message || "";
   status.hidden = !String(message || "").trim();
+};
+
+export const getAdminMapToolSection = (key) => {
+  const buttons = getAdminMapToolsButtons();
+  const definition = sectionDefinitions[key];
+  if (!buttons || !definition) return null;
+
+  let section = buttons.querySelector(`[data-admin-tool-section="${key}"]`);
+  if (!section) {
+    section = document.createElement("section");
+    section.className = "admin-map-tool-section";
+    section.dataset.adminToolSection = key;
+    section.innerHTML = `
+      <button type="button" class="admin-map-tool-section-toggle" aria-expanded="false">
+        <span class="admin-map-tool-section-icon" aria-hidden="true">${definition[1]}</span>
+        <span>${definition[0]}</span>
+      </button>
+      <div class="admin-map-tool-section-body" hidden></div>
+    `;
+    section.querySelector(".admin-map-tool-section-toggle")?.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const toggle = event.currentTarget;
+      const willOpen = toggle.getAttribute("aria-expanded") !== "true";
+      requestAdminMapToolMode(null);
+      setAdminMapToolsStatus("");
+      buttons.querySelectorAll(".admin-map-tool-section").forEach((item) => {
+        const itemToggle = item.querySelector(".admin-map-tool-section-toggle");
+        const itemBody = item.querySelector(".admin-map-tool-section-body");
+        const isCurrent = item === section;
+        itemToggle?.setAttribute("aria-expanded", isCurrent && willOpen ? "true" : "false");
+        if (itemBody) itemBody.hidden = !(isCurrent && willOpen);
+        item.classList.toggle("is-expanded", isCurrent && willOpen);
+      });
+      window.dispatchEvent(new CustomEvent("adminMapToolSectionChanged", { detail: { key, open: willOpen } }));
+    });
+    buttons.appendChild(section);
+  }
+
+  const footer = buttons.querySelector(`#${footerId}`);
+  if (footer) buttons.appendChild(footer);
+
+  return section.querySelector(".admin-map-tool-section-body");
+};
+
+export const getAdminMapToolsFooter = () => {
+  const buttons = getAdminMapToolsButtons();
+  if (!buttons) return null;
+
+  let footer = document.getElementById(footerId);
+  if (!footer) {
+    footer = document.createElement("div");
+    footer.id = footerId;
+    footer.className = "admin-map-tools-footer";
+    buttons.appendChild(footer);
+  }
+  buttons.appendChild(footer);
+  return footer;
 };
 
 export const setAdminMapToolActiveMode = (mode) => {

@@ -1772,6 +1772,13 @@ public class AdminController : Controller
             .Take(pageSize)
             .ToList();
 
+        var totalWalkingRoutes = await _context.WalkingRouteEdges
+            .AsNoTracking()
+            .CountAsync(cancellationToken);
+        var totalRouteMeters = await _context.WalkingRouteEdges
+            .AsNoTracking()
+            .SumAsync(e => (double?)e.DistanceMeters, cancellationToken) ?? 0;
+
         var model = new AdminLocationsViewModel
         {
             Search = search ?? string.Empty,
@@ -1787,6 +1794,8 @@ public class AdminController : Controller
             BuildingsWithInteriorMap = filteredLocationRowsList.Count(row => row.HasInteriorMap),
             TotalRooms = filteredLocationRowsList.Sum(row => row.RoomsCount),
             AssignedInventoryItems = filteredLocationRowsList.Sum(row => row.AssignedInventoryCount),
+            TotalWalkingRoutes = totalWalkingRoutes,
+            TotalRouteMeters = totalRouteMeters,
             NewFilterField = string.Empty,
             NewFilterValue = string.Empty,
             AvailableColumnFilters = GetLocationColumnFilterOptions(),

@@ -1366,7 +1366,7 @@ const getActionButtonStyle = () => `
 `;
 
 const DASHBOARD_INVENTORY_URL = `${BACKEND_API_URL}/dashboard/inventory`;
-const DASHBOARD_BUILDING_EDIT_URL = `${BACKEND_API_URL}/dashboard/editsyncedbuilding`;
+const DASHBOARD_BUILDING_EDIT_URL = `${BACKEND_API_URL}/admin/editsyncedbuilding`;
 
 const buildDashboardEquipmentLink = (identifier) => {
   const value = String(identifier || "").trim();

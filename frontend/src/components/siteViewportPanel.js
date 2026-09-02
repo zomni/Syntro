@@ -1,15 +1,24 @@
 import { BACKEND_API_URL, map } from "../views/map.js";
-import { getActiveCampus, applyCampusZoomRange } from "@app/goToCampus";
-import { getSite, updateSiteViewport } from "../config/siteConfig.js";
+import { getActiveCampus, applyCampusZoomRange, applyCampusBounds } from "@app/goToCampus";
+import { getSite, updateSiteViewport, updateSiteBounds, resetSiteBounds } from "../config/siteConfig.js";
 import {
   getAdminMapToolsButtons,
+  getAdminMapToolSection,
   removeAdminMapToolsPanelIfEmpty,
+  setAdminMapToolsStatus,
 } from "./adminMapToolsPanel.js";
 import { identifiers } from "../utils/identifiers.js";
 import { validateZoomRange } from "../utils/viewportRules.js";
+import { registerBuildingUndo } from "@app/walkingRouteEditor";
 
 const controlsClass = "site-viewport-controls";
 const statusClass = "site-viewport-status";
+let boundaryEditing = false;
+let boundaryLayer = null;
+let boundaryMarkers = [];
+let boundaryPoints = [];
+let boundaryOriginal = [];
+let boundaryMapDraggingWasEnabled = true;
 
 const loadSession = async () => {
   try {
@@ -27,9 +36,9 @@ const loadSession = async () => {
 const showStatus = (message, isError = false) => {
   const status = document.querySelector(`.${controlsClass} .${statusClass}`);
   if (status) {
-    status.textContent = message || "";
     status.classList.toggle("is-error", isError);
   }
+  setAdminMapToolsStatus(message || "");
 };
 
 const getInputs = () => {
@@ -38,7 +47,159 @@ const getInputs = () => {
   const saveButton = document.querySelector(`.${controlsClass} [data-site-viewport-save]`);
   const useMinButton = document.querySelector(`.${controlsClass} [data-site-viewport-use-min]`);
   const useMaxButton = document.querySelector(`.${controlsClass} [data-site-viewport-use-max]`);
-  return { minInput, maxInput, saveButton, useMinButton, useMaxButton };
+  const editBoundsButton = document.querySelector(`.${controlsClass} [data-site-bounds-edit]`);
+  const saveBoundsButton = document.querySelector(`.${controlsClass} [data-site-bounds-save]`);
+  const cancelBoundsButton = document.querySelector(`.${controlsClass} [data-site-bounds-cancel]`);
+  const resetBoundsButton = document.querySelector(`.${controlsClass} [data-site-bounds-reset]`);
+  return { minInput, maxInput, saveButton, useMinButton, useMaxButton, editBoundsButton, saveBoundsButton, cancelBoundsButton, resetBoundsButton };
+};
+
+const boundsToLatLngs = (bounds) => {
+  if (!Array.isArray(bounds) || bounds.length < 2) return [];
+  if (bounds.length === 2) {
+    const south = Math.min(bounds[0][0], bounds[1][0]);
+    const north = Math.max(bounds[0][0], bounds[1][0]);
+    const west = Math.min(bounds[0][1], bounds[1][1]);
+    const east = Math.max(bounds[0][1], bounds[1][1]);
+    return [[south, west], [south, east], [north, east], [north, west]];
+  }
+  return bounds.slice(0, -1).map((point) => [Number(point[0]), Number(point[1])]);
+};
+
+const latLngsToBounds = (latlngs) => latlngs.map((point) => [point.lat, point.lng]);
+
+const clearBoundaryEditor = () => {
+  boundaryMarkers.forEach((marker) => map.removeLayer(marker));
+  boundaryMarkers = [];
+  boundaryPoints = [];
+  if (boundaryLayer) {
+    map.removeLayer(boundaryLayer);
+    boundaryLayer = null;
+  }
+};
+
+const redrawBoundary = (latlngs) => {
+  clearBoundaryEditor();
+  boundaryPoints = latlngs.slice(0, 4).map((point) => L.latLng(point.lat, point.lng));
+  const closed = [...boundaryPoints, boundaryPoints[0]];
+  boundaryLayer = L.polygon(closed, {
+    color: "#2563eb",
+    weight: 3,
+    dashArray: "8 6",
+    fillColor: "#60a5fa",
+    fillOpacity: 0.12,
+    interactive: false,
+  }).addTo(map);
+  const sidePoints = [
+    L.latLng(boundaryPoints[0].lat, (boundaryPoints[0].lng + boundaryPoints[1].lng) / 2),
+    L.latLng((boundaryPoints[1].lat + boundaryPoints[2].lat) / 2, boundaryPoints[1].lng),
+    L.latLng(boundaryPoints[2].lat, (boundaryPoints[2].lng + boundaryPoints[3].lng) / 2),
+    L.latLng((boundaryPoints[3].lat + boundaryPoints[0].lat) / 2, boundaryPoints[0].lng),
+  ];
+  boundaryMarkers = sidePoints.map((point, side) => {
+    const marker = L.marker(point, {
+      draggable: true,
+      zIndexOffset: 3000,
+      icon: L.divIcon({ className: `site-boundary-side-marker site-boundary-side-${side}`, html: "", iconSize: [18, 18], iconAnchor: [9, 9] }),
+    }).addTo(map);
+    marker.on("drag", (event) => {
+      const next = boundaryPoints.map((item) => L.latLng(item.lat, item.lng));
+      if (side === 0) {
+        next[0].lat = event.latlng.lat;
+        next[1].lat = event.latlng.lat;
+      } else if (side === 1) {
+        next[1].lng = event.latlng.lng;
+        next[2].lng = event.latlng.lng;
+      } else if (side === 2) {
+        next[2].lat = event.latlng.lat;
+        next[3].lat = event.latlng.lat;
+      } else {
+        next[3].lng = event.latlng.lng;
+        next[0].lng = event.latlng.lng;
+      }
+      boundaryPoints = next;
+      boundaryLayer?.setLatLngs([...next, next[0]]);
+      const first = side === 0 ? 0 : side === 1 ? 1 : side === 2 ? 2 : 3;
+      const second = side === 0 ? 1 : side === 1 ? 2 : side === 2 ? 3 : 0;
+      marker.setLatLng(L.latLng(
+        (next[first].lat + next[second].lat) / 2,
+        (next[first].lng + next[second].lng) / 2
+      ));
+    });
+    return marker;
+  });
+};
+
+const stopBoundaryEditing = () => {
+  boundaryEditing = false;
+  clearBoundaryEditor();
+  if (boundaryMapDraggingWasEnabled) map.dragging.enable();
+  const campus = getActiveCampus();
+  if (campus) applyCampusBounds(campus, true);
+  document.querySelector(`.${controlsClass}`)?.classList.remove("is-boundary-editing");
+  const { editBoundsButton, saveBoundsButton, cancelBoundsButton, resetBoundsButton } = getInputs();
+  if (editBoundsButton) editBoundsButton.hidden = false;
+  if (saveBoundsButton) saveBoundsButton.hidden = true;
+  if (cancelBoundsButton) cancelBoundsButton.hidden = true;
+  if (resetBoundsButton) resetBoundsButton.hidden = false;
+};
+
+const startBoundaryEditing = () => {
+  const campus = getActiveCampus();
+  const site = campus ? getSite(campus) : null;
+  const points = boundsToLatLngs(site?.bounds);
+  if (!site || points.length < 3) {
+    showStatus("El campus no tiene un limite editable.", true);
+    return;
+  }
+  boundaryEditing = true;
+  boundaryOriginal = points.map((point) => [...point]);
+  boundaryMapDraggingWasEnabled = map.dragging.enabled();
+  map.dragging.disable();
+  map.setMaxBounds(null);
+  map.options.maxBoundsViscosity = 0;
+  redrawBoundary(points.map((point) => L.latLng(point[0], point[1])));
+  document.querySelector(`.${controlsClass}`)?.classList.add("is-boundary-editing");
+  const { editBoundsButton, saveBoundsButton, cancelBoundsButton, resetBoundsButton } = getInputs();
+  if (editBoundsButton) editBoundsButton.hidden = true;
+  if (saveBoundsButton) saveBoundsButton.hidden = false;
+  if (cancelBoundsButton) cancelBoundsButton.hidden = false;
+  if (resetBoundsButton) resetBoundsButton.hidden = true;
+  showStatus("Arrastra los vértices para ajustar el limite y guarda cuando termines.");
+};
+
+const saveBoundary = () => {
+  const campus = getActiveCampus();
+  const site = campus ? getSite(campus) : null;
+  if (!site || !boundaryEditing || boundaryPoints.length < 4) return;
+  const previousBounds = site.bounds.map((point) => [...point]);
+  const nextBounds = latLngsToBounds(boundaryPoints);
+  if (!updateSiteBounds(campus, nextBounds)) {
+    showStatus("No se pudo guardar el limite del campus.", true);
+    return;
+  }
+  registerBuildingUndo({
+    label: "editar limite del campus",
+    restore: async () => {
+      updateSiteBounds(campus, previousBounds);
+      applyCampusBounds(campus, true);
+    },
+  });
+  stopBoundaryEditing();
+  applyCampusBounds(campus, true);
+  showStatus("Limite del campus guardado.");
+};
+
+const cancelBoundary = () => {
+  stopBoundaryEditing();
+  showStatus("");
+};
+
+const restoreBoundary = () => {
+  const campus = getActiveCampus();
+  if (!campus || !resetSiteBounds(campus)) return;
+  applyCampusBounds(campus, true);
+  showStatus("Limite original restaurado localmente.");
 };
 
 const setInputsDisabled = (disabled) => {
@@ -117,7 +278,7 @@ const saveViewport = async () => {
 };
 
 const bindControls = () => {
-  const { saveButton, useMinButton, useMaxButton } = getInputs();
+  const { saveButton, useMinButton, useMaxButton, editBoundsButton, saveBoundsButton, cancelBoundsButton, resetBoundsButton } = getInputs();
   if (saveButton && saveButton.dataset.bound !== "true") {
     saveButton.dataset.bound = "true";
     saveButton.addEventListener("click", saveViewport);
@@ -136,46 +297,56 @@ const bindControls = () => {
       if (maxInput) maxInput.value = String(Math.round(map.getZoom()));
     });
   }
-
-  const toggle = document.querySelector(`.${controlsClass} [data-site-viewport-toggle]`);
-  const body = document.querySelector(`.${controlsClass} [data-site-viewport-body]`);
-  if (toggle && body && toggle.dataset.bound !== "true") {
-    toggle.dataset.bound = "true";
-    toggle.addEventListener("click", () => {
-      const willOpen = body.hidden;
-      body.hidden = !willOpen;
-      toggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
-      toggle.classList.toggle("is-expanded", willOpen);
-    });
+  if (editBoundsButton && editBoundsButton.dataset.bound !== "true") {
+    editBoundsButton.dataset.bound = "true";
+    editBoundsButton.addEventListener("click", startBoundaryEditing);
   }
+  if (saveBoundsButton && saveBoundsButton.dataset.bound !== "true") {
+    saveBoundsButton.dataset.bound = "true";
+    saveBoundsButton.addEventListener("click", saveBoundary);
+  }
+  if (cancelBoundsButton && cancelBoundsButton.dataset.bound !== "true") {
+    cancelBoundsButton.dataset.bound = "true";
+    cancelBoundsButton.addEventListener("click", cancelBoundary);
+  }
+  if (resetBoundsButton && resetBoundsButton.dataset.bound !== "true") {
+    resetBoundsButton.dataset.bound = "true";
+    resetBoundsButton.addEventListener("click", restoreBoundary);
+  }
+
 };
 
 const createSiteViewportControls = () => {
-  const buttons = getAdminMapToolsButtons();
-  if (!buttons) return;
+  const sectionBody = getAdminMapToolSection("dimensions");
+  if (!sectionBody) return;
 
   if (!document.querySelector(`.${controlsClass}`)) {
-    buttons.insertAdjacentHTML(
+    sectionBody.insertAdjacentHTML(
       "beforeend",
       `
-      <div class="${controlsClass} admin-map-tools-group">
-        <button type="button" class="dashboard-link site-viewport-toggle" data-site-viewport-toggle aria-expanded="false">
-          <span class="site-viewport-toggle-icon" aria-hidden="true">+</span> Zoom del sitio
-        </button>
-        <div class="site-viewport-body" data-site-viewport-body hidden>
-          <label class="site-viewport-field">M&iacute;n
-            <input type="number" min="0" max="21" step="1" data-site-viewport-min />
-          </label>
-          <label class="site-viewport-field">M&aacute;x
-            <input type="number" min="0" max="21" step="1" data-site-viewport-max />
-          </label>
+      <div class="${controlsClass}">
+          <div class="site-viewport-fields">
+            <label class="site-viewport-field">M&iacute;n
+              <input type="number" min="0" max="21" step="1" data-site-viewport-min />
+            </label>
+            <label class="site-viewport-field">M&aacute;x
+              <input type="number" min="0" max="21" step="1" data-site-viewport-max />
+            </label>
+          </div>
           <div class="site-viewport-actions">
-            <button type="button" class="dashboard-link" data-site-viewport-use-min title="Usar el zoom actual como m&iacute;nimo">Zoom actual &rarr; m&iacute;n</button>
-            <button type="button" class="dashboard-link" data-site-viewport-use-max title="Usar el zoom actual como m&aacute;ximo">Zoom actual &rarr; m&aacute;x</button>
-            <button type="button" class="dashboard-link" data-site-viewport-save>Guardar zoom</button>
+            <div class="site-viewport-current-actions">
+              <button type="button" class="dashboard-link" data-site-viewport-use-min title="Usar el zoom actual como m&iacute;nimo">Actual min</button>
+              <button type="button" class="dashboard-link" data-site-viewport-use-max title="Usar el zoom actual como m&aacute;ximo">Actual max</button>
+            </div>
+            <button type="button" class="dashboard-link site-viewport-save" data-site-viewport-save>Guardar zoom</button>
+          </div>
+          <div class="site-viewport-boundary-actions">
+            <button type="button" class="dashboard-link" data-site-bounds-edit>Editar limite</button>
+            <button type="button" class="dashboard-link action-save-button" data-site-bounds-save hidden>Guardar limite</button>
+            <button type="button" class="dashboard-link action-cancel-button" data-site-bounds-cancel hidden>Cancelar</button>
+            <button type="button" class="dashboard-link" data-site-bounds-reset>Restaurar limite</button>
           </div>
           <div class="${statusClass}"></div>
-        </div>
       </div>
       `
     );
@@ -207,4 +378,17 @@ window.addEventListener(identifiers.events.sessionChanged, (event) => {
   syncSiteViewportPanelForSession(event.detail || {});
 });
 
-window.addEventListener(identifiers.events.campusChanged, syncControls);
+window.addEventListener(identifiers.events.campusChanged, () => {
+  if (boundaryEditing) stopBoundaryEditing();
+  syncControls();
+});
+
+window.addEventListener("adminMapToolsHidden", () => {
+  if (boundaryEditing) stopBoundaryEditing();
+  showStatus("");
+});
+
+window.addEventListener("adminMapToolSectionChanged", (event) => {
+  const detail = event.detail || {};
+  if (boundaryEditing && (detail.key !== "dimensions" || !detail.open)) stopBoundaryEditing();
+});
