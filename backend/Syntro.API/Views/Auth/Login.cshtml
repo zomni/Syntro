@@ -18,12 +18,22 @@
             --pi-primary: #003366;
             --pi-primary-hover: #002855;
         }
-        body { background: linear-gradient(180deg, #eefaf7, #f8fafc); }
-        .auth-card { border: 1px solid rgba(15, 118, 110, 0.18); border-radius: 18px; }
+        body {
+            background: linear-gradient(180deg, rgba(0,30,60,0.82), rgba(0,20,40,0.92)),
+                        url('/assets/branding/hospital-sotero.jpg') center/cover no-repeat fixed;
+            min-height: 100vh;
+        }
+        .auth-card {
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
         .auth-logo { box-shadow: 0 10px 24px rgba(15, 118, 110, 0.28); }
         .btn-primary { background-color: var(--pi-primary); border-color: var(--pi-primary); }
         .btn-primary:hover, .btn-primary:focus { background-color: var(--pi-primary-hover); border-color: var(--pi-primary-hover); }
-        .form-control:focus { border-color: var(--pi-primary); box-shadow: 0 0 0 0.2rem rgba(15, 118, 110, 0.18); }
+        .form-control:focus { border-color: var(--pi-primary); box-shadow: 0 0 0 0.2rem rgba(0, 51, 102, 0.25); }
     </style>
 </head>
 <body>
@@ -33,7 +43,7 @@
                 <div class="mb-4 text-center">
                     <img src="/assets/branding/app-logo-backend.svg" alt="Syntro" style="width: 88px; height: 88px; border-radius: 22px; object-fit: cover;" class="mb-3 shadow-sm auth-logo" />
                     <h1 class="h3 fw-bold mb-0 d-flex align-items-center gap-2">
-                        <span>Ingresar a Syntro Admin</span>
+                        <span>SYNTRO</span>
                         <span
                             class="text-muted small"
                             role="button"
