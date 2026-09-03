@@ -10,6 +10,23 @@ using Syntro.API.Models;
 using Syntro.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Un paquete completo del proyecto (DB + PDFs + documentos + backups) puede superar
+// el límite por defecto de Kestrel (30 MB) y el de FormOptions (128 MB). Sin un límite
+// global, [RequestSizeLimit] (filtro de recurso) se aplica después de que la validación
+// antiforgery (filtro de autorización) ya empezó a leer el cuerpo multipart, abortando
+// la conexión (ERR_CONNECTION_ABORTED) para paquetes grandes. Subimos ambos límites
+// para que tanto la fase antiforgery como el model binding acepten paquetes grandes.
+const long MaxPackageBodyBytes = 1_500_000_000;
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = MaxPackageBodyBytes;
+});
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = MaxPackageBodyBytes;
+});
+
 var securitySettings = builder.Configuration.GetSection("SecuritySettings");
 var corsSettings = builder.Configuration.GetSection("CorsSettings");
 var mfaSettings = builder.Configuration.GetSection("MfaSettings");

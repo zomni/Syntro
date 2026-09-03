@@ -982,11 +982,9 @@ public class AdminController : Controller
             CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
 
             var frontendDataDirectory = ResolveFrontendDataDirectory();
-            if (!string.IsNullOrWhiteSpace(frontendDataDirectory))
+            if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendDataDirectory))
             {
-                CopyFileIfExists(Path.Combine(frontendDataDirectory, "walking_routes_backup.json"), Path.Combine(frontendStaging, "walking_routes_backup.json"));
-                CopyFileIfExists(Path.Combine(frontendDataDirectory, "syntro_buildings_backend_backup.json"), Path.Combine(frontendStaging, "syntro_buildings_backend_backup.json"));
-                CopyFileIfExists(Path.Combine(frontendDataDirectory, "network_telemetry_backup.json"), Path.Combine(frontendStaging, "network_telemetry_backup.json"));
+                CopyDirectoryContents(frontendDataDirectory, frontendStaging);
             }
 
             var manifest = JsonSerializer.Serialize(new
@@ -1002,9 +1000,7 @@ public class AdminController : Controller
                     dataProtectionKeys = Directory.Exists(GetDataProtectionKeysDirectory()),
                     frontendBackups = new[]
                     {
-                        "walking_routes_backup.json",
-                        "syntro_buildings_backend_backup.json",
-                        "network_telemetry_backup.json"
+                        "Todos los archivos de frontend-data (campus config, floor geojson, catalog, search, interiors, backups)"
                     }
                 }
             }, new JsonSerializerOptions { WriteIndented = true });
@@ -1035,7 +1031,7 @@ public class AdminController : Controller
     [HttpPost("/admin/project-package/upload")]
     [HttpPost("/dashboard/project-package/upload")]
     [ValidateAntiForgeryToken]
-    [RequestSizeLimit(250_000_000)]
+    [RequestSizeLimit(1_500_000_000)]
     public async Task<IActionResult> UploadProjectPackage(IFormFile? packageFile, CancellationToken cancellationToken)
     {
         if (packageFile is null || packageFile.Length == 0)
@@ -4550,9 +4546,7 @@ public class AdminController : Controller
         if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendPackageRoot))
         {
             Directory.CreateDirectory(frontendDataDirectory);
-            CopyFileIfExists(Path.Combine(frontendPackageRoot, "walking_routes_backup.json"), Path.Combine(frontendDataDirectory, "walking_routes_backup.json"));
-            CopyFileIfExists(Path.Combine(frontendPackageRoot, "syntro_buildings_backend_backup.json"), Path.Combine(frontendDataDirectory, "syntro_buildings_backend_backup.json"));
-            CopyFileIfExists(Path.Combine(frontendPackageRoot, "network_telemetry_backup.json"), Path.Combine(frontendDataDirectory, "network_telemetry_backup.json"));
+            CopyDirectoryContents(frontendPackageRoot, frontendDataDirectory);
         }
     }
 
@@ -4604,6 +4598,28 @@ public class AdminController : Controller
         }
     }
 
+    private static void CopyDirectoryContents(string sourceDirectory, string destinationDirectory)
+    {
+        if (!Directory.Exists(sourceDirectory))
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(destinationDirectory);
+
+        foreach (var file in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
+        {
+            var destFile = file.Replace(sourceDirectory, destinationDirectory);
+            var destParent = Path.GetDirectoryName(destFile);
+            if (!string.IsNullOrWhiteSpace(destParent))
+            {
+                Directory.CreateDirectory(destParent);
+            }
+
+            System.IO.File.Copy(file, destFile, overwrite: true);
+        }
+    }
+
     private static void TryDeleteDirectory(string? path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
@@ -4641,8 +4657,62 @@ public class AdminController : Controller
             await _databaseBackupService.CreateBackupFromCurrentDatabaseAsync(User.Identity?.Name ?? "admin", "pre-restore");
         }
 
-        System.IO.File.Copy(sourcePath, databasePath, overwrite: true);
+        // El backup anterior reabrio conexiones en modo WAL y dejo el archivo
+        // syntro.db con handles de pool abiertos. Liberamos todo otra vez y
+        // descartamos los sidecars WAL obsoletos antes de restaurar.
         SqliteConnection.ClearAllPools();
+        TryDeleteFile(databasePath + "-wal");
+        TryDeleteFile(databasePath + "-shm");
+
+        // No sobreescribimos el archivo con File.Copy (falla con "being used by
+        // another process" porque la DB en WAL queda abierta por el pool). En su
+        // lugar restauramos via la API de backup online de SQLite, que gestiona
+        // los bloqueos. Reintentamos brevemente ante "database is locked".
+        var maxRetries = 10;
+        Exception? lastException = null;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
+        {
+            try
+            {
+                await using (var source = new SqliteConnection($"Data Source={sourcePath}"))
+                await using (var destination = new SqliteConnection($"Data Source={databasePath}"))
+                {
+                    await source.OpenAsync();
+                    await destination.OpenAsync();
+                    source.BackupDatabase(destination);
+                }
+                SqliteConnection.ClearAllPools();
+                return;
+            }
+            catch (Microsoft.Data.Sqlite.SqliteException ex) when (IsBusyError(ex))
+            {
+                lastException = ex;
+                await Task.Delay(500 + (attempt * 250));
+            }
+        }
+
+        throw new InvalidOperationException(
+            "No fue posible restaurar la base de datos porque el archivo esta en uso. " +
+            "Reintenta la restauracion cuando no haya actividad en la aplicacion: " + lastException?.Message);
+    }
+
+    private static bool IsBusyError(Microsoft.Data.Sqlite.SqliteException ex)
+    {
+        return ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try
+        {
+            if (System.IO.File.Exists(path))
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+        catch
+        {
+        }
     }
 
     private static void ValidateSqliteFile(string path)

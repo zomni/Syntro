@@ -60,9 +60,7 @@ try {
     }
 
     if (Test-Path $frontendDataRoot -and (Test-Path $frontendPackageRoot)) {
-        Get-ChildItem $frontendPackageRoot -File | ForEach-Object {
-            Copy-Item $_.FullName (Join-Path $frontendDataRoot $_.Name) -Force
-        }
+        Copy-Item (Join-Path $frontendPackageRoot "*") $frontendDataRoot -Recurse -Force
     }
 
     Write-Host "Paquete restaurado correctamente." -ForegroundColor Green

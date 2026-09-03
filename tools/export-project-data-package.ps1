@@ -53,17 +53,8 @@ try {
         }
     }
 
-    $frontendFiles = @(
-        "walking_routes_backup.json",
-        "syntro_buildings_backend_backup.json",
-        "network_telemetry_backup.json"
-    )
-
-    foreach ($file in $frontendFiles) {
-        $source = Join-Path $frontendDataRoot $file
-        if (Test-Path $source) {
-            Copy-Item $source (Join-Path $frontendStaging $file) -Force
-        }
+    if (Test-Path $frontendDataRoot) {
+        Copy-Item (Join-Path $frontendDataRoot "*") $frontendStaging -Recurse -Force
     }
 
     $manifest = [ordered]@{
@@ -75,11 +66,7 @@ try {
             inventoryForms = Test-Path (Join-Path $backendDataRoot "inventory-forms")
             backups = [bool]$IncludeBackups
             dataProtectionKeys = [bool]$IncludeDataProtectionKeys
-            frontendBackups = @(
-                "walking_routes_backup.json",
-                "syntro_buildings_backend_backup.json",
-                "network_telemetry_backup.json"
-            )
+            frontendData = "Todos los archivos de frontend-data (campus config, floor geojson, catalog, search, interiors, backups)"
         }
     } | ConvertTo-Json -Depth 6
 

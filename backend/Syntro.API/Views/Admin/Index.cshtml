@@ -530,6 +530,17 @@
                                 </div>
                             </form>
 
+                            <div id="projectPackageLoadingOverlay" class="d-none"
+                                 style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999;
+                                        background:rgba(0,0,0,0.6); display:flex; align-items:center;
+                                        justify-content:center;">
+                                <div class="text-center text-white p-4">
+                                    <div class="spinner-border spinner-border-lg mb-3" role="status" style="width:3.5rem; height:3.5rem;"></div>
+                                    <div class="fw-semibold mb-1">Restaurando paquete completo</div>
+                                    <div class="small text-white-50">Este proceso puede tardar varios minutos. No cierres la pestaña ni navegues a otra pagina.</div>
+                                </div>
+                            </div>
+
                             <div class="mt-4">
                                 <div class="small text-muted mb-2">Respaldos disponibles</div>
                                 @if (Model.DatabaseBackups.Count == 0)
@@ -819,6 +830,11 @@
             packageFileInput.addEventListener("change", updateUploadState);
             packageUploadForm.addEventListener("submit", () => {
                 hasPendingProjectPackageFile = false;
+                packageUploadButton.disabled = true;
+                var overlay = document.getElementById("projectPackageLoadingOverlay");
+                if (overlay) {
+                    overlay.classList.remove("d-none");
+                }
             });
 
             const packageDownloadButton = document.getElementById("projectPackageDownloadButton");
