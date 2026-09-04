@@ -31,6 +31,7 @@ public class DatabaseBackupViewModel
     public string FileName { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public DateTime LastWriteUtc { get; set; }
+    public bool IsCurrent { get; set; }
 }
 
 public class DashboardCategorySummaryViewModel

@@ -87,14 +87,24 @@ public class AdminController : Controller
             DatabaseFileSizeBytes = databaseFileInfo?.Length ?? 0,
             DatabaseLastWriteUtc = databaseFileInfo?.LastWriteTimeUtc,
             FrontendMapUrl = ResolveFrontendMapUrl(),
-            DatabaseBackups = databaseBackups
-                .Select(file => new DatabaseBackupViewModel
+            DatabaseBackups = new[]
+            {
+                new DatabaseBackupViewModel
                 {
-                    FileName = file.Name,
-                    SizeBytes = file.Length,
-                    LastWriteUtc = file.LastWriteTimeUtc
-                })
-                .ToList(),
+                    FileName = databaseFileInfo?.Name ?? "syntro.db",
+                    SizeBytes = databaseFileInfo?.Length ?? 0,
+                    LastWriteUtc = databaseFileInfo?.LastWriteTimeUtc ?? DateTime.MinValue,
+                    IsCurrent = true
+                }
+            }
+            .Concat(databaseBackups.Select(file => new DatabaseBackupViewModel
+            {
+                FileName = file.Name,
+                SizeBytes = file.Length,
+                LastWriteUtc = file.LastWriteTimeUtc,
+                IsCurrent = false
+            }))
+            .ToList(),
             CategoryBreakdown = await inventoryQuery
                 .AsNoTracking()
                 .GroupBy(i => i.InferredCategory == "" ? "sin-categoria" : i.InferredCategory)
@@ -861,6 +871,13 @@ public class AdminController : Controller
         }
 
         var safeFileName = Path.GetFileName(fileName);
+        var activeDbName = Path.GetFileName(GetDatabaseFilePath());
+        if (string.Equals(safeFileName, activeDbName, StringComparison.OrdinalIgnoreCase))
+        {
+            TempData["ErrorMessage"] = "No se puede eliminar la base de datos activa.";
+            return RedirectToAction(nameof(Index));
+        }
+
         var backupPath = Path.Combine(GetDatabaseBackupDirectory(), safeFileName);
         var fileExisted = System.IO.File.Exists(backupPath);
 
@@ -879,12 +896,19 @@ public class AdminController : Controller
                 await _context.SaveChangesAsync();
             }
 
+            var remainingBackups = GetDatabaseBackupFiles();
+            if (remainingBackups.Count == 0)
+            {
+                await _databaseBackupService.CreateBackupAsync(
+                    User.Identity?.Name ?? "admin", "auto-empty-fallback", CancellationToken.None);
+            }
+
             TempData["SuccessMessage"] = $"Respaldo eliminado correctamente: {safeFileName}";
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "backup-delete",
                 resource: "database-backup",
                 summary: $"Respaldo eliminado {fileName}",
-                details: $"Archivo: {(fileExisted ? "eliminado" : "ya no existia")}, registro BD: {(historyRecord != null ? "eliminado" : "no encontrado")}",
+                details: $"Archivo: {(fileExisted ? "eliminado" : "ya no existia")}, registro BD: {(historyRecord != null ? "eliminado" : "no encontrado")}, respaldos restantes: {remainingBackups.Count}",
                 result: "success",
                 severity: "warning",
                 changedByUsername: User.Identity?.Name ?? "admin");

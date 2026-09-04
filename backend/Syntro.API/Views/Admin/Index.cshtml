@@ -575,26 +575,35 @@
                                                         var backup = allBackups[i];
                                                         var hidden = i >= 3 ? "style=\"display:none\"" : "";
                                                         <tr class="backup-row" @Html.Raw(hidden) data-index="@i">
-                                                            <td class="small fw-semibold">@backup.FileName</td>
+                                                            <td class="small fw-semibold">
+                                                                @backup.FileName
+                                                                @if (backup.IsCurrent)
+                                                                {
+                                                                    <span class="badge bg-success ms-1" style="font-size:0.65rem;">Activo</span>
+                                                                }
+                                                            </td>
                                                             <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
                                                             <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
                                                             <td class="text-end">
                                                                 <div class="d-flex gap-2 justify-content-end">
-                                                                    <a href="/dashboard/database/backups/@backup.FileName" class="btn btn-sm btn-outline-secondary">
+                                                                    <a href="@(backup.IsCurrent ? "/admin/database/download" : $"/dashboard/database/backups/{backup.FileName}")" class="btn btn-sm btn-outline-secondary">
                                                                         Descargar
                                                                     </a>
-                                                                    <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
-                                                                        @Html.AntiForgeryToken()
-                                                                        <button type="submit" class="btn btn-sm btn-outline-warning">
-                                                                            Restaurar
-                                                                        </button>
-                                                                    </form>
-                                                                    <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
-                                                                        @Html.AntiForgeryToken()
-                                                                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                                            Eliminar
-                                                                        </button>
-                                                                    </form>
+                                                                    @if (!backup.IsCurrent)
+                                                                    {
+                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
+                                                                            @Html.AntiForgeryToken()
+                                                                            <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                                                Restaurar
+                                                                            </button>
+                                                                        </form>
+                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
+                                                                            @Html.AntiForgeryToken()
+                                                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                                Eliminar
+                                                                            </button>
+                                                                        </form>
+                                                                    }
                                                                 </div>
                                                             </td>
                                                         </tr>
