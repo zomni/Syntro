@@ -4,7 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     ports:
-      - "5001:8080"
+      - "5002:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
       - DOTNET_USE_POLLING_FILE_WATCHER=1
@@ -12,6 +12,7 @@ services:
       - DOTNET_WATCH_RESTART_ON_RUDE_EDIT=1
       - DOTNET_WATCH_HOT_RELOAD=0
       - AllowedOrigins=${ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:3000}
+      - CorsSettings__AllowedOrigins=${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://localhost:3000}
       - FrontendAppUrl=${FRONTEND_APP_URL:-http://localhost:8081}
       - FrontendDataPath=/app/frontend-data
       - ExcelImportRoot=/app/import
@@ -74,7 +75,7 @@ services:
       args:
         API_BASE_URL: ${API_BASE_URL:-http://localhost:5001}
     ports:
-      - "8081:8080"
+      - "8082:8080"
     volumes:
       - ${FRONTEND_DATA_HOST_PATH:-./frontend/src/data}:/usr/share/nginx/html/data
     restart: unless-stopped
