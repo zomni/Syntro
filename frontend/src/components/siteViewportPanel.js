@@ -56,14 +56,13 @@ const getInputs = () => {
 
 const boundsToLatLngs = (bounds) => {
   if (!Array.isArray(bounds) || bounds.length < 2) return [];
-  if (bounds.length === 2) {
-    const south = Math.min(bounds[0][0], bounds[1][0]);
-    const north = Math.max(bounds[0][0], bounds[1][0]);
-    const west = Math.min(bounds[0][1], bounds[1][1]);
-    const east = Math.max(bounds[0][1], bounds[1][1]);
-    return [[south, west], [south, east], [north, east], [north, west]];
-  }
-  return bounds.slice(0, -1).map((point) => [Number(point[0]), Number(point[1])]);
+  const lats = bounds.map((p) => Number(p[0]));
+  const lngs = bounds.map((p) => Number(p[1]));
+  const south = Math.min(...lats);
+  const north = Math.max(...lats);
+  const west = Math.min(...lngs);
+  const east = Math.max(...lngs);
+  return [[south, west], [south, east], [north, east], [north, west]];
 };
 
 const latLngsToBounds = (latlngs) => latlngs.map((point) => [point.lat, point.lng]);
@@ -131,12 +130,13 @@ const redrawBoundary = (latlngs) => {
   });
 };
 
-const stopBoundaryEditing = () => {
+const stopBoundaryEditing = (applyBounds = true) => {
   boundaryEditing = false;
+  window.__syntroBoundaryEditing = false;
   clearBoundaryEditor();
   if (boundaryMapDraggingWasEnabled) map.dragging.enable();
   const campus = getActiveCampus();
-  if (campus) applyCampusBounds(campus, true);
+  if (campus && applyBounds) applyCampusBounds(campus, true);
   document.querySelector(`.${controlsClass}`)?.classList.remove("is-boundary-editing");
   const { editBoundsButton, saveBoundsButton, cancelBoundsButton, resetBoundsButton } = getInputs();
   if (editBoundsButton) editBoundsButton.hidden = false;
@@ -154,6 +154,7 @@ const startBoundaryEditing = () => {
     return;
   }
   boundaryEditing = true;
+  window.__syntroBoundaryEditing = true;
   boundaryOriginal = points.map((point) => [...point]);
   boundaryMapDraggingWasEnabled = map.dragging.enabled();
   map.dragging.disable();
@@ -212,7 +213,7 @@ const saveBoundary = async () => {
       applyCampusBounds(campus, true);
     },
   });
-  stopBoundaryEditing();
+  stopBoundaryEditing(false);
   applyCampusBounds(campus, false);
   showStatus("Limite del campus guardado.");
 };

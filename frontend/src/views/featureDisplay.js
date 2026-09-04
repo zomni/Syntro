@@ -230,6 +230,10 @@ const suspendMapBoundsForPopup = () => {
 
 const restoreMapBoundsAfterPopup = () => {
   if (!popupBoundsState) return;
+  if (window.__syntroBoundaryEditing) {
+    popupBoundsState = null;
+    return;
+  }
 
   const { maxBounds, maxBoundsViscosity } = popupBoundsState;
   popupBoundsState = null;
