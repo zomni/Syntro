@@ -132,6 +132,7 @@ public class CreateInventoryItemViewModel
     public IReadOnlyList<SyncedRoom> Rooms { get; set; } = [];
     public IReadOnlyList<string> Categories { get; set; } = [];
     public IReadOnlyList<string> Statuses { get; set; } = [];
+    public bool HasNoPackage { get; set; }
 }
 
 public class AdminLocationsViewModel

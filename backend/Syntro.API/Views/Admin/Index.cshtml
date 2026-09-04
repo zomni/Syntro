@@ -605,15 +605,24 @@
                                                                     <a href="@(backup.IsCurrent ? "/admin/database/download" : $"/dashboard/database/backups/{backup.FileName}")" class="btn btn-sm btn-outline-secondary">
                                                                         Descargar
                                                                     </a>
-                                                                    @if (!backup.IsCurrent)
+                                                                    @if (backup.IsCurrent)
                                                                     {
-                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. Â¿Continuar?');">
+                                                                        <form method="post" action="/admin/database/clear" onsubmit="return confirm('Se guardara un respaldo automatico del estado actual y luego se vaciaran todos los datos (inventario, edificios, salas, telemetria). La aplicacion quedara sin datos. \u00bfContinuar?');">
+                                                                            @Html.AntiForgeryToken()
+                                                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                                Eliminar
+                                                                            </button>
+                                                                        </form>
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. \u00bfContinuar?');">
                                                                             @Html.AntiForgeryToken()
                                                                             <button type="submit" class="btn btn-sm btn-outline-warning">
                                                                                 Restaurar
                                                                             </button>
                                                                         </form>
-                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. Â¿Continuar?');">
+                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. \u00bfContinuar?');">
                                                                             @Html.AntiForgeryToken()
                                                                             <button type="submit" class="btn btn-sm btn-outline-danger">
                                                                                 Eliminar

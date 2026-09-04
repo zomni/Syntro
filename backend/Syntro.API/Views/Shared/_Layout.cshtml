@@ -509,6 +509,32 @@
         window.setInterval(tick, 1000);
     });
     </script>
+    @if (ViewBag.HasNoPackage == true)
+    {
+        <div id="no-package-modal" class="modal" tabindex="-1" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" style="border-radius:16px;overflow:hidden;">
+                    <div class="modal-body text-center p-4">
+                        <div style="width:56px;height:56px;margin:0 auto 1rem;background:#fef3c7;border-radius:50%;display:grid;place-items:center;">
+                            <i class="bi bi-exclamation-triangle" style="font-size:1.5rem;color:#d97706;"></i>
+                        </div>
+                        <h5 class="fw-bold mb-2">No hay paquete cargado</h5>
+                        <p class="text-muted mb-3" style="font-size:0.9rem;">Debes iniciar un paquete completo antes de usar esta seccion. Sube un paquete .zip o importa un archivo Excel desde el dashboard.</p>
+                    </div>
+                    <div class="modal-footer justify-content-center border-0 pt-0 pb-3">
+                        <a href="/dashboard" class="btn btn-primary fw-semibold px-3"><i class="bi bi-upload me-1"></i> Ir al Dashboard</a>
+                        <button type="button" class="btn btn-outline-secondary fw-semibold px-3" onclick="history.back()">Cancelar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                const modal = document.getElementById("no-package-modal");
+                if (modal) new bootstrap.Modal(modal).show();
+            });
+        </script>
+    }
     @RenderSection("Scripts", required: false)
 </body>
 </html>

@@ -771,11 +771,12 @@ public class AdminController : Controller
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [HttpGet("/api/package-status")]
-    public IActionResult GetPackageStatus()
+    public async Task<IActionResult> GetPackageStatus(CancellationToken cancellationToken)
     {
         var fileInfo = GetDatabaseFileInfo();
         var backupFiles = GetDatabaseBackupFiles();
-        var hasData = fileInfo != null && fileInfo.Length > 1024;
+        var hasData = await _context.SyncedBuildings.AnyAsync(b => b.IsActive, cancellationToken)
+                   || await _context.ImportedInventoryItems.AnyAsync(cancellationToken);
 
         return Ok(new
         {
@@ -943,6 +944,53 @@ public class AdminController : Controller
                 severity: "warning",
                 changedByUsername: User.Identity?.Name ?? "admin");
         }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/admin/database/clear")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ClearActiveDatabase(CancellationToken cancellationToken)
+    {
+        await _databaseBackupService.CreateBackupAsync(
+            User.Identity?.Name ?? "admin", "before-clear", cancellationToken);
+
+        await _context.Database.ExecuteSqlRawAsync("""
+            PRAGMA foreign_keys = OFF;
+            BEGIN;
+            DELETE FROM NetworkTelemetryObservations;
+            DELETE FROM NetworkTelemetrySnapshots;
+            DELETE FROM ScheduledScanRuns;
+            DELETE FROM InventoryDocuments;
+            DELETE FROM ImportedInventoryItems;
+            DELETE FROM InventoryAliasRules;
+            DELETE FROM SyncedRooms;
+            DELETE FROM SyncedEquipments;
+            DELETE FROM WalkingRouteEdges;
+            DELETE FROM WalkingRouteNodes;
+            DELETE FROM BuildingGeometryOverrides;
+            DELETE FROM ManualBuildings;
+            DELETE FROM SyncedBuildings;
+            DELETE FROM Locations;
+            DELETE FROM Equipments;
+            DELETE FROM MlTrainingRuns;
+            COMMIT;
+            PRAGMA foreign_keys = ON;
+            """, cancellationToken);
+
+        await _context.Database.ExecuteSqlRawAsync("VACUUM;", cancellationToken);
+        _context.ChangeTracker.Clear();
+
+        TempData["SuccessMessage"] = "Paquete eliminado correctamente. La aplicacion quedo sin datos.";
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "package-clear",
+            resource: "database",
+            summary: "Paquete activo eliminado (datos vaciados)",
+            details: "Se vaciaron todas las tablas de datos y se ejecuto VACUUM.",
+            result: "success",
+            severity: "warning",
+            changedByUsername: User.Identity?.Name ?? "admin");
 
         return RedirectToAction(nameof(Index));
     }
@@ -1403,8 +1451,9 @@ public class AdminController : Controller
     }
 
     [HttpGet("/admin/delivery-form")]
-    public IActionResult DeliveryForm()
+    public async Task<IActionResult> DeliveryForm()
     {
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
         return View(BuildDefaultDeliveryFormViewModel());
     }
 
@@ -1889,6 +1938,8 @@ public class AdminController : Controller
         if (building is null)
             return NotFound();
 
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
+
         var model = new EditSyncedBuildingViewModel
         {
             Building = building,
@@ -1992,6 +2043,8 @@ public class AdminController : Controller
             .AsNoTracking()
             .FirstAsync(b => b.ExternalId == room.BuildingExternalId);
 
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
+
         return View(new EditSyncedRoomViewModel
         {
             Room = room,
@@ -2022,7 +2075,11 @@ public class AdminController : Controller
     }
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
-    public IActionResult CreateLocation() => View(new Location());
+    public async Task<IActionResult> CreateLocation()
+    {
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
+        return View(new Location());
+    }
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [HttpPost]
@@ -2045,6 +2102,7 @@ public class AdminController : Controller
         if (location == null)
             return NotFound();
 
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
         return View(location);
     }
 
@@ -2541,6 +2599,7 @@ public class AdminController : Controller
         if (item == null)
             return NotFound();
 
+        ViewBag.HasNoPackage = await HasNoPackageDataAsync();
         return View(await BuildEditInventoryItemViewModelAsync(item));
     }
 
@@ -4019,7 +4078,8 @@ public class AdminController : Controller
                 .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
                 .ToListAsync(),
             Categories = await GetInventoryCategoryOptionsAsync(),
-            Statuses = await GetInventoryStatusOptionsAsync()
+            Statuses = await GetInventoryStatusOptionsAsync(),
+            HasNoPackage = await HasNoPackageDataAsync()
         };
     }
 
@@ -4494,6 +4554,12 @@ public class AdminController : Controller
         }
 
         return "http://localhost:8080";
+    }
+
+    private async Task<bool> HasNoPackageDataAsync(CancellationToken ct = default)
+    {
+        return !await _context.SyncedBuildings.AnyAsync(b => b.IsActive, ct)
+            && !await _context.ImportedInventoryItems.AnyAsync(ct);
     }
 
     private string GetDatabaseFilePath()
