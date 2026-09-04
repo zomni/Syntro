@@ -532,12 +532,19 @@
 
                             <div id="projectPackageLoadingOverlay" class="d-none"
                                  style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999;
-                                        background:rgba(0,0,0,0.6); display:flex; align-items:center;
-                                        justify-content:center;">
-                                <div class="text-center text-white p-4">
+                                        background:rgba(0,0,0,0.75); display:flex; align-items:center;
+                                        justify-content:center; cursor:default;">
+                                <div class="text-center text-white p-4" style="max-width:420px; width:100%;">
                                     <div class="spinner-border spinner-border-lg mb-3" role="status" style="width:3.5rem; height:3.5rem;"></div>
-                                    <div class="fw-semibold mb-1">Restaurando paquete completo</div>
-                                    <div class="small text-white-50">Este proceso puede tardar varios minutos. No cierres la pestaña ni navegues a otra pagina.</div>
+                                    <div class="fw-semibold mb-1" id="packageOverlayTitle">Restaurando paquete completo</div>
+                                    <div class="small text-white-50 mb-3" id="packageOverlaySubtitle">Este proceso puede tardar varios minutos. No cierres la pesta&ntilde;a ni navegues a otra p&aacute;gina.</div>
+                                    <div class="progress mb-3" style="height:8px; background:rgba(255,255,255,0.15);">
+                                        <div id="packageProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%;"></div>
+                                    </div>
+                                    <div class="small text-white-50 mb-3" id="packageOverlayPercent">0%</div>
+                                    <button id="packageCancelButton" type="button" class="btn btn-outline-light btn-sm" style="min-width:140px;">
+                                        <i class="bi bi-x-circle me-1"></i> Cancelar
+                                    </button>
                                 </div>
                             </div>
 
@@ -807,13 +814,93 @@
             };
 
             packageFileInput.addEventListener("change", updateUploadState);
-            packageUploadForm.addEventListener("submit", () => {
+
+            let packageUploadAbort = null;
+
+            packageUploadForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                if (!packageFileInput.files || packageFileInput.files.length === 0) return;
+
                 hasPendingProjectPackageFile = false;
                 packageUploadButton.disabled = true;
+
                 var overlay = document.getElementById("projectPackageLoadingOverlay");
-                if (overlay) {
-                    overlay.classList.remove("d-none");
-                }
+                var progressBar = document.getElementById("packageProgressBar");
+                var percentLabel = document.getElementById("packageOverlayPercent");
+                var titleEl = document.getElementById("packageOverlayTitle");
+                var subtitleEl = document.getElementById("packageOverlaySubtitle");
+                var cancelBtn = document.getElementById("packageCancelButton");
+
+                if (overlay) overlay.classList.remove("d-none");
+                if (progressBar) { progressBar.style.width = "0%"; progressBar.classList.remove("bg-danger"); }
+                if (percentLabel) percentLabel.textContent = "0%";
+                if (titleEl) titleEl.textContent = "Restaurando paquete completo";
+                if (subtitleEl) subtitleEl.textContent = "Subiendo archivo...";
+
+                var formData = new FormData(packageUploadForm);
+                var xhr = new XMLHttpRequest();
+                packageUploadAbort = () => { xhr.abort(); };
+
+                cancelBtn.onclick = () => { xhr.abort(); };
+
+                xhr.upload.addEventListener("progress", (e) => {
+                    if (e.lengthComputable) {
+                        var pct = Math.round((e.loaded / e.total) * 100);
+                        if (progressBar) progressBar.style.width = pct + "%";
+                        if (percentLabel) {
+                            var loadedMB = (e.loaded / 1048576).toFixed(1);
+                            var totalMB = (e.total / 1048576).toFixed(1);
+                            percentLabel.textContent = pct + "% \u2014 " + loadedMB + " MB / " + totalMB + " MB";
+                        }
+                    }
+                });
+
+                xhr.addEventListener("load", () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        var resp;
+                        try { resp = JSON.parse(xhr.responseText); } catch { resp = null; }
+                        if (titleEl) titleEl.textContent = "\u2705 Paquete restaurado correctamente";
+                        if (subtitleEl) subtitleEl.textContent = resp?.message || "Recarga la pagina para ver los cambios.";
+                        if (progressBar) { progressBar.style.width = "100%"; progressBar.classList.remove("bg-danger"); progressBar.classList.add("bg-success"); }
+                        if (percentLabel) percentLabel.textContent = "100%";
+                        if (cancelBtn) cancelBtn.style.display = "none";
+                        hasPendingProjectPackageFile = false;
+                    } else {
+                        var errMsg;
+                        try { var errResp = JSON.parse(xhr.responseText); errMsg = errResp?.message; } catch { errMsg = null; }
+                        if (titleEl) titleEl.textContent = "\u274c Error al restaurar paquete";
+                        if (subtitleEl) subtitleEl.textContent = errMsg || ("Error del servidor (" + xhr.status + ")");
+                        if (progressBar) progressBar.classList.add("bg-danger");
+                        if (percentLabel) percentLabel.textContent = "";
+                        if (cancelBtn) { cancelBtn.textContent = "Cerrar"; cancelBtn.onclick = () => { overlay?.classList.add("d-none"); cancelBtn.style.display = ""; cancelBtn.textContent = '\u2390 Cancelar'; }; }
+                        packageUploadButton.disabled = false;
+                    }
+                    packageUploadAbort = null;
+                });
+
+                xhr.addEventListener("error", () => {
+                    if (titleEl) titleEl.textContent = "\u274c Error de conexion";
+                    if (subtitleEl) subtitleEl.textContent = "No se pudo conectar con el servidor. Verifica tu conexion.";
+                    if (progressBar) progressBar.classList.add("bg-danger");
+                    if (percentLabel) percentLabel.textContent = "";
+                    if (cancelBtn) { cancelBtn.textContent = "Cerrar"; cancelBtn.onclick = () => { overlay?.classList.add("d-none"); cancelBtn.style.display = ""; cancelBtn.textContent = '\u2390 Cancelar'; }; }
+                    packageUploadButton.disabled = false;
+                    packageUploadAbort = null;
+                });
+
+                xhr.addEventListener("abort", () => {
+                    if (titleEl) titleEl.textContent = "Carga cancelada";
+                    if (subtitleEl) subtitleEl.textContent = "La restauracion fue interrumpida por el usuario.";
+                    if (progressBar) progressBar.classList.add("bg-danger");
+                    if (percentLabel) percentLabel.textContent = "";
+                    if (cancelBtn) { cancelBtn.textContent = "Cerrar"; cancelBtn.onclick = () => { overlay?.classList.add("d-none"); cancelBtn.style.display = ""; cancelBtn.textContent = '\u2390 Cancelar'; }; }
+                    packageUploadButton.disabled = false;
+                    packageUploadAbort = null;
+                });
+
+                xhr.open("POST", packageUploadForm.action);
+                xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+                xhr.send(formData);
             });
 
             const packageDownloadButton = document.getElementById("projectPackageDownloadButton");

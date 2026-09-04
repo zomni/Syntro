@@ -168,12 +168,35 @@ const startBoundaryEditing = () => {
   showStatus("Arrastra los vértices para ajustar el limite y guarda cuando termines.");
 };
 
-const saveBoundary = () => {
+const saveBoundary = async () => {
   const campus = getActiveCampus();
   const site = campus ? getSite(campus) : null;
   if (!site || !boundaryEditing || boundaryPoints.length < 4) return;
   const previousBounds = site.bounds.map((point) => [...point]);
   const nextBounds = latLngsToBounds(boundaryPoints);
+
+  showStatus("Guardando limite...");
+
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      cache: "no-store",
+      body: JSON.stringify({ bounds: nextBounds }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      showStatus(data?.message || `No se pudo guardar el limite (${response.status}).`, true);
+      return;
+    }
+  } catch (error) {
+    console.error("Error guardando el limite del campus:", error);
+    showStatus("Error de red al guardar el limite.", true);
+    return;
+  }
+
   if (!updateSiteBounds(campus, nextBounds)) {
     showStatus("No se pudo guardar el limite del campus.", true);
     return;
@@ -195,11 +218,25 @@ const cancelBoundary = () => {
   showStatus("");
 };
 
-const restoreBoundary = () => {
+const restoreBoundary = async () => {
   const campus = getActiveCampus();
-  if (!campus || !resetSiteBounds(campus)) return;
+  if (!campus) return;
+
+  showStatus("Restaurando limite...");
+
+  try {
+    await fetch(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
+      method: "DELETE",
+      credentials: "include",
+      cache: "no-store",
+    });
+  } catch {
+    // Continuar con el reset local incluso si el backend falla.
+  }
+
+  if (!resetSiteBounds(campus)) return;
   applyCampusBounds(campus, true);
-  showStatus("Limite original restaurado localmente.");
+  showStatus("Limite original restaurado.");
 };
 
 const setInputsDisabled = (disabled) => {

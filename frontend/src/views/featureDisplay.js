@@ -257,6 +257,7 @@ let equipmentSyncRetryHandle = null;
 let backendStatusPanel = null;
 let backendSessionCache = null;
 let backendSessionCacheAt = 0;
+let backendSessionPendingPromise = null;
 let buildingEquipmentSummaryCache = null;
 let buildingEquipmentSummaryPromise = null;
 let globalEquipmentTypeFilter = "";
@@ -314,23 +315,36 @@ const loadBackendSession = async () => {
     return backendSessionCache;
   }
 
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      backendSessionCache = { isAuthenticated: false, isAdmin: false };
-    } else {
-      backendSessionCache = await response.json();
-    }
-  } catch {
-    backendSessionCache = { isAuthenticated: false, isAdmin: false };
+  if (backendSessionPendingPromise) {
+    return backendSessionPendingPromise;
   }
 
-  backendSessionCacheAt = now;
-  return backendSessionCache;
+  backendSessionPendingPromise = (async () => {
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        backendSessionCache = { isAuthenticated: false, isAdmin: false };
+      } else {
+        backendSessionCache = await response.json();
+      }
+    } catch {
+      backendSessionCache = { isAuthenticated: false, isAdmin: false };
+    }
+
+    backendSessionCacheAt = Date.now();
+    window.syntroBackendSession = backendSessionCache;
+    return backendSessionCache;
+  })();
+
+  try {
+    return await backendSessionPendingPromise;
+  } finally {
+    backendSessionPendingPromise = null;
+  }
 };
 
 const resetBuildingEquipmentSummaryCache = () => {

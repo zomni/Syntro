@@ -29,6 +29,7 @@ public class AdminController : Controller
     private readonly IMemoryCache _memoryCache;
     private readonly EquipmentDeliveryDocumentService _equipmentDeliveryDocumentService;
     private readonly NetworkTelemetryService _networkTelemetryService;
+    private readonly SiteViewportOverridesService _viewportOverridesService;
     private readonly IPasswordHasher<AuthUser> _passwordHasher;
     private const string ManualInventorySourceFile = "manual-admin";
     private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
@@ -42,6 +43,7 @@ public class AdminController : Controller
         IMemoryCache memoryCache,
         EquipmentDeliveryDocumentService equipmentDeliveryDocumentService,
         NetworkTelemetryService networkTelemetryService,
+        SiteViewportOverridesService viewportOverridesService,
         IPasswordHasher<AuthUser> passwordHasher)
     {
         _context = context;
@@ -51,6 +53,7 @@ public class AdminController : Controller
         _memoryCache = memoryCache;
         _equipmentDeliveryDocumentService = equipmentDeliveryDocumentService;
         _networkTelemetryService = networkTelemetryService;
+        _viewportOverridesService = viewportOverridesService;
         _passwordHasher = passwordHasher;
     }
 
@@ -987,6 +990,9 @@ public class AdminController : Controller
                 CopyDirectoryContents(frontendDataDirectory, frontendStaging);
             }
 
+            var viewportOverridesPath = _viewportOverridesService.GetOverridesFilePath();
+            CopyFileIfExists(viewportOverridesPath, Path.Combine(backendStaging, "site-viewport-overrides.json"));
+
             var manifest = JsonSerializer.Serialize(new
             {
                 exportedAt = DateTime.UtcNow,
@@ -1034,8 +1040,11 @@ public class AdminController : Controller
     [RequestSizeLimit(1_500_000_000)]
     public async Task<IActionResult> UploadProjectPackage(IFormFile? packageFile, CancellationToken cancellationToken)
     {
+        var isAjax = string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase);
+
         if (packageFile is null || packageFile.Length == 0)
         {
+            if (isAjax) return BadRequest(new { success = false, message = "Selecciona un paquete del proyecto para restaurar." });
             TempData["ErrorMessage"] = "Selecciona un paquete del proyecto para restaurar.";
             return RedirectToAction(nameof(Index));
         }
@@ -1043,6 +1052,7 @@ public class AdminController : Controller
         var extension = Path.GetExtension(packageFile.FileName);
         if (!string.Equals(extension, ".zip", StringComparison.OrdinalIgnoreCase))
         {
+            if (isAjax) return BadRequest(new { success = false, message = "El paquete debe ser un archivo .zip." });
             TempData["ErrorMessage"] = "El paquete debe ser un archivo .zip.";
             return RedirectToAction(nameof(Index));
         }
@@ -1063,7 +1073,6 @@ public class AdminController : Controller
             ZipFile.ExtractToDirectory(tempZipPath, extractRoot, overwriteFiles: true);
             await RestoreProjectPackageAsync(extractRoot, cancellationToken);
 
-            TempData["SuccessMessage"] = "Paquete del proyecto restaurado correctamente. Si tienes otras sesiones abiertas, recarga la pagina.";
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "project-package-import",
                 resource: "project-package",
@@ -1073,10 +1082,16 @@ public class AdminController : Controller
                 severity: "warning",
                 changedByUsername: User.Identity?.Name ?? "admin",
                 cancellationToken: cancellationToken);
+
+            if (isAjax)
+            {
+                return Ok(new { success = true, message = "Paquete del proyecto restaurado correctamente. Si tienes otras sesiones abiertas, recarga la pagina." });
+            }
+
+            TempData["SuccessMessage"] = "Paquete del proyecto restaurado correctamente. Si tienes otras sesiones abiertas, recarga la pagina.";
         }
         catch (Exception ex)
         {
-            TempData["ErrorMessage"] = $"No fue posible restaurar el paquete del proyecto: {ex.Message}";
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "project-package-import",
                 resource: "project-package",
@@ -1086,6 +1101,13 @@ public class AdminController : Controller
                 severity: "critical",
                 changedByUsername: User.Identity?.Name ?? "admin",
                 cancellationToken: cancellationToken);
+
+            if (isAjax)
+            {
+                return StatusCode(500, new { success = false, message = $"No fue posible restaurar el paquete del proyecto: {ex.Message}" });
+            }
+
+            TempData["ErrorMessage"] = $"No fue posible restaurar el paquete del proyecto: {ex.Message}";
         }
         finally
         {
@@ -4541,6 +4563,14 @@ public class AdminController : Controller
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-documents"), GetInventoryDocumentsDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "backups"), GetDatabaseBackupDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
+
+        var viewportOverridesSource = Path.Combine(backendPackageRoot, "site-viewport-overrides.json");
+        if (System.IO.File.Exists(viewportOverridesSource))
+        {
+            var viewportOverridesDest = _viewportOverridesService.GetOverridesFilePath();
+            Directory.CreateDirectory(Path.GetDirectoryName(viewportOverridesDest)!);
+            System.IO.File.Copy(viewportOverridesSource, viewportOverridesDest, overwrite: true);
+        }
 
         var frontendDataDirectory = ResolveFrontendDataDirectory();
         if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendPackageRoot))

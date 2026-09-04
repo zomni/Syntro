@@ -34,6 +34,8 @@ let sites;
 let sitesSource = "static";
 let sitesLoadedPromise = null;
 let isBackendAuthenticated = null;
+let serverOverrides = null;
+let serverOverridesPromise = null;
 const viewportStorageKey = "syntro-site-viewport-overrides";
 const boundsStorageKey = "syntro-site-bounds-overrides";
 
@@ -81,9 +83,38 @@ const writeBoundsOverride = (campusKey, bounds) => {
   }
 };
 
+const fetchServerOverrides = async () => {
+  if (serverOverridesPromise) {
+    return serverOverridesPromise;
+  }
+
+  serverOverridesPromise = (async () => {
+    try {
+      const response = await fetch(`${appConfig.apiBaseUrl}/api/sites/viewport-overrides`, {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && typeof data === "object") {
+          serverOverrides = data;
+        }
+      }
+    } catch {
+      // Backend no disponible, usar fallback localStorage.
+    }
+  })();
+
+  try {
+    await serverOverridesPromise;
+  } finally {
+    serverOverridesPromise = null;
+  }
+};
+
 const applyViewportOverrides = (siteMap) => {
-  const overrides = readViewportOverrides();
-  Object.entries(overrides).forEach(([campusKey, viewport]) => {
+  // 1. Aplicar overrides de localStorage (fallback)
+  const localViewportOverrides = readViewportOverrides();
+  Object.entries(localViewportOverrides).forEach(([campusKey, viewport]) => {
     const site = siteMap[campusKey];
     const minZoom = Number(viewport?.minZoom);
     const maxZoom = Number(viewport?.maxZoom);
@@ -92,13 +123,31 @@ const applyViewportOverrides = (siteMap) => {
       site.maxZoom = maxZoom;
     }
   });
-  const boundsOverrides = readBoundsOverrides();
-  Object.entries(boundsOverrides).forEach(([campusKey, bounds]) => {
+  const localBoundsOverrides = readBoundsOverrides();
+  Object.entries(localBoundsOverrides).forEach(([campusKey, bounds]) => {
     const site = siteMap[campusKey];
     if (site && Array.isArray(bounds) && bounds.length >= 2) {
       site.bounds = bounds;
     }
   });
+
+  // 2. Aplicar overrides del servidor (tienen prioridad sobre localStorage)
+  if (serverOverrides) {
+    Object.entries(serverOverrides).forEach(([campusKey, data]) => {
+      const site = siteMap[campusKey];
+      if (!site) return;
+      const minZoom = Number(data?.minZoom);
+      const maxZoom = Number(data?.maxZoom);
+      if (Number.isInteger(minZoom) && Number.isInteger(maxZoom)) {
+        site.minZoom = minZoom;
+        site.maxZoom = maxZoom;
+      }
+      if (Array.isArray(data?.bounds) && data.bounds.length >= 2) {
+        site.bounds = data.bounds;
+      }
+    });
+  }
+
   return siteMap;
 };
 
@@ -108,17 +157,19 @@ export const loadSites = () => {
   if (!sitesLoadedPromise) {
     sitesLoadedPromise = (async () => {
       try {
-        const response = await fetch(`${appConfig.apiBaseUrl}/api/auth/session`, {
-          credentials: "include",
-          cache: "no-store",
-        });
+        const [sessionResponse] = await Promise.all([
+          fetch(`${appConfig.apiBaseUrl}/api/auth/session`, {
+            credentials: "include",
+            cache: "no-store",
+          }),
+          fetchServerOverrides(),
+        ]);
 
-        if (!response.ok) {
-          return;
+        if (sessionResponse.ok) {
+          const session = await sessionResponse.json();
+          isBackendAuthenticated = session?.isAuthenticated === true;
         }
 
-        const session = await response.json();
-        isBackendAuthenticated = session?.isAuthenticated === true;
         sites = applyViewportOverrides(normalizeStaticSites());
         sitesSource = "static";
         if (typeof window !== "undefined") {
@@ -169,6 +220,16 @@ export const updateSiteViewport = (campusKey, viewport) => {
   site.minZoom = minZoom;
   site.maxZoom = maxZoom;
   writeViewportOverride(campusKey, minZoom, maxZoom);
+
+  // Actualizar cache local del servidor
+  if (serverOverrides) {
+    serverOverrides[campusKey] = {
+      ...serverOverrides[campusKey],
+      minZoom,
+      maxZoom,
+    };
+  }
+
   return true;
 };
 
@@ -177,6 +238,15 @@ export const updateSiteBounds = (campusKey, bounds) => {
   if (!site || !Array.isArray(bounds) || bounds.length < 3) return false;
   site.bounds = bounds.map((point) => [Number(point[0]), Number(point[1])]);
   writeBoundsOverride(campusKey, site.bounds);
+
+  // Actualizar cache local del servidor
+  if (serverOverrides) {
+    serverOverrides[campusKey] = {
+      ...serverOverrides[campusKey],
+      bounds: site.bounds,
+    };
+  }
+
   return true;
 };
 
@@ -190,12 +260,20 @@ export const resetSiteBounds = (campusKey) => {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(boundsStorageKey, JSON.stringify(overrides));
   }
+
+  // Actualizar cache local del servidor
+  if (serverOverrides && serverOverrides[campusKey]) {
+    delete serverOverrides[campusKey].bounds;
+  }
+
   return true;
 };
 
 export const resetSitesCache = (keepStatic = true) => {
   sitesLoadedPromise = null;
   isBackendAuthenticated = null;
+  serverOverrides = null;
+  serverOverridesPromise = null;
   sites = keepStatic ? applyViewportOverrides(normalizeStaticSites()) : {};
   sitesSource = "static";
 };
