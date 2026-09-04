@@ -87,9 +87,26 @@ const positionAdminMapToolsPanel = () => {
 
 export const removeAdminMapToolsPanelIfEmpty = () => {
   const buttons = document.getElementById(buttonsId);
-  if (buttons && buttons.children.length === 0) {
+  if (!buttons) return;
+
+  buttons.querySelectorAll(".admin-map-tool-section").forEach((section) => {
+    const body = section.querySelector(".admin-map-tool-section-body");
+    if (!body || body.children.length === 0) {
+      section.remove();
+    }
+  });
+
+  if (buttons.children.length === 0) {
     document.getElementById(panelId)?.remove();
   }
+};
+
+export const removeAdminMapToolSection = (key) => {
+  const buttons = document.getElementById(buttonsId);
+  if (!buttons) return;
+  const section = buttons.querySelector(`[data-admin-tool-section="${key}"]`);
+  if (section) section.remove();
+  removeAdminMapToolsPanelIfEmpty();
 };
 
 export const getAdminMapToolsButtons = () => {

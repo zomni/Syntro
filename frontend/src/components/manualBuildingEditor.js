@@ -5,7 +5,7 @@ import { resetBuildingsCatalogCache } from "@app/addData";
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import {
   getAdminMapToolSection,
-  removeAdminMapToolsPanelIfEmpty,
+  removeAdminMapToolSection,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
   setAdminMapToolsStatus,
@@ -320,7 +320,7 @@ const removeEditorControls = () => {
   stopDrawing();
   removeModal();
   getEditorControls()?.remove();
-  removeAdminMapToolsPanelIfEmpty();
+  removeAdminMapToolSection("buildings");
 };
 
 const loadSession = async () => {

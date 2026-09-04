@@ -4,7 +4,7 @@ import { getSite, updateSiteViewport, updateSiteBounds, resetSiteBounds } from "
 import {
   getAdminMapToolsButtons,
   getAdminMapToolSection,
-  removeAdminMapToolsPanelIfEmpty,
+  removeAdminMapToolSection,
   setAdminMapToolsStatus,
 } from "./adminMapToolsPanel.js";
 import { identifiers } from "../utils/identifiers.js";
@@ -119,12 +119,13 @@ const redrawBoundary = (latlngs) => {
       }
       boundaryPoints = next;
       boundaryLayer?.setLatLngs([...next, next[0]]);
-      const first = side === 0 ? 0 : side === 1 ? 1 : side === 2 ? 2 : 3;
-      const second = side === 0 ? 1 : side === 1 ? 2 : side === 2 ? 3 : 0;
-      marker.setLatLng(L.latLng(
-        (next[first].lat + next[second].lat) / 2,
-        (next[first].lng + next[second].lng) / 2
-      ));
+      const sideMidpoints = [
+        L.latLng(next[0].lat, (next[0].lng + next[1].lng) / 2),
+        L.latLng((next[1].lat + next[2].lat) / 2, next[1].lng),
+        L.latLng(next[2].lat, (next[2].lng + next[3].lng) / 2),
+        L.latLng((next[3].lat + next[0].lat) / 2, next[0].lng),
+      ];
+      boundaryMarkers.forEach((m, i) => m.setLatLng(sideMidpoints[i]));
     });
     return marker;
   });
@@ -171,7 +172,10 @@ const startBoundaryEditing = () => {
 const saveBoundary = async () => {
   const campus = getActiveCampus();
   const site = campus ? getSite(campus) : null;
-  if (!site || !boundaryEditing || boundaryPoints.length < 4) return;
+  if (!site || !boundaryEditing || boundaryPoints.length < 4) {
+    showStatus("No hay edicion activa para guardar.", true);
+    return;
+  }
   const previousBounds = site.bounds.map((point) => [...point]);
   const nextBounds = latLngsToBounds(boundaryPoints);
 
@@ -209,7 +213,7 @@ const saveBoundary = async () => {
     },
   });
   stopBoundaryEditing();
-  applyCampusBounds(campus, true);
+  applyCampusBounds(campus, false);
   showStatus("Limite del campus guardado.");
 };
 
@@ -395,7 +399,7 @@ const createSiteViewportControls = () => {
 
 const removeSiteViewportControls = () => {
   document.querySelector(`.${controlsClass}`)?.remove();
-  removeAdminMapToolsPanelIfEmpty();
+  removeAdminMapToolSection("dimensions");
 };
 
 export const syncSiteViewportPanelForSession = (session) => {

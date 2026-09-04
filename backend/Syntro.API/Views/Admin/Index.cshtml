@@ -831,7 +831,12 @@
                 var subtitleEl = document.getElementById("packageOverlaySubtitle");
                 var cancelBtn = document.getElementById("packageCancelButton");
 
-                if (overlay) overlay.classList.remove("d-none");
+                if (overlay) {
+                    if (overlay.parentElement !== document.body) {
+                        document.body.appendChild(overlay);
+                    }
+                    overlay.classList.remove("d-none");
+                }
                 if (progressBar) { progressBar.style.width = "0%"; progressBar.classList.remove("bg-danger"); }
                 if (percentLabel) percentLabel.textContent = "0%";
                 if (titleEl) titleEl.textContent = "Restaurando paquete completo";
@@ -865,6 +870,7 @@
                         if (percentLabel) percentLabel.textContent = "100%";
                         if (cancelBtn) cancelBtn.style.display = "none";
                         hasPendingProjectPackageFile = false;
+                        setTimeout(function () { window.location.reload(); }, 2500);
                     } else {
                         var errMsg;
                         try { var errResp = JSON.parse(xhr.responseText); errMsg = errResp?.message; } catch { errMsg = null; }

@@ -8,7 +8,7 @@ import { resetBuildingsCatalogCache } from "@app/addData";
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import {
   getAdminMapToolSection,
-  removeAdminMapToolsPanelIfEmpty,
+  removeAdminMapToolSection,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
   setAdminMapToolsStatus,
@@ -408,7 +408,7 @@ const createGeometryControls = () => {
 const removeGeometryControls = () => {
   stopGeometryEditor();
   document.getElementById(controlsId)?.remove();
-  removeAdminMapToolsPanelIfEmpty();
+  removeAdminMapToolSection("buildings");
 };
 
 export const syncBuildingGeometryEditorForSession = (session) => {

@@ -2,7 +2,7 @@ import { BACKEND_API_URL, map } from "../views/map.js";
 import {
   getAdminMapToolSection,
   getAdminMapToolsFooter,
-  removeAdminMapToolsPanelIfEmpty,
+  removeAdminMapToolSection,
   requestAdminMapToolMode,
   setAdminMapToolActiveMode,
   setAdminMapToolsStatus,
@@ -1266,7 +1266,7 @@ const removeEditorControls = () => {
   stopDrawing();
   removeModal();
   getEditorControls()?.remove();
-  removeAdminMapToolsPanelIfEmpty();
+  removeAdminMapToolSection("routes");
 };
 
 const loadSession = async () => {

@@ -11,7 +11,8 @@ public class SiteViewportOverridesService
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
     public SiteViewportOverridesService(IWebHostEnvironment env, ILogger<SiteViewportOverridesService> logger)
