@@ -990,7 +990,6 @@ public class AdminController : Controller
             CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
             CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
             CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
-            CopyDirectoryIfExists(GetDatabaseBackupDirectory(), Path.Combine(backendStaging, "backups"));
             CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
 
             var frontendDataDirectory = ResolveFrontendDataDirectory();
@@ -1011,7 +1010,6 @@ public class AdminController : Controller
                     database = System.IO.File.Exists(GetDatabaseFilePath()),
                     inventoryForms = Directory.Exists(GetInventoryFormPdfDirectory()),
                     inventoryDocuments = Directory.Exists(GetInventoryDocumentsDirectory()),
-                    backups = Directory.Exists(GetDatabaseBackupDirectory()),
                     dataProtectionKeys = Directory.Exists(GetDataProtectionKeysDirectory()),
                     frontendBackups = new[]
                     {
@@ -4570,7 +4568,6 @@ public class AdminController : Controller
 
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-forms"), GetInventoryFormPdfDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-documents"), GetInventoryDocumentsDirectory(), overwrite: true);
-        CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "backups"), GetDatabaseBackupDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
 
         var viewportOverridesSource = Path.Combine(backendPackageRoot, "site-viewport-overrides.json");
