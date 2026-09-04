@@ -105,6 +105,7 @@ public class AdminController : Controller
                 IsCurrent = false
             }))
             .ToList(),
+            HasNoBackups = databaseBackups.Count == 0,
             CategoryBreakdown = await inventoryQuery
                 .AsNoTracking()
                 .GroupBy(i => i.InferredCategory == "" ? "sin-categoria" : i.InferredCategory)
@@ -769,6 +770,24 @@ public class AdminController : Controller
     }
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpGet("/api/package-status")]
+    public IActionResult GetPackageStatus()
+    {
+        var fileInfo = GetDatabaseFileInfo();
+        var backupFiles = GetDatabaseBackupFiles();
+        var hasData = fileInfo != null && fileInfo.Length > 1024;
+
+        return Ok(new
+        {
+            hasData,
+            activeDatabaseName = fileInfo?.Name ?? "syntro.db",
+            activeDatabaseSizeBytes = fileInfo?.Length ?? 0,
+            backupCount = backupFiles.Count,
+            backups = backupFiles.Select(f => new { f.Name, f.Length, f.LastWriteTimeUtc }).ToList()
+        });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [HttpGet("/admin/database/download")]
     public async Task<IActionResult> DownloadDatabase()
     {
@@ -897,13 +916,12 @@ public class AdminController : Controller
             }
 
             var remainingBackups = GetDatabaseBackupFiles();
-            if (remainingBackups.Count == 0)
-            {
-                await _databaseBackupService.CreateBackupAsync(
-                    User.Identity?.Name ?? "admin", "auto-empty-fallback", CancellationToken.None);
-            }
 
             TempData["SuccessMessage"] = $"Respaldo eliminado correctamente: {safeFileName}";
+            if (remainingBackups.Count == 0)
+            {
+                TempData["InfoMessage"] = "No quedan respaldos. Suba un nuevo paquete desde el dashboard.";
+            }
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "backup-delete",
                 resource: "database-backup",

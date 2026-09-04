@@ -128,6 +128,12 @@
                                     <option value="@building.ExternalId">@building.EffectiveDisplayName (@building.ExternalId)</option>
                                 }
                             </select>
+                            @if (!Model.Buildings.Any())
+                            {
+                                <div class="form-text text-warning">
+                                    <i class="bi bi-info-circle me-1"></i>No hay edificios disponibles. Suba un paquete completo desde el dashboard para cargar el campus.
+                                </div>
+                            }
                             <span asp-validation-for="Form.AssignedBuildingExternalId" class="text-danger small"></span>
                         </div>
 

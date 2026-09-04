@@ -105,6 +105,7 @@ public class InventoryImportController : ControllerBase
 
         return Ok(new
         {
+            hasData = totalItems > 0 || activeBuildings > 0,
             totalItems,
             assignedItems,
             pendingItems,

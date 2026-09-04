@@ -493,6 +493,21 @@
                     </tr>
                 </thead>
                 <tbody>
+                    @if (!Model.Locations.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="bi bi-building fs-1 d-block mb-2"></i>
+                                    <div class="fw-semibold">No hay edificios registrados</div>
+                                    <div class="small mb-3">Suba un paquete completo para cargar el mapa del campus.</div>
+                                    <a href="/dashboard" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-upload me-1"></i>Ir al Dashboard
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
                     @foreach (var loc in Model.Locations)
                     {
                         <tr>

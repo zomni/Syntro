@@ -713,6 +713,21 @@
                     </tr>
                 </thead>
                 <tbody>
+                    @if (!Model.Items.Any())
+                    {
+                        <tr>
+                            <td colspan="12" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                    <div class="fw-semibold">No hay equipos registrados</div>
+                                    <div class="small mb-3">Suba un paquete completo o importe un archivo Excel para comenzar.</div>
+                                    <a href="/dashboard" class="btn btn-primary btn-sm">
+                                        <i class="bi bi-upload me-1"></i>Ir al Dashboard
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
                     @foreach (var item in Model.Items)
                     {
                         <tr>

@@ -15,6 +15,7 @@ public class AdminDashboardViewModel
     public DateTime? DatabaseLastWriteUtc { get; set; }
     public string FrontendMapUrl { get; set; } = string.Empty;
     public IReadOnlyList<DatabaseBackupViewModel> DatabaseBackups { get; set; } = [];
+    public bool HasNoBackups { get; set; }
     public IReadOnlyList<DashboardCategorySummaryViewModel> CategoryBreakdown { get; set; } = [];
     public IReadOnlyList<DashboardInventoryPreviewViewModel> RecentItems { get; set; } = [];
     public IReadOnlyList<ActivityLogListItemViewModel> RecentActivity { get; set; } = [];

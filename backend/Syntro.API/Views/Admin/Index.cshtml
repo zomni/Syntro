@@ -197,6 +197,22 @@
     </div>
 }
 
+@if (Model.TotalImportedItems == 0 && Model.SyncedBuildings == 0)
+{
+    <div class="alert alert-info d-flex align-items-center gap-3 mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #e0f2fe, #f0f9ff); border-left: 4px solid #0ea5e9 !important;">
+        <div class="bg-info bg-opacity-10 rounded-3 p-3">
+            <i class="bi bi-cloud-upload fs-1 text-info"></i>
+        </div>
+        <div class="flex-grow-1">
+            <div class="fw-bold text-dark fs-5">No hay un paquete cargado</div>
+            <div class="text-muted small mb-2">Suba un paquete completo (.zip) o importe un archivo Excel para comenzar a usar la plataforma.</div>
+        </div>
+        <a href="@Model.FrontendMapUrl" class="btn btn-info text-white fw-semibold" target="syntro-map">
+            <i class="bi bi-upload me-1"></i> Ir al mapa para subir
+        </a>
+    </div>
+}
+
 <div class="card dashboard-hero shadow-sm mb-4">
     <div class="card-body p-4 p-lg-5">
         <div class="row g-4 align-items-center">

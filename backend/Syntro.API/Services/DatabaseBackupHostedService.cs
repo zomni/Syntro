@@ -50,6 +50,18 @@ public class DatabaseBackupHostedService : BackgroundService
 
             try
             {
+                var dbPath = Syntro.API.Infrastructure.SqliteDatabasePathResolver.ResolveDatabasePath(
+                    _configuration, Directory.GetCurrentDirectory());
+                if (System.IO.File.Exists(dbPath))
+                {
+                    var fileInfo = new System.IO.FileInfo(dbPath);
+                    if (fileInfo.Length < 1024)
+                    {
+                        _logger.LogInformation("Database is empty or minimal ({Size} bytes), skipping scheduled backup.", fileInfo.Length);
+                        continue;
+                    }
+                }
+
                 using var scope = _scopeFactory.CreateScope();
                 var backupService = scope.ServiceProvider.GetRequiredService<DatabaseBackupService>();
                 await backupService.CreateBackupAsync("sistema", "scheduled-backup", stoppingToken);
