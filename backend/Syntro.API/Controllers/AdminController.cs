@@ -860,22 +860,31 @@ public class AdminController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), Path.GetFileName(fileName));
-        if (!System.IO.File.Exists(backupPath))
-        {
-            TempData["ErrorMessage"] = "No se encontro el respaldo seleccionado.";
-            return RedirectToAction(nameof(Index));
-        }
+        var safeFileName = Path.GetFileName(fileName);
+        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), safeFileName);
+        var fileExisted = System.IO.File.Exists(backupPath);
 
         try
         {
-            System.IO.File.Delete(backupPath);
-            TempData["SuccessMessage"] = $"Respaldo eliminado correctamente: {Path.GetFileName(backupPath)}";
+            if (fileExisted)
+            {
+                System.IO.File.Delete(backupPath);
+            }
+
+            var historyRecord = await _context.BackupHistories
+                .FirstOrDefaultAsync(b => b.FilePath == backupPath || b.FilePath.EndsWith("/" + safeFileName));
+            if (historyRecord != null)
+            {
+                _context.BackupHistories.Remove(historyRecord);
+                await _context.SaveChangesAsync();
+            }
+
+            TempData["SuccessMessage"] = $"Respaldo eliminado correctamente: {safeFileName}";
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "backup-delete",
                 resource: "database-backup",
                 summary: $"Respaldo eliminado {fileName}",
-                details: "El administrador elimino un archivo de respaldo.",
+                details: $"Archivo: {(fileExisted ? "eliminado" : "ya no existia")}, registro BD: {(historyRecord != null ? "eliminado" : "no encontrado")}",
                 result: "success",
                 severity: "warning",
                 changedByUsername: User.Identity?.Name ?? "admin");
