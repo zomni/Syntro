@@ -5,11 +5,23 @@ import {
   setAdminMapToolsStatus,
   getAdminMapToolSection,
 } from "./adminMapToolsPanel.js";
-import "leaflet-path-transform";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+
+const ICONS = {
+  select: "&#9757;",
+  square: "&#9633;",
+  rect: "&#9645;",
+  circle: "&#9675;",
+  polygon: "&#9651;",
+  free: "&#10070;",
+  delete: "&#10005;",
+  undo: "&#8630;",
+  suggest: "&#10024;",
+  save: "&#10003;",
+};
 
 let currentEditorState = null;
 let undoStack = [];
@@ -121,13 +133,12 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       isDirty: false,
       buildingPolygonLayer: null,
       roomLayers: [],
-      vertexMarkers: [],
       previewLayer: null,
       drawPoints: [],
-      drawPreviewLine: null,
       suggestions: [],
       suggestionPreviewLayers: [],
-      activeTransformLayer: null,
+      dragging: null,
+      rotating: null,
     };
 
     undoStack = [];
@@ -141,7 +152,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
     updatePopupContent();
     installKeyboardShortcuts();
 
-    setAdminMapToolsStatus("Editor de salas abierto.");
+    setAdminMapToolsStatus("Editor de salas abierto. Ctrl+click para mover, Shift+click para rotar.");
     requestAdminMapToolMode("room-edit");
   } catch (error) {
     console.error("Error opening room editor:", error);
@@ -153,18 +164,19 @@ const installKeyboardShortcuts = () => {
   removeKeyboardShortcuts();
   keydownHandler = (e) => {
     if (!currentEditorState || !popupContainer) return;
-    if (e.key === "Enter") {
+    if (e.key === "Escape") {
       e.preventDefault();
-      saveRoomEditor();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      if (currentEditorState.drawPoints && currentEditorState.drawPoints.length > 0) {
+      if (currentEditorState.mode !== "select") {
         clearDrawState();
         currentEditorState.mode = "select";
         updatePopupContent();
         setAdminMapToolsStatus("Dibujo cancelado.");
-      } else {
-        cancelRoomEditor();
+      }
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const mode = currentEditorState.mode;
+      if (mode === "draw-polygon" || mode === "draw-free") {
+        finishCurrentPolygonDraw();
       }
     }
   };
@@ -175,6 +187,22 @@ const removeKeyboardShortcuts = () => {
   if (keydownHandler) {
     document.removeEventListener("keydown", keydownHandler);
     keydownHandler = null;
+  }
+};
+
+const finishCurrentPolygonDraw = () => {
+  if (!currentEditorState) return;
+  const pts = currentEditorState.drawPoints;
+  if (pts.length >= 3) {
+    const closedRing = [...pts, pts[0]];
+    const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
+    clearDrawState();
+    createNewRoom(geoJsonCoords);
+  } else if (pts.length > 0) {
+    clearDrawState();
+    currentEditorState.mode = "select";
+    updatePopupContent();
+    setAdminMapToolsStatus("Se necesitan al menos 3 puntos.");
   }
 };
 
@@ -300,7 +328,7 @@ const updateTopBar = () => {
   closeBtn.type = "button";
   closeBtn.className = "room-editor-close-btn";
   closeBtn.innerHTML = "&times;";
-  closeBtn.title = "Cerrar editor (Esc)";
+  closeBtn.title = "Cerrar editor";
   closeBtn.addEventListener("click", () => cancelRoomEditor());
   topBarEl.appendChild(closeBtn);
 
@@ -340,7 +368,7 @@ const updateTopBar = () => {
 
   const hint = document.createElement("span");
   hint.className = "room-editor-shortcut-hint";
-  hint.textContent = "Enter: guardar | Esc: cancelar";
+  hint.textContent = "Ctrl+mover | Shift+rotar";
   topBarEl.appendChild(hint);
 };
 
@@ -356,19 +384,19 @@ const updateBottomBar = () => {
   tools.className = "room-editor-tools";
 
   const toolDefs = [
-    { id: "select", label: "Sel", icon: "&#128070;", title: "Seleccionar sala" },
-    { id: "draw-square", label: "Cuad", icon: "&#9632;", title: "Dibujar cuadrado" },
-    { id: "draw-rect", label: "Rect", icon: "&#9645;", title: "Dibujar rectangulo" },
-    { id: "draw-circle", label: "Circ", icon: "&#9675;", title: "Dibujar circulo" },
-    { id: "draw-polygon", label: "Polig", icon: "&#9651;", title: "Dibujar poligono" },
-    { id: "draw-free", label: "Libre", icon: "&#9998;", title: "Dibujo libre" },
+    { id: "select", icon: ICONS.select, title: "Seleccionar" },
+    { id: "draw-square", icon: ICONS.square, title: "Cuadrado" },
+    { id: "draw-rect", icon: ICONS.rect, title: "Rectangulo" },
+    { id: "draw-circle", icon: ICONS.circle, title: "Circulo" },
+    { id: "draw-polygon", icon: ICONS.polygon, title: "Poligono" },
+    { id: "draw-free", icon: ICONS.free, title: "Libre (vertices)" },
   ];
 
   for (const t of toolDefs) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = `room-editor-tool-btn${mode === t.id ? " is-active" : ""}`;
-    btn.innerHTML = `<span>${t.icon}</span><span>${t.label}</span>`;
+    btn.className = `room-editor-tool-btn is-icon-only${mode === t.id ? " is-active" : ""}`;
+    btn.innerHTML = `<span>${t.icon}</span>`;
     btn.title = t.title;
     btn.addEventListener("click", () => selectRoomMode(t.id));
     tools.appendChild(btn);
@@ -380,8 +408,8 @@ const updateBottomBar = () => {
 
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
-  deleteBtn.className = "room-editor-tool-btn";
-  deleteBtn.innerHTML = '<span>&#128465;</span><span>Del</span>';
+  deleteBtn.className = "room-editor-tool-btn is-icon-only";
+  deleteBtn.innerHTML = `<span>${ICONS.delete}</span>`;
   deleteBtn.title = "Eliminar sala seleccionada";
   deleteBtn.disabled = !selectedRoom;
   deleteBtn.addEventListener("click", () => deleteSelectedRoom());
@@ -389,8 +417,8 @@ const updateBottomBar = () => {
 
   const undoBtn = document.createElement("button");
   undoBtn.type = "button";
-  undoBtn.className = "room-editor-tool-btn";
-  undoBtn.innerHTML = '<span>&#8617;</span><span>Undo</span>';
+  undoBtn.className = "room-editor-tool-btn is-icon-only";
+  undoBtn.innerHTML = `<span>${ICONS.undo}</span>`;
   undoBtn.title = "Deshacer";
   undoBtn.disabled = undoStack.length === 0;
   undoBtn.addEventListener("click", () => undoRoomEditor());
@@ -402,8 +430,8 @@ const updateBottomBar = () => {
 
   const suggestBtn = document.createElement("button");
   suggestBtn.type = "button";
-  suggestBtn.className = `room-editor-tool-btn is-suggest${hasSuggestions ? " is-active" : ""}`;
-  suggestBtn.innerHTML = '<span>&#10024;</span><span>Sugerir</span>';
+  suggestBtn.className = `room-editor-tool-btn is-icon-only is-suggest${hasSuggestions ? " is-active" : ""}`;
+  suggestBtn.innerHTML = `<span>${ICONS.suggest}</span>`;
   suggestBtn.title = "Sugerir salas automaticamente";
   suggestBtn.addEventListener("click", () => runQuickSuggestion());
   tools.appendChild(suggestBtn);
@@ -411,21 +439,20 @@ const updateBottomBar = () => {
   if (hasSuggestions) {
     const approveBtn = document.createElement("button");
     approveBtn.type = "button";
-    approveBtn.className = "room-editor-tool-btn is-suggest";
-    approveBtn.innerHTML = '<span>&#10003;</span><span>Aceptar</span>';
+    approveBtn.className = "room-editor-tool-btn is-icon-only is-suggest";
+    approveBtn.innerHTML = `<span>${ICONS.save}</span>`;
     approveBtn.title = "Guardar salas sugeridas";
     approveBtn.addEventListener("click", () => saveQuickSuggestions());
     tools.appendChild(approveBtn);
 
     const cancelSugBtn = document.createElement("button");
     cancelSugBtn.type = "button";
-    cancelSugBtn.className = "room-editor-tool-btn";
-    cancelSugBtn.innerHTML = '<span>&#10005;</span><span>Descartar</span>';
+    cancelSugBtn.className = "room-editor-tool-btn is-icon-only";
+    cancelSugBtn.innerHTML = `<span>${ICONS.delete}</span>`;
     cancelSugBtn.title = "Descartar sugerencias";
     cancelSugBtn.addEventListener("click", () => {
+      clearSuggestionPreviewLayers();
       currentEditorState.suggestions = [];
-      currentEditorState.suggestionPreviewLayers.forEach((l) => popupMap.removeLayer(l));
-      currentEditorState.suggestionPreviewLayers = [];
       updateBottomBar();
       setAdminMapToolsStatus("Sugerencias descartadas.");
     });
@@ -437,8 +464,8 @@ const updateBottomBar = () => {
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "room-editor-save-btn";
-  saveBtn.textContent = "Guardar";
-  saveBtn.title = "Guardar cambios (Enter)";
+  saveBtn.innerHTML = `<span>${ICONS.save}</span><span> Guardar</span>`;
+  saveBtn.title = "Guardar cambios";
   saveBtn.addEventListener("click", () => saveRoomEditor());
   bottomBarEl.appendChild(saveBtn);
 };
@@ -631,18 +658,19 @@ const renderRooms = () => {
 
       layer.on("click", (e) => {
         L.DomEvent.stop(e);
-        if (currentEditorState.mode === "select") {
+        const oe = e.originalEvent;
+
+        if (oe.ctrlKey) {
+          enableDragLayer(layer, room, e);
+        } else if (oe.shiftKey) {
+          enableRotateLayer(layer, room, e);
+        } else if (currentEditorState.mode === "select") {
           selectRoom(room);
         }
       });
 
       layer.roomData = room;
       currentEditorState.roomLayers.push(layer);
-
-      if (isSelected) {
-        enableTransformOnSelected(layer, room);
-        renderVertexMarkers(latLngs, room);
-      }
     } catch (e) {
       console.warn("Error rendering room:", room.externalId, e);
     }
@@ -667,42 +695,85 @@ const transformLatLngs = (latLngs, rotationDeg, scaleX, scaleY) => {
   });
 };
 
-const enableTransformOnSelected = (layer, room) => {
-  if (!layer.transform) return;
+const enableDragLayer = (layer, room, e) => {
+  if (!popupMap) return;
+  L.DomEvent.stop(e);
 
-  try {
-    layer.transform.enable({ rotation: true, scaling: true, uniformScaling: false });
+  const startLatLng = e.latlng;
+  const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  if (!geom?.coordinates?.[0]) return;
 
-    let transformActive = false;
+  const origCoords = geom.coordinates[0].map((c) => [...c]);
+  let dragging = true;
 
-    layer.on("rotate", (e) => {
-      if (!transformActive) {
-        transformActive = true;
-        const angle = layer.transform.getAngle ? layer.transform.getAngle() : 0;
-        room.rotation = ((angle % 360) + 360) % 360;
-        currentEditorState.isDirty = true;
-        updateTransformInputs();
-        transformActive = false;
-      }
-    });
+  const onMove = (ev) => {
+    if (!dragging) return;
+    const dLat = ev.latlng.lat - startLatLng.lat;
+    const dLng = ev.latlng.lng - startLatLng.lng;
+    const newCoords = origCoords.map((c) => [c[0] + dLng, c[1] + dLat]);
+    const newGeo = { type: "Polygon", coordinates: [newCoords] };
+    room.geometryJson = JSON.stringify(newGeo);
+    currentEditorState.isDirty = true;
 
-    layer.on("scale", (e) => {
-      if (!transformActive) {
-        transformActive = true;
-        if (e.scale) {
-          room.scaleX = (room.scaleX || 1) * (e.scale.x || 1);
-          room.scaleY = (room.scaleY || 1) * (e.scale.y || 1);
-          currentEditorState.isDirty = true;
-          updateTransformInputs();
-        }
-        transformActive = false;
-      }
-    });
+    const newLatLngs = newCoords.map((c) => [c[1], c[0]]);
+    layer.setLatLngs(newLatLngs);
+  };
 
-    currentEditorState.activeTransformLayer = layer;
-  } catch (err) {
-    console.warn("Could not enable transform on layer:", err);
-  }
+  const onUp = () => {
+    dragging = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.getContainer().style.cursor = "";
+  };
+
+  popupMap.getContainer().style.cursor = "grabbing";
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
+};
+
+const enableRotateLayer = (layer, room, e) => {
+  if (!popupMap) return;
+  L.DomEvent.stop(e);
+
+  const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  if (!geom?.coordinates?.[0]) return;
+
+  const coords = geom.coordinates[0];
+  const centerLat = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+  const centerLng = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+  const center = L.latLng(centerLat, centerLng);
+
+  const startAngle = Math.atan2(e.latlng.lat - center.lat, e.latlng.lng - center.lng);
+  const baseRotation = room.rotation || 0;
+  let rotating = true;
+
+  const onMove = (ev) => {
+    if (!rotating) return;
+    const currentAngle = Math.atan2(ev.latlng.lat - center.lat, ev.latlng.lng - center.lng);
+    const deltaDeg = ((currentAngle - startAngle) * 180) / Math.PI;
+    room.rotation = ((baseRotation + deltaDeg) % 360 + 360) % 360;
+    currentEditorState.isDirty = true;
+
+    updateTransformInputs();
+    const newLatLngs = transformLatLngs(
+      coords.map((c) => [c[1], c[0]]),
+      room.rotation,
+      room.scaleX || 1,
+      room.scaleY || 1
+    );
+    layer.setLatLngs(newLatLngs);
+  };
+
+  const onUp = () => {
+    rotating = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.getContainer().style.cursor = "";
+  };
+
+  popupMap.getContainer().style.cursor = "crosshair";
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
 };
 
 const updateTransformInputs = () => {
@@ -719,60 +790,9 @@ const updateTransformInputs = () => {
 const clearRoomLayers = () => {
   if (!currentEditorState || !popupMap) return;
   for (const layer of currentEditorState.roomLayers) {
-    try {
-      if (layer.transform) layer.transform.disable();
-    } catch (e) { /* ignore */ }
     popupMap.removeLayer(layer);
   }
   currentEditorState.roomLayers = [];
-  currentEditorState.activeTransformLayer = null;
-  clearVertexMarkers();
-};
-
-const renderVertexMarkers = (latLngs, room) => {
-  clearVertexMarkers();
-
-  if (!popupMap) return;
-
-  for (let i = 0; i < latLngs.length - 1; i++) {
-    const marker = L.marker(latLngs[i], {
-      icon: L.divIcon({
-        className: VERTEX_CLASS,
-        iconSize: [12, 12],
-        iconAnchor: [6, 6],
-      }),
-      draggable: true,
-    }).addTo(popupMap);
-
-    const idx = i;
-    marker.on("drag", (e) => {
-      latLngs[idx] = e.target.getLatLng();
-      if (currentEditorState.selectedRoom?.externalId === room.externalId) {
-        const roomLayer = currentEditorState.roomLayers.find((l) => l.roomData?.externalId === room.externalId);
-        if (roomLayer) roomLayer.setLatLngs(latLngs);
-      }
-    });
-
-    marker.on("dragend", () => {
-      pushUndo({
-        type: "move-vertex",
-        roomExternalId: room.externalId,
-        vertexIndex: idx,
-        previousLatLng: latLngs[idx],
-        newLatLng: marker.getLatLng(),
-      });
-    });
-
-    currentEditorState.vertexMarkers.push(marker);
-  }
-};
-
-const clearVertexMarkers = () => {
-  if (!currentEditorState || !popupMap) return;
-  for (const marker of currentEditorState.vertexMarkers) {
-    popupMap.removeLayer(marker);
-  }
-  currentEditorState.vertexMarkers = [];
 };
 
 const selectRoom = (room) => {
@@ -801,180 +821,149 @@ const selectRoomMode = (mode) => {
 
   switch (mode) {
     case "draw-square":
-      setAdminMapToolsStatus("Haz clic para colocar el centro del cuadrado. Arrastra para definir el tamano.");
-      startRoomDrawSquare();
+      setAdminMapToolsStatus("Mantén click y arrastra para definir el tamano del cuadrado.");
+      startDrawSquare();
       break;
     case "draw-rect":
-      setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
-      startRoomDrawRect();
+      setAdminMapToolsStatus("Mantén click y arrastra para definir el rectangulo.");
+      startDrawRect();
       break;
     case "draw-circle":
-      setAdminMapToolsStatus("Haz clic para colocar el centro del circulo. Arrastra para definir el radio.");
-      startRoomDrawCircle();
+      setAdminMapToolsStatus("Mantén click y arrastra para definir el radio del circulo.");
+      startDrawCircle();
       break;
     case "draw-polygon":
-      setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
-      startRoomDrawPolygon();
+      setAdminMapToolsStatus("Click para agregar puntos. Enter o doble clic para cerrar.");
+      startDrawPolygon();
       break;
     case "draw-free":
-      setAdminMapToolsStatus("Mantén presionado el mouse y dibuja libremente.");
-      startRoomDrawFree();
+      setAdminMapToolsStatus("Click para agregar vertices. Enter o doble clic para cerrar.");
+      startDrawFree();
       break;
     default:
-      setAdminMapToolsStatus("Modo seleccion. Click en una sala para editarla.");
+      setAdminMapToolsStatus("Modo seleccion. Ctrl+click para mover, Shift+click para rotar.");
   }
 };
 
-const startRoomDrawSquare = () => {
+const startDrawSquare = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-square";
 
-  let center = null;
+  let startLatLng = null;
 
-  const onMouseDown = (e) => {
-    center = e.latlng;
+  const onDown = (e) => {
+    startLatLng = e.latlng;
     currentEditorState.previewLayer = L.polygon(
-      [[center.lat, center.lng], [center.lat, center.lng], [center.lat, center.lng], [center.lat, center.lng]],
+      [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
+       [startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng]],
       { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
     ).addTo(popupMap);
     popupMap.on("mousemove", onMove);
-    popupMap.once("mouseup", onMouseUp);
+    popupMap.once("mouseup", onUp);
   };
 
   const onMove = (e) => {
-    if (!center || !currentEditorState.previewLayer) return;
-    const dLat = Math.abs(e.latlng.lat - center.lat);
-    const dLng = Math.abs(e.latlng.lng - center.lng);
+    if (!startLatLng || !currentEditorState.previewLayer) return;
+    const dLat = Math.abs(e.latlng.lat - startLatLng.lat);
+    const dLng = Math.abs(e.latlng.lng - startLatLng.lng);
     const d = Math.max(dLat, dLng);
-    const signLat = e.latlng.lat >= center.lat ? 1 : -1;
-    const signLng = e.latlng.lng >= center.lng ? 1 : -1;
-    const rectCoords = [
-      [center.lat + d * signLat, center.lng - d * signLng],
-      [center.lat + d * signLat, center.lng + d * signLng],
-      [center.lat - d * signLat, center.lng + d * signLng],
-      [center.lat - d * signLat, center.lng - d * signLng],
-      [center.lat + d * signLat, center.lng - d * signLng],
-    ];
-    currentEditorState.previewLayer.setLatLngs(rectCoords);
+    const sLat = e.latlng.lat >= startLatLng.lat ? 1 : -1;
+    const sLng = e.latlng.lng >= startLatLng.lng ? 1 : -1;
+    currentEditorState.previewLayer.setLatLngs([
+      [startLatLng.lat + d * sLat, startLatLng.lng - d * sLng],
+      [startLatLng.lat + d * sLat, startLatLng.lng + d * sLng],
+      [startLatLng.lat - d * sLat, startLatLng.lng + d * sLng],
+      [startLatLng.lat - d * sLat, startLatLng.lng - d * sLng],
+    ]);
   };
 
-  const onMouseUp = () => {
+  const onUp = () => {
     popupMap.off("mousemove", onMove);
-    popupMap.off("mousedown", onMouseDown);
     if (currentEditorState.previewLayer) {
       const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
       popupMap.removeLayer(currentEditorState.previewLayer);
       currentEditorState.previewLayer = null;
       if (latLngs && latLngs.length >= 4) {
-        const closedRing = latLngs.map((ll) => [ll.lat, ll.lng]);
-        closedRing.push(closedRing[0]);
-        const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
-        createNewRoom(geoJsonCoords);
+        const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
+        ring.push(ring[0]);
+        createNewRoom(ring);
       }
     }
   };
 
-  popupMap.on("mousedown", onMouseDown);
+  popupMap.on("mousedown", onDown);
 };
 
-const startRoomDrawRect = () => {
+const startDrawRect = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-rect";
-  currentEditorState.drawPoints = [];
 
-  const onClick = (e) => {
-    currentEditorState.drawPoints.push(e.latlng);
-    if (currentEditorState.drawPoints.length === 1) {
-      setAdminMapToolsStatus("Ahora haz clic para colocar la esquina inferior derecha.");
-      currentEditorState.drawPreviewLine = L.circleMarker(e.latlng, {
-        radius: 4, color: "#f59e0b", fillColor: "#f59e0b", fillOpacity: 1,
-      }).addTo(popupMap);
-    } else if (currentEditorState.drawPoints.length === 2) {
-      popupMap.off("click", onClick);
-      popupMap.off("mousemove", onMove);
-      if (currentEditorState.drawPreviewLine) {
-        popupMap.removeLayer(currentEditorState.drawPreviewLine);
-        currentEditorState.drawPreviewLine = null;
-      }
-      finishRectDraw();
-    }
+  let startLatLng = null;
+
+  const onDown = (e) => {
+    startLatLng = e.latlng;
+    currentEditorState.previewLayer = L.polygon(
+      [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
+       [startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng]],
+      { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
+    ).addTo(popupMap);
+    popupMap.on("mousemove", onMove);
+    popupMap.once("mouseup", onUp);
   };
 
   const onMove = (e) => {
-    if (currentEditorState.drawPoints.length === 1 && currentEditorState.previewLayer) {
-      const p1 = currentEditorState.drawPoints[0];
-      const p2 = e.latlng;
-      const rectCoords = [
-        [p1.lat, p1.lng],
-        [p1.lat, p2.lng],
-        [p2.lat, p2.lng],
-        [p2.lat, p1.lng],
-        [p1.lat, p1.lng],
-      ];
-      currentEditorState.previewLayer.setLatLngs(rectCoords);
+    if (!startLatLng || !currentEditorState.previewLayer) return;
+    currentEditorState.previewLayer.setLatLngs([
+      [startLatLng.lat, startLatLng.lng],
+      [startLatLng.lat, e.latlng.lng],
+      [e.latlng.lat, e.latlng.lng],
+      [e.latlng.lat, startLatLng.lng],
+    ]);
+  };
+
+  const onUp = () => {
+    popupMap.off("mousemove", onMove);
+    if (currentEditorState.previewLayer) {
+      const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
+      popupMap.removeLayer(currentEditorState.previewLayer);
+      currentEditorState.previewLayer = null;
+      if (latLngs && latLngs.length >= 4) {
+        const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
+        ring.push(ring[0]);
+        createNewRoom(ring);
+      }
     }
   };
 
-  popupMap.on("click", onClick);
-  popupMap.on("mousemove", onMove);
-
-  const p = popupMap.getCenter();
-  currentEditorState.previewLayer = L.polygon(
-    [[p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng]],
-    { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
-  ).addTo(popupMap);
+  popupMap.on("mousedown", onDown);
 };
 
-const finishRectDraw = () => {
-  if (!currentEditorState || currentEditorState.drawPoints.length < 2) return;
-
-  const p1 = currentEditorState.drawPoints[0];
-  const p2 = currentEditorState.drawPoints[1];
-
-  const coords = [
-    [p1.lng, p1.lat],
-    [p2.lng, p1.lat],
-    [p2.lng, p2.lat],
-    [p1.lng, p2.lat],
-    [p1.lng, p1.lat],
-  ];
-
-  createNewRoom(coords);
-};
-
-const startRoomDrawCircle = () => {
+const startDrawCircle = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-circle";
 
   let center = null;
 
-  const onMouseDown = (e) => {
+  const onDown = (e) => {
     center = e.latlng;
     currentEditorState.previewLayer = L.circle(center, {
-      radius: 1,
-      color: "#f59e0b",
-      weight: 2,
-      fillColor: "#f59e0b",
-      fillOpacity: 0.25,
-      dashArray: "6 6",
-      interactive: false,
+      radius: 1, color: "#f59e0b", weight: 2, fillColor: "#f59e0b",
+      fillOpacity: 0.25, dashArray: "6 6", interactive: false,
     }).addTo(popupMap);
     popupMap.on("mousemove", onMove);
-    popupMap.once("mouseup", onMouseUp);
+    popupMap.once("mouseup", onUp);
   };
 
   const onMove = (e) => {
     if (!center || !currentEditorState.previewLayer) return;
-    const radius = center.distanceTo(e.latlng);
-    currentEditorState.previewLayer.setRadius(radius);
+    currentEditorState.previewLayer.setRadius(center.distanceTo(e.latlng));
   };
 
-  const onMouseUp = () => {
+  const onUp = () => {
     popupMap.off("mousemove", onMove);
-    popupMap.off("mousedown", onMouseDown);
     if (currentEditorState.previewLayer && center) {
       const radius = currentEditorState.previewLayer.getRadius();
       popupMap.removeLayer(currentEditorState.previewLayer);
@@ -994,25 +983,24 @@ const startRoomDrawCircle = () => {
     }
   };
 
-  popupMap.on("mousedown", onMouseDown);
+  popupMap.on("mousedown", onDown);
 };
 
-const startRoomDrawPolygon = () => {
+const startDrawPolygon = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-polygon";
   currentEditorState.drawPoints = [];
 
-  const tempLatLngs = [];
-
   const onClick = (e) => {
     currentEditorState.drawPoints.push(e.latlng);
-    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
+    const pts = currentEditorState.drawPoints;
 
     if (currentEditorState.previewLayer) {
-      currentEditorState.previewLayer.setLatLngs(tempLatLngs.length >= 3 ? tempLatLngs : tempLatLngs.concat([tempLatLngs[0]]));
-    } else if (tempLatLngs.length >= 3) {
-      currentEditorState.previewLayer = L.polygon(tempLatLngs, {
+      const ring = pts.length >= 3 ? [...pts, pts[0]] : pts;
+      currentEditorState.previewLayer.setLatLngs(ring);
+    } else if (pts.length >= 3) {
+      currentEditorState.previewLayer = L.polygon([...pts, pts[0]], {
         color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false,
       }).addTo(popupMap);
     }
@@ -1020,94 +1008,54 @@ const startRoomDrawPolygon = () => {
 
   const onDblClick = (e) => {
     L.DomEvent.stop(e);
-    popupMap.off("click", onClick);
-    popupMap.off("dblclick", onDblClick);
-
-    if (currentEditorState.previewLayer) {
-      popupMap.removeLayer(currentEditorState.previewLayer);
-      currentEditorState.previewLayer = null;
-    }
-
-    if (tempLatLngs.length >= 3) {
-      const closedRing = [...tempLatLngs, tempLatLngs[0]];
-      const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
-      createNewRoom(geoJsonCoords);
-    }
+    finishCurrentPolygonDraw();
   };
 
   popupMap.on("click", onClick);
   popupMap.on("dblclick", onDblClick);
 };
 
-const startRoomDrawFree = () => {
+const startDrawFree = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-free";
+  currentEditorState.drawPoints = [];
 
-  let drawing = false;
-  const tempLatLngs = [];
-
-  const onMouseDown = (e) => {
-    drawing = true;
-    tempLatLngs.length = 0;
-    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
-
-    currentEditorState.previewLayer = L.polyline(tempLatLngs, {
-      color: "#f59e0b", weight: 2, dashArray: "6 6", interactive: false,
-    }).addTo(popupMap);
-  };
-
-  const onMouseMove = (e) => {
-    if (!drawing) return;
-    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
-    if (currentEditorState.previewLayer) {
-      currentEditorState.previewLayer.setLatLngs(tempLatLngs);
-    }
-  };
-
-  const onMouseUp = () => {
-    if (!drawing) return;
-    drawing = false;
-    popupMap.off("mousedown", onMouseDown);
-    popupMap.off("mousemove", onMouseMove);
-    popupMap.off("mouseup", onMouseUp);
+  const onClick = (e) => {
+    currentEditorState.drawPoints.push(e.latlng);
+    const pts = currentEditorState.drawPoints;
 
     if (currentEditorState.previewLayer) {
-      popupMap.removeLayer(currentEditorState.previewLayer);
-      currentEditorState.previewLayer = null;
-    }
-
-    if (tempLatLngs.length >= 3) {
-      const simplified = simplifyPoints(tempLatLngs, 0.00002);
-      simplified.push(simplified[0]);
-      const geoJsonCoords = simplified.map((ll) => [ll[1], ll[0]]);
-      createNewRoom(geoJsonCoords);
+      const ring = pts.length >= 3 ? [...pts, pts[0]] : pts;
+      currentEditorState.previewLayer.setLatLngs(ring);
+    } else if (pts.length >= 3) {
+      currentEditorState.previewLayer = L.polygon([...pts, pts[0]], {
+        color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false,
+      }).addTo(popupMap);
     }
   };
 
-  popupMap.on("mousedown", onMouseDown);
-  popupMap.on("mousemove", onMouseMove);
-  popupMap.on("mouseup", onMouseUp);
+  const onDblClick = (e) => {
+    L.DomEvent.stop(e);
+    finishCurrentPolygonDraw();
+  };
+
+  popupMap.on("click", onClick);
+  popupMap.on("dblclick", onDblClick);
 };
 
-const simplifyPoints = (points, tolerance) => {
-  if (points.length <= 3) return points;
-
-  const result = [points[0]];
-  let lastKept = points[0];
-
-  for (let i = 1; i < points.length - 1; i++) {
-    const dx = points[i][1] - lastKept[1];
-    const dy = points[i][0] - lastKept[0];
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist >= tolerance) {
-      result.push(points[i]);
-      lastKept = points[i];
-    }
+const clearDrawState = () => {
+  if (!currentEditorState || !popupMap) return;
+  if (currentEditorState.previewLayer) {
+    popupMap.removeLayer(currentEditorState.previewLayer);
+    currentEditorState.previewLayer = null;
   }
-
-  result.push(points[points.length - 1]);
-  return result;
+  currentEditorState.drawPoints = [];
+  popupMap.off("click");
+  popupMap.off("dblclick");
+  popupMap.off("mousemove");
+  popupMap.off("mousedown");
+  popupMap.off("mouseup");
 };
 
 const createNewRoom = (geoJsonCoords) => {
@@ -1142,25 +1090,7 @@ const createNewRoom = (geoJsonCoords) => {
   currentEditorState.mode = "select";
   renderRooms();
   updatePopupContent();
-  setAdminMapToolsStatus("Sala creada. Completa las propiedades y guarda.");
-};
-
-const clearDrawState = () => {
-  if (!currentEditorState || !popupMap) return;
-  if (currentEditorState.previewLayer) {
-    popupMap.removeLayer(currentEditorState.previewLayer);
-    currentEditorState.previewLayer = null;
-  }
-  if (currentEditorState.drawPreviewLine) {
-    popupMap.removeLayer(currentEditorState.drawPreviewLine);
-    currentEditorState.drawPreviewLine = null;
-  }
-  currentEditorState.drawPoints = [];
-  popupMap.off("click");
-  popupMap.off("dblclick");
-  popupMap.off("mousemove");
-  popupMap.off("mousedown");
-  popupMap.off("mouseup");
+  setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar.");
 };
 
 const deleteSelectedRoom = () => {
@@ -1384,7 +1314,7 @@ const runQuickSuggestion = async () => {
     clearSuggestionPreviewLayers();
     renderSuggestionPreviewLayers();
     updateBottomBar();
-    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en "Aceptar" para guardarlas.`);
+    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en el check para guardarlas.`);
   } catch (error) {
     console.error("Error running suggestion:", error);
     setAdminMapToolsStatus("Error al generar sugerencias.");

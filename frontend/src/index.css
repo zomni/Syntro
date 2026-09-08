@@ -1166,6 +1166,17 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     transition: all 0.15s ease;
 }
 
+.room-editor-tool-btn.is-icon-only {
+    padding: 6px 8px;
+    min-width: 32px;
+    justify-content: center;
+}
+
+.room-editor-tool-btn.is-icon-only span {
+    font-size: 16px;
+    line-height: 1;
+}
+
 .room-editor-tool-btn:hover {
     background: #f3f4f6;
 }
@@ -1332,53 +1343,8 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     padding: 16px 0;
 }
 
-.room-editor-suggestion-panel {
-    background: #f5f3ff;
-    margin: -12px -14px;
-    padding: 12px 14px;
-    border-top: 1px solid #e5e7eb;
-}
-
-.room-editor-suggestion-list {
-    max-height: 180px;
-    overflow-y: auto;
-}
-
-.room-editor-suggestion-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 0;
-    border-bottom: 1px solid #e5e7eb;
-    font-size: 11px;
+.room-editor-suggestion-layer {
     cursor: pointer;
-}
-
-.room-editor-suggestion-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 8px;
-}
-
-.room-editor-suggestion-actions button {
-    flex: 1;
-    padding: 5px;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-}
-
-.room-editor-action-cancel {
-    border: 1px solid #d1d5db;
-    background: white;
-    color: #374151;
-}
-
-.room-editor-action-save {
-    border: none;
-    background: #15803d;
-    color: white;
-    font-weight: 600;
 }
 
 .room-editor-vertex-marker {
@@ -1397,31 +1363,6 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 
 .room-editor-room-layer {
     cursor: pointer;
-}
-
-.leaflet-path-transform-handler {
-    fill: #f59e0b;
-    stroke: white;
-    stroke-width: 2;
-    cursor: pointer;
-}
-
-.leaflet-path-transform-handler:hover {
-    fill: #d97706;
-}
-
-.leaflet-path-transform-origin {
-    fill: #2563eb;
-    stroke: white;
-    stroke-width: 2;
-    cursor: pointer;
-}
-
-.leaflet-path-transform-rotation {
-    stroke: #f59e0b;
-    stroke-width: 2;
-    stroke-dasharray: 4 4;
-    pointer-events: none;
 }
 
 .building-equipment-bubble {
