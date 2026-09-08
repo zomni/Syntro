@@ -548,7 +548,7 @@ const buildPropertiesPanel = (room) => {
       <div class="room-editor-section-title">Transformar</div>
       <div class="room-editor-form-grid">
         <label>Rotacion (grados)
-          <input type="number" value="${rotation}" min="0" max="360" step="1" data-transform="rotation" />
+          <input type="number" value="${rotation}" min="0" max="270" step="90" data-transform="rotation" />
         </label>
         <label>Escala X
           <input type="number" value="${scaleX}" min="0.1" max="10" step="0.1" data-transform="scaleX" />
@@ -656,7 +656,7 @@ const renderRooms = () => {
         className: ROOM_LAYER_CLASS,
       }).addTo(popupMap);
 
-      layer.on("click", (e) => {
+      layer.on("mousedown", (e) => {
         L.DomEvent.stop(e);
         const oe = e.originalEvent;
 
@@ -853,6 +853,7 @@ const startDrawSquare = () => {
   let startLatLng = null;
 
   const onDown = (e) => {
+    L.DomEvent.stop(e);
     startLatLng = e.latlng;
     currentEditorState.previewLayer = L.polygon(
       [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
@@ -903,6 +904,7 @@ const startDrawRect = () => {
   let startLatLng = null;
 
   const onDown = (e) => {
+    L.DomEvent.stop(e);
     startLatLng = e.latlng;
     currentEditorState.previewLayer = L.polygon(
       [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
@@ -948,6 +950,7 @@ const startDrawCircle = () => {
   let center = null;
 
   const onDown = (e) => {
+    L.DomEvent.stop(e);
     center = e.latlng;
     currentEditorState.previewLayer = L.circle(center, {
       radius: 1, color: "#f59e0b", weight: 2, fillColor: "#f59e0b",
