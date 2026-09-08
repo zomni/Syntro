@@ -1047,11 +1047,46 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     z-index: 10;
 }
 
+.room-editor-building-name-wrap {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
 .room-editor-building-name {
     font-size: 14px;
     font-weight: 600;
     color: #1f2937;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.room-editor-building-id {
+    font-size: 10px;
+    color: #9ca3af;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.room-editor-room-count {
+    font-size: 12px;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+.room-editor-shortcut-hint {
+    font-size: 10px;
+    color: #9ca3af;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.room-editor-transform-section {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid #e5e7eb;
 }
 
 .room-editor-floor-selector {
@@ -1362,6 +1397,31 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 
 .room-editor-room-layer {
     cursor: pointer;
+}
+
+.leaflet-path-transform-handler {
+    fill: #f59e0b;
+    stroke: white;
+    stroke-width: 2;
+    cursor: pointer;
+}
+
+.leaflet-path-transform-handler:hover {
+    fill: #d97706;
+}
+
+.leaflet-path-transform-origin {
+    fill: #2563eb;
+    stroke: white;
+    stroke-width: 2;
+    cursor: pointer;
+}
+
+.leaflet-path-transform-rotation {
+    stroke: #f59e0b;
+    stroke-width: 2;
+    stroke-dasharray: 4 4;
+    pointer-events: none;
 }
 
 .building-equipment-bubble {

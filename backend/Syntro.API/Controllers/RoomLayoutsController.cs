@@ -55,7 +55,7 @@ public class RoomLayoutsController : ControllerBase
     }
 
     [HttpPost("suggest")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public IActionResult Suggest([FromBody] SuggestionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.BuildingExternalId))
@@ -72,7 +72,7 @@ public class RoomLayoutsController : ControllerBase
     }
 
     [HttpPost("bulk-save")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public async Task<IActionResult> BulkSave(
         [FromBody] BulkSaveRequest request,
         CancellationToken cancellationToken)

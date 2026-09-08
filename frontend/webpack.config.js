@@ -39,6 +39,7 @@ module.exports = {
       "@app/networkTelemetryPanel": src("components", "networkTelemetryPanel.js"),
       "@app/siteViewportPanel": src("components", "siteViewportPanel.js"),
       "@app/roomEditor": src("components", "roomEditor.js"),
+      "leaflet": src("lib", "leaflet", "leaflet.js"),
     },
   },
   module: {

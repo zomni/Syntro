@@ -5,6 +5,7 @@ import {
   setAdminMapToolsStatus,
   getAdminMapToolSection,
 } from "./adminMapToolsPanel.js";
+import "leaflet-path-transform";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -19,6 +20,7 @@ let topBarEl = null;
 let bottomBarEl = null;
 let sidePanelEl = null;
 let mapContainerEl = null;
+let keydownHandler = null;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
@@ -26,17 +28,15 @@ const getApiUrl = () => {
 
 export const initRoomEditor = () => {
   window.selectRoomEditorFloor = selectRoomEditorFloor;
-  window.startRoomDrawRect = startRoomDrawRect;
-  window.startRoomDrawPolygon = startRoomDrawPolygon;
   window.selectRoomMode = selectRoomMode;
   window.deleteSelectedRoom = deleteSelectedRoom;
   window.undoRoomEditor = undoRoomEditor;
   window.redoRoomEditor = redoRoomEditor;
   window.updateRoomProperty = updateRoomProperty;
-  window.runSuggestion = runSuggestion;
-  window.approveSuggestion = approveSuggestion;
-  window.rejectSuggestion = rejectSuggestion;
+  window.runQuickSuggestion = runQuickSuggestion;
   window.approveAllSuggestions = approveAllSuggestions;
+  window.saveQuickSuggestions = saveQuickSuggestions;
+  window.updateRoomTransform = updateRoomTransform;
 
   createToggleButton();
   listenForBuildingClick();
@@ -81,14 +81,15 @@ const listenForBuildingClick = () => {
       event.preventDefault();
       event.stopPropagation();
       const featureId = event.detail?.featureId;
+      const feature = event.detail?.feature;
       if (featureId) {
-        openRoomEditor(featureId);
+        openRoomEditor(featureId, feature);
       }
     }
   });
 };
 
-const openRoomEditor = async (buildingExternalId) => {
+const openRoomEditor = async (buildingExternalId, feature) => {
   if (!buildingExternalId) return;
 
   setAdminMapToolsStatus("Abriendo editor de salas...");
@@ -100,8 +101,17 @@ const openRoomEditor = async (buildingExternalId) => {
     const floors = floorsData.length > 0 ? floorsData : [{ floor: 0, totalCount: 0 }];
     const selectedFloor = floors[0].floor;
 
+    const buildingName =
+      feature?.properties?.mapLabel ||
+      feature?.properties?.title ||
+      feature?.properties?.name ||
+      feature?.properties?.displayName ||
+      feature?.properties?.sourceId ||
+      buildingExternalId;
+
     currentEditorState = {
       buildingExternalId,
+      buildingName,
       buildingGeometry: buildingData,
       floors,
       selectedFloor,
@@ -117,6 +127,7 @@ const openRoomEditor = async (buildingExternalId) => {
       drawPreviewLine: null,
       suggestions: [],
       suggestionPreviewLayers: [],
+      activeTransformLayer: null,
     };
 
     undoStack = [];
@@ -128,12 +139,42 @@ const openRoomEditor = async (buildingExternalId) => {
     renderBuildingBoundary(buildingData);
     renderRooms();
     updatePopupContent();
+    installKeyboardShortcuts();
 
     setAdminMapToolsStatus("Editor de salas abierto.");
     requestAdminMapToolMode("room-edit");
   } catch (error) {
     console.error("Error opening room editor:", error);
     setAdminMapToolsStatus("Error al abrir editor de salas.");
+  }
+};
+
+const installKeyboardShortcuts = () => {
+  removeKeyboardShortcuts();
+  keydownHandler = (e) => {
+    if (!currentEditorState || !popupContainer) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      saveRoomEditor();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      if (currentEditorState.drawPoints && currentEditorState.drawPoints.length > 0) {
+        clearDrawState();
+        currentEditorState.mode = "select";
+        updatePopupContent();
+        setAdminMapToolsStatus("Dibujo cancelado.");
+      } else {
+        cancelRoomEditor();
+      }
+    }
+  };
+  document.addEventListener("keydown", keydownHandler);
+};
+
+const removeKeyboardShortcuts = () => {
+  if (keydownHandler) {
+    document.removeEventListener("keydown", keydownHandler);
+    keydownHandler = null;
   }
 };
 
@@ -195,6 +236,7 @@ const createPopup = () => {
 };
 
 const destroyPopup = () => {
+  removeKeyboardShortcuts();
   if (popupMap) {
     popupMap.remove();
     popupMap = null;
@@ -218,7 +260,8 @@ const initPopupMap = (geometry) => {
   });
 
   L.tileLayer(TILE_URL, {
-    maxZoom: 19,
+    maxZoom: 22,
+    minZoom: 12,
     keepBuffer: 8,
     updateWhenIdle: false,
     updateWhenZooming: true,
@@ -229,7 +272,7 @@ const initPopupMap = (geometry) => {
     if (coords && coords.length > 0) {
       const latLngs = coords.map((c) => [c[1], c[0]]);
       const bounds = L.latLngBounds(latLngs);
-      popupMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
+      popupMap.fitBounds(bounds, { padding: [40, 40] });
     }
   }
 
@@ -247,7 +290,7 @@ const updatePopupContent = () => {
 const updateTopBar = () => {
   if (!topBarEl || !currentEditorState) return;
 
-  const { buildingExternalId, floors, selectedFloor, rooms } = currentEditorState;
+  const { buildingName, buildingExternalId, floors, selectedFloor, rooms } = currentEditorState;
   const floorSummary = floors.find((f) => f.floor === selectedFloor);
   const roomCount = floorSummary?.totalCount || rooms.length;
 
@@ -257,14 +300,26 @@ const updateTopBar = () => {
   closeBtn.type = "button";
   closeBtn.className = "room-editor-close-btn";
   closeBtn.innerHTML = "&times;";
-  closeBtn.title = "Cerrar editor";
+  closeBtn.title = "Cerrar editor (Esc)";
   closeBtn.addEventListener("click", () => cancelRoomEditor());
   topBarEl.appendChild(closeBtn);
 
+  const nameContainer = document.createElement("div");
+  nameContainer.className = "room-editor-building-name-wrap";
+
   const name = document.createElement("span");
   name.className = "room-editor-building-name";
-  name.textContent = buildingExternalId;
-  topBarEl.appendChild(name);
+  name.textContent = buildingName;
+  name.title = buildingExternalId;
+  nameContainer.appendChild(name);
+
+  if (buildingName !== buildingExternalId) {
+    const idSmall = document.createElement("span");
+    idSmall.className = "room-editor-building-id";
+    idSmall.textContent = buildingExternalId;
+    nameContainer.appendChild(idSmall);
+  }
+  topBarEl.appendChild(nameContainer);
 
   const floorSelector = document.createElement("div");
   floorSelector.className = "room-editor-floor-selector";
@@ -279,15 +334,21 @@ const updateTopBar = () => {
   topBarEl.appendChild(floorSelector);
 
   const count = document.createElement("span");
-  count.style.cssText = "font-size:12px;color:#6b7280;";
+  count.className = "room-editor-room-count";
   count.textContent = `${roomCount} sala(s)`;
   topBarEl.appendChild(count);
+
+  const hint = document.createElement("span");
+  hint.className = "room-editor-shortcut-hint";
+  hint.textContent = "Enter: guardar | Esc: cancelar";
+  topBarEl.appendChild(hint);
 };
 
 const updateBottomBar = () => {
   if (!bottomBarEl || !currentEditorState) return;
 
-  const { mode, selectedRoom } = currentEditorState;
+  const { mode, selectedRoom, suggestions } = currentEditorState;
+  const hasSuggestions = suggestions && suggestions.length > 0;
 
   bottomBarEl.innerHTML = "";
 
@@ -295,9 +356,12 @@ const updateBottomBar = () => {
   tools.className = "room-editor-tools";
 
   const toolDefs = [
-    { id: "select", label: "Seleccionar", icon: "&#128070;" },
-    { id: "draw-rect", label: "Rectangulo", icon: "&#9645;" },
-    { id: "draw-polygon", label: "Poligono", icon: "&#9651;" },
+    { id: "select", label: "Sel", icon: "&#128070;", title: "Seleccionar sala" },
+    { id: "draw-square", label: "Cuad", icon: "&#9632;", title: "Dibujar cuadrado" },
+    { id: "draw-rect", label: "Rect", icon: "&#9645;", title: "Dibujar rectangulo" },
+    { id: "draw-circle", label: "Circ", icon: "&#9675;", title: "Dibujar circulo" },
+    { id: "draw-polygon", label: "Polig", icon: "&#9651;", title: "Dibujar poligono" },
+    { id: "draw-free", label: "Libre", icon: "&#9998;", title: "Dibujo libre" },
   ];
 
   for (const t of toolDefs) {
@@ -305,6 +369,7 @@ const updateBottomBar = () => {
     btn.type = "button";
     btn.className = `room-editor-tool-btn${mode === t.id ? " is-active" : ""}`;
     btn.innerHTML = `<span>${t.icon}</span><span>${t.label}</span>`;
+    btn.title = t.title;
     btn.addEventListener("click", () => selectRoomMode(t.id));
     tools.appendChild(btn);
   }
@@ -316,7 +381,8 @@ const updateBottomBar = () => {
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
   deleteBtn.className = "room-editor-tool-btn";
-  deleteBtn.innerHTML = '<span>&#128465;</span><span>Eliminar</span>';
+  deleteBtn.innerHTML = '<span>&#128465;</span><span>Del</span>';
+  deleteBtn.title = "Eliminar sala seleccionada";
   deleteBtn.disabled = !selectedRoom;
   deleteBtn.addEventListener("click", () => deleteSelectedRoom());
   tools.appendChild(deleteBtn);
@@ -324,7 +390,8 @@ const updateBottomBar = () => {
   const undoBtn = document.createElement("button");
   undoBtn.type = "button";
   undoBtn.className = "room-editor-tool-btn";
-  undoBtn.innerHTML = '<span>&#8617;</span><span>Deshacer</span>';
+  undoBtn.innerHTML = '<span>&#8617;</span><span>Undo</span>';
+  undoBtn.title = "Deshacer";
   undoBtn.disabled = undoStack.length === 0;
   undoBtn.addEventListener("click", () => undoRoomEditor());
   tools.appendChild(undoBtn);
@@ -335,10 +402,35 @@ const updateBottomBar = () => {
 
   const suggestBtn = document.createElement("button");
   suggestBtn.type = "button";
-  suggestBtn.className = `room-editor-tool-btn${mode === "suggest" ? " is-active is-suggest" : ""}`;
+  suggestBtn.className = `room-editor-tool-btn is-suggest${hasSuggestions ? " is-active" : ""}`;
   suggestBtn.innerHTML = '<span>&#10024;</span><span>Sugerir</span>';
-  suggestBtn.addEventListener("click", () => showSuggestionPanel());
+  suggestBtn.title = "Sugerir salas automaticamente";
+  suggestBtn.addEventListener("click", () => runQuickSuggestion());
   tools.appendChild(suggestBtn);
+
+  if (hasSuggestions) {
+    const approveBtn = document.createElement("button");
+    approveBtn.type = "button";
+    approveBtn.className = "room-editor-tool-btn is-suggest";
+    approveBtn.innerHTML = '<span>&#10003;</span><span>Aceptar</span>';
+    approveBtn.title = "Guardar salas sugeridas";
+    approveBtn.addEventListener("click", () => saveQuickSuggestions());
+    tools.appendChild(approveBtn);
+
+    const cancelSugBtn = document.createElement("button");
+    cancelSugBtn.type = "button";
+    cancelSugBtn.className = "room-editor-tool-btn";
+    cancelSugBtn.innerHTML = '<span>&#10005;</span><span>Descartar</span>';
+    cancelSugBtn.title = "Descartar sugerencias";
+    cancelSugBtn.addEventListener("click", () => {
+      currentEditorState.suggestions = [];
+      currentEditorState.suggestionPreviewLayers.forEach((l) => popupMap.removeLayer(l));
+      currentEditorState.suggestionPreviewLayers = [];
+      updateBottomBar();
+      setAdminMapToolsStatus("Sugerencias descartadas.");
+    });
+    tools.appendChild(cancelSugBtn);
+  }
 
   bottomBarEl.appendChild(tools);
 
@@ -346,6 +438,7 @@ const updateBottomBar = () => {
   saveBtn.type = "button";
   saveBtn.className = "room-editor-save-btn";
   saveBtn.textContent = "Guardar";
+  saveBtn.title = "Guardar cambios (Enter)";
   saveBtn.addEventListener("click", () => saveRoomEditor());
   bottomBarEl.appendChild(saveBtn);
 };
@@ -353,13 +446,9 @@ const updateBottomBar = () => {
 const updateSidePanel = () => {
   if (!sidePanelEl || !currentEditorState) return;
 
-  const { mode, selectedRoom } = currentEditorState;
+  const { selectedRoom } = currentEditorState;
 
-  if (mode === "suggest") {
-    sidePanelEl.className = "room-editor-side-panel is-visible";
-    sidePanelEl.innerHTML = "";
-    sidePanelEl.appendChild(buildSuggestionPanel());
-  } else if (selectedRoom) {
+  if (selectedRoom) {
     sidePanelEl.className = "room-editor-side-panel is-visible";
     sidePanelEl.innerHTML = "";
     sidePanelEl.appendChild(buildPropertiesPanel(selectedRoom));
@@ -389,6 +478,11 @@ const buildPropertiesPanel = (room) => {
 
   const body = document.createElement("div");
   body.className = "room-editor-side-panel-body";
+
+  const rotation = room.rotation || 0;
+  const scaleX = room.scaleX || 1;
+  const scaleY = room.scaleY || 1;
+
   body.innerHTML = `
     <div class="room-editor-form-grid">
       <label>Nombre *
@@ -423,6 +517,20 @@ const buildPropertiesPanel = (room) => {
         <input type="number" value="${room.capacity || ""}" data-prop="capacity" />
       </label>
     </div>
+    <div class="room-editor-transform-section">
+      <div class="room-editor-section-title">Transformar</div>
+      <div class="room-editor-form-grid">
+        <label>Rotacion (grados)
+          <input type="number" value="${rotation}" min="0" max="360" step="1" data-transform="rotation" />
+        </label>
+        <label>Escala X
+          <input type="number" value="${scaleX}" min="0.1" max="10" step="0.1" data-transform="scaleX" />
+        </label>
+        <label>Escala Y
+          <input type="number" value="${scaleY}" min="0.1" max="10" step="0.1" data-transform="scaleY" />
+        </label>
+      </div>
+    </div>
     <label class="room-editor-full-label">Notas
       <textarea data-prop="notes">${escapeHtml(room.notes || "")}</textarea>
     </label>
@@ -442,120 +550,25 @@ const buildPropertiesPanel = (room) => {
     }
   });
 
+  body.querySelectorAll("[data-transform]").forEach((el) => {
+    el.addEventListener("change", () => {
+      const prop = el.dataset.transform;
+      const val = parseFloat(el.value);
+      if (isNaN(val)) return;
+      updateRoomTransform(prop, val);
+    });
+  });
+
   container.appendChild(body);
   return container;
 };
 
-const buildSuggestionPanel = () => {
-  const suggestions = currentEditorState?.suggestions || [];
-  const approvedCount = suggestions.filter((s) => s.approved).length;
-
-  const container = document.createElement("div");
-
-  const header = document.createElement("div");
-  header.className = "room-editor-side-panel-header";
-  header.innerHTML = '<span class="room-editor-side-panel-title" style="color:#7c3aed;">&#10024; Sugerencia</span>';
-  container.appendChild(header);
-
-  const body = document.createElement("div");
-  body.className = "room-editor-side-panel-body";
-
-  const sugPanel = document.createElement("div");
-  sugPanel.className = "room-editor-suggestion-panel";
-  sugPanel.innerHTML = `
-    <div class="room-editor-form-grid">
-      <label>Patron
-        <select data-suggest="pattern">
-          <option value="grid">Cuadricula</option>
-          <option value="corridor-central">Pasillo central</option>
-          <option value="corridor-lateral">Pasillo lateral</option>
-          <option value="perimeter">Perimetral</option>
-        </select>
-      </label>
-      <label>Cantidad
-        <input type="number" value="6" min="1" max="100" data-suggest="count" />
-      </label>
-      <label>Pasillo (m)
-        <input type="number" value="1.5" min="0" step="0.5" data-suggest="corridor" />
-      </label>
-      <label>Prefijo
-        <input value="Box" data-suggest="prefix" />
-      </label>
-      <label>Tipo
-        <select data-suggest="type">
-          <option value="box">Box</option>
-          <option value="sala">Sala</option>
-          <option value="oficina">Oficina</option>
-        </select>
-      </label>
-      <label>Filas (0=auto)
-        <input type="number" value="0" min="0" data-suggest="rows" />
-      </label>
-    </div>
-  `;
-  body.appendChild(sugPanel);
-
-  const genBtn = document.createElement("button");
-  genBtn.type = "button";
-  genBtn.style.cssText = "width:100%;margin:8px 0;padding:6px;border-radius:4px;border:none;background:#7c3aed;color:white;font-size:12px;cursor:pointer;";
-  genBtn.textContent = "Generar sugerencia";
-  genBtn.addEventListener("click", () => runSuggestion());
-  body.appendChild(genBtn);
-
-  if (suggestions.length > 0) {
-    const info = document.createElement("div");
-    info.className = "room-editor-hint";
-    info.textContent = `${approvedCount} de ${suggestions.length} sala(s) aprobada(s)`;
-    body.appendChild(info);
-
-    const btnRow = document.createElement("div");
-    btnRow.className = "room-editor-suggestion-actions";
-
-    const approveAllBtn = document.createElement("button");
-    approveAllBtn.type = "button";
-    approveAllBtn.className = "room-editor-action-cancel";
-    approveAllBtn.textContent = "Aprobar todas";
-    approveAllBtn.addEventListener("click", () => approveAllSuggestions());
-
-    const saveSugBtn = document.createElement("button");
-    saveSugBtn.type = "button";
-    saveSugBtn.className = "room-editor-action-save";
-    saveSugBtn.textContent = "Guardar aprobadas";
-    saveSugBtn.addEventListener("click", () => saveSuggestions());
-
-    btnRow.appendChild(approveAllBtn);
-    btnRow.appendChild(saveSugBtn);
-    body.appendChild(btnRow);
-
-    const list = document.createElement("div");
-    list.className = "room-editor-suggestion-list";
-    suggestions.forEach((s, i) => {
-      const row = document.createElement("label");
-      row.className = "room-editor-suggestion-item";
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = s.approved;
-      cb.addEventListener("change", () => {
-        if (s.approved) rejectSuggestion(i);
-        else approveSuggestion(i);
-      });
-      const span = document.createElement("span");
-      span.textContent = `${s.displayName} (${s.type})`;
-      if (!s.approved) span.style.cssText = "text-decoration:line-through;color:#9ca3af;";
-      row.appendChild(cb);
-      row.appendChild(span);
-      list.appendChild(row);
-    });
-    body.appendChild(list);
-  } else {
-    const hint = document.createElement("div");
-    hint.className = "room-editor-hint";
-    hint.textContent = 'Configura los parametros y haz clic en "Generar sugerencia"';
-    body.appendChild(hint);
-  }
-
-  container.appendChild(body);
-  return container;
+const updateRoomTransform = (property, value) => {
+  if (!currentEditorState?.selectedRoom) return;
+  const room = currentEditorState.selectedRoom;
+  room[property] = value;
+  currentEditorState.isDirty = true;
+  renderRooms();
 };
 
 const renderBuildingBoundary = (geometry) => {
@@ -596,7 +609,15 @@ const renderRooms = () => {
       if (!geom.coordinates) continue;
 
       const coords = geom.coordinates[0];
-      const latLngs = coords.map((c) => [c[1], c[0]]);
+      let latLngs = coords.map((c) => [c[1], c[0]]);
+
+      const rotation = room.rotation || 0;
+      const scaleX = room.scaleX || 1;
+      const scaleY = room.scaleY || 1;
+
+      if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
+        latLngs = transformLatLngs(latLngs, rotation, scaleX, scaleY);
+      }
 
       const isSelected = currentEditorState.selectedRoom?.externalId === room.externalId;
 
@@ -619,6 +640,7 @@ const renderRooms = () => {
       currentEditorState.roomLayers.push(layer);
 
       if (isSelected) {
+        enableTransformOnSelected(layer, room);
         renderVertexMarkers(latLngs, room);
       }
     } catch (e) {
@@ -627,12 +649,83 @@ const renderRooms = () => {
   }
 };
 
+const transformLatLngs = (latLngs, rotationDeg, scaleX, scaleY) => {
+  if (latLngs.length < 3) return latLngs;
+
+  const centerLat = latLngs.reduce((s, ll) => s + ll[0], 0) / latLngs.length;
+  const centerLng = latLngs.reduce((s, ll) => s + ll[1], 0) / latLngs.length;
+  const rad = (rotationDeg * Math.PI) / 180;
+  const cosR = Math.cos(rad);
+  const sinR = Math.sin(rad);
+
+  return latLngs.map((ll) => {
+    const dx = (ll[1] - centerLng) * scaleX;
+    const dy = (ll[0] - centerLat) * scaleY;
+    const newLng = centerLng + dx * cosR - dy * sinR;
+    const newLat = centerLat + dx * sinR + dy * cosR;
+    return [newLat, newLng];
+  });
+};
+
+const enableTransformOnSelected = (layer, room) => {
+  if (!layer.transform) return;
+
+  try {
+    layer.transform.enable({ rotation: true, scaling: true, uniformScaling: false });
+
+    let transformActive = false;
+
+    layer.on("rotate", (e) => {
+      if (!transformActive) {
+        transformActive = true;
+        const angle = layer.transform.getAngle ? layer.transform.getAngle() : 0;
+        room.rotation = ((angle % 360) + 360) % 360;
+        currentEditorState.isDirty = true;
+        updateTransformInputs();
+        transformActive = false;
+      }
+    });
+
+    layer.on("scale", (e) => {
+      if (!transformActive) {
+        transformActive = true;
+        if (e.scale) {
+          room.scaleX = (room.scaleX || 1) * (e.scale.x || 1);
+          room.scaleY = (room.scaleY || 1) * (e.scale.y || 1);
+          currentEditorState.isDirty = true;
+          updateTransformInputs();
+        }
+        transformActive = false;
+      }
+    });
+
+    currentEditorState.activeTransformLayer = layer;
+  } catch (err) {
+    console.warn("Could not enable transform on layer:", err);
+  }
+};
+
+const updateTransformInputs = () => {
+  if (!sidePanelEl || !currentEditorState?.selectedRoom) return;
+  const room = currentEditorState.selectedRoom;
+  const rotInput = sidePanelEl.querySelector("[data-transform='rotation']");
+  const sxInput = sidePanelEl.querySelector("[data-transform='scaleX']");
+  const syInput = sidePanelEl.querySelector("[data-transform='scaleY']");
+  if (rotInput) rotInput.value = Math.round(room.rotation || 0);
+  if (sxInput) sxInput.value = (room.scaleX || 1).toFixed(1);
+  if (syInput) syInput.value = (room.scaleY || 1).toFixed(1);
+};
+
 const clearRoomLayers = () => {
   if (!currentEditorState || !popupMap) return;
   for (const layer of currentEditorState.roomLayers) {
+    try {
+      if (layer.transform) layer.transform.disable();
+    } catch (e) { /* ignore */ }
     popupMap.removeLayer(layer);
   }
   currentEditorState.roomLayers = [];
+  currentEditorState.activeTransformLayer = null;
   clearVertexMarkers();
 };
 
@@ -706,15 +799,83 @@ const selectRoomMode = (mode) => {
   updateBottomBar();
   updateSidePanel();
 
-  if (mode === "draw-rect") {
-    setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
-    startRoomDrawRect();
-  } else if (mode === "draw-polygon") {
-    setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
-    startRoomDrawPolygon();
-  } else {
-    setAdminMapToolsStatus("Modo seleccion. Click en una sala para editarla.");
+  switch (mode) {
+    case "draw-square":
+      setAdminMapToolsStatus("Haz clic para colocar el centro del cuadrado. Arrastra para definir el tamano.");
+      startRoomDrawSquare();
+      break;
+    case "draw-rect":
+      setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
+      startRoomDrawRect();
+      break;
+    case "draw-circle":
+      setAdminMapToolsStatus("Haz clic para colocar el centro del circulo. Arrastra para definir el radio.");
+      startRoomDrawCircle();
+      break;
+    case "draw-polygon":
+      setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
+      startRoomDrawPolygon();
+      break;
+    case "draw-free":
+      setAdminMapToolsStatus("Mantén presionado el mouse y dibuja libremente.");
+      startRoomDrawFree();
+      break;
+    default:
+      setAdminMapToolsStatus("Modo seleccion. Click en una sala para editarla.");
   }
+};
+
+const startRoomDrawSquare = () => {
+  if (!currentEditorState || !popupMap) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-square";
+
+  let center = null;
+
+  const onMouseDown = (e) => {
+    center = e.latlng;
+    currentEditorState.previewLayer = L.polygon(
+      [[center.lat, center.lng], [center.lat, center.lng], [center.lat, center.lng], [center.lat, center.lng]],
+      { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
+    ).addTo(popupMap);
+    popupMap.on("mousemove", onMove);
+    popupMap.once("mouseup", onMouseUp);
+  };
+
+  const onMove = (e) => {
+    if (!center || !currentEditorState.previewLayer) return;
+    const dLat = Math.abs(e.latlng.lat - center.lat);
+    const dLng = Math.abs(e.latlng.lng - center.lng);
+    const d = Math.max(dLat, dLng);
+    const signLat = e.latlng.lat >= center.lat ? 1 : -1;
+    const signLng = e.latlng.lng >= center.lng ? 1 : -1;
+    const rectCoords = [
+      [center.lat + d * signLat, center.lng - d * signLng],
+      [center.lat + d * signLat, center.lng + d * signLng],
+      [center.lat - d * signLat, center.lng + d * signLng],
+      [center.lat - d * signLat, center.lng - d * signLng],
+      [center.lat + d * signLat, center.lng - d * signLng],
+    ];
+    currentEditorState.previewLayer.setLatLngs(rectCoords);
+  };
+
+  const onMouseUp = () => {
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mousedown", onMouseDown);
+    if (currentEditorState.previewLayer) {
+      const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
+      popupMap.removeLayer(currentEditorState.previewLayer);
+      currentEditorState.previewLayer = null;
+      if (latLngs && latLngs.length >= 4) {
+        const closedRing = latLngs.map((ll) => [ll.lat, ll.lng]);
+        closedRing.push(closedRing[0]);
+        const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
+        createNewRoom(geoJsonCoords);
+      }
+    }
+  };
+
+  popupMap.on("mousedown", onMouseDown);
 };
 
 const startRoomDrawRect = () => {
@@ -783,6 +944,59 @@ const finishRectDraw = () => {
   createNewRoom(coords);
 };
 
+const startRoomDrawCircle = () => {
+  if (!currentEditorState || !popupMap) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-circle";
+
+  let center = null;
+
+  const onMouseDown = (e) => {
+    center = e.latlng;
+    currentEditorState.previewLayer = L.circle(center, {
+      radius: 1,
+      color: "#f59e0b",
+      weight: 2,
+      fillColor: "#f59e0b",
+      fillOpacity: 0.25,
+      dashArray: "6 6",
+      interactive: false,
+    }).addTo(popupMap);
+    popupMap.on("mousemove", onMove);
+    popupMap.once("mouseup", onMouseUp);
+  };
+
+  const onMove = (e) => {
+    if (!center || !currentEditorState.previewLayer) return;
+    const radius = center.distanceTo(e.latlng);
+    currentEditorState.previewLayer.setRadius(radius);
+  };
+
+  const onMouseUp = () => {
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mousedown", onMouseDown);
+    if (currentEditorState.previewLayer && center) {
+      const radius = currentEditorState.previewLayer.getRadius();
+      popupMap.removeLayer(currentEditorState.previewLayer);
+      currentEditorState.previewLayer = null;
+      if (radius > 1) {
+        const numPoints = 36;
+        const ring = [];
+        for (let i = 0; i < numPoints; i++) {
+          const angle = (i / numPoints) * 2 * Math.PI;
+          const lat = center.lat + (radius / 111320) * Math.cos(angle);
+          const lng = center.lng + (radius / (111320 * Math.cos((center.lat * Math.PI) / 180))) * Math.sin(angle);
+          ring.push([lng, lat]);
+        }
+        ring.push(ring[0]);
+        createNewRoom(ring);
+      }
+    }
+  };
+
+  popupMap.on("mousedown", onMouseDown);
+};
+
 const startRoomDrawPolygon = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
@@ -825,6 +1039,77 @@ const startRoomDrawPolygon = () => {
   popupMap.on("dblclick", onDblClick);
 };
 
+const startRoomDrawFree = () => {
+  if (!currentEditorState || !popupMap) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-free";
+
+  let drawing = false;
+  const tempLatLngs = [];
+
+  const onMouseDown = (e) => {
+    drawing = true;
+    tempLatLngs.length = 0;
+    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
+
+    currentEditorState.previewLayer = L.polyline(tempLatLngs, {
+      color: "#f59e0b", weight: 2, dashArray: "6 6", interactive: false,
+    }).addTo(popupMap);
+  };
+
+  const onMouseMove = (e) => {
+    if (!drawing) return;
+    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
+    if (currentEditorState.previewLayer) {
+      currentEditorState.previewLayer.setLatLngs(tempLatLngs);
+    }
+  };
+
+  const onMouseUp = () => {
+    if (!drawing) return;
+    drawing = false;
+    popupMap.off("mousedown", onMouseDown);
+    popupMap.off("mousemove", onMouseMove);
+    popupMap.off("mouseup", onMouseUp);
+
+    if (currentEditorState.previewLayer) {
+      popupMap.removeLayer(currentEditorState.previewLayer);
+      currentEditorState.previewLayer = null;
+    }
+
+    if (tempLatLngs.length >= 3) {
+      const simplified = simplifyPoints(tempLatLngs, 0.00002);
+      simplified.push(simplified[0]);
+      const geoJsonCoords = simplified.map((ll) => [ll[1], ll[0]]);
+      createNewRoom(geoJsonCoords);
+    }
+  };
+
+  popupMap.on("mousedown", onMouseDown);
+  popupMap.on("mousemove", onMouseMove);
+  popupMap.on("mouseup", onMouseUp);
+};
+
+const simplifyPoints = (points, tolerance) => {
+  if (points.length <= 3) return points;
+
+  const result = [points[0]];
+  let lastKept = points[0];
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const dx = points[i][1] - lastKept[1];
+    const dy = points[i][0] - lastKept[0];
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist >= tolerance) {
+      result.push(points[i]);
+      lastKept = points[i];
+    }
+  }
+
+  result.push(points[points.length - 1]);
+  return result;
+};
+
 const createNewRoom = (geoJsonCoords) => {
   if (!currentEditorState) return;
 
@@ -843,6 +1128,9 @@ const createNewRoom = (geoJsonCoords) => {
     source: "manual",
     notes: "",
     isNew: true,
+    rotation: 0,
+    scaleX: 1,
+    scaleY: 1,
   };
 
   pushUndo({ type: "create-room", room: newRoom });
@@ -871,6 +1159,8 @@ const clearDrawState = () => {
   popupMap.off("click");
   popupMap.off("dblclick");
   popupMap.off("mousemove");
+  popupMap.off("mousedown");
+  popupMap.off("mouseup");
 };
 
 const deleteSelectedRoom = () => {
@@ -1052,24 +1342,8 @@ const escapeHtml = (str) => {
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 };
 
-const showSuggestionPanel = () => {
+const runQuickSuggestion = async () => {
   if (!currentEditorState) return;
-  currentEditorState.mode = "suggest";
-  currentEditorState.suggestions = [];
-  currentEditorState.suggestionPreviewLayers = [];
-  updateBottomBar();
-  updateSidePanel();
-};
-
-const runSuggestion = async () => {
-  if (!currentEditorState) return;
-
-  const pattern = sidePanelEl?.querySelector("[data-suggest='pattern']")?.value || "grid";
-  const count = parseInt(sidePanelEl?.querySelector("[data-suggest='count']")?.value) || 6;
-  const corridor = parseFloat(sidePanelEl?.querySelector("[data-suggest='corridor']")?.value) || 1.5;
-  const prefix = sidePanelEl?.querySelector("[data-suggest='prefix']")?.value || "Box";
-  const roomType = sidePanelEl?.querySelector("[data-suggest='type']")?.value || "box";
-  const rows = parseInt(sidePanelEl?.querySelector("[data-suggest='rows']")?.value) || 0;
 
   setAdminMapToolsStatus("Generando sugerencias...");
 
@@ -1087,13 +1361,13 @@ const runSuggestion = async () => {
       body: JSON.stringify({
         buildingExternalId: currentEditorState.buildingExternalId,
         floor: currentEditorState.selectedFloor,
-        roomCount: count,
-        pattern,
-        rows,
+        roomCount: 6,
+        pattern: "grid",
+        rows: 0,
         columns: 0,
-        corridorWidth: corridor,
-        roomType,
-        namePrefix: prefix,
+        corridorWidth: 1.5,
+        roomType: "sala",
+        namePrefix: "Sala",
         coordinates: buildingCoords,
       }),
     });
@@ -1109,8 +1383,8 @@ const runSuggestion = async () => {
 
     clearSuggestionPreviewLayers();
     renderSuggestionPreviewLayers();
-    updateSidePanel();
-    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Revisa y aprueba las que desees guardar.`);
+    updateBottomBar();
+    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en "Aceptar" para guardarlas.`);
   } catch (error) {
     console.error("Error running suggestion:", error);
     setAdminMapToolsStatus("Error al generar sugerencias.");
@@ -1151,28 +1425,12 @@ const clearSuggestionPreviewLayers = () => {
   currentEditorState.suggestionPreviewLayers = [];
 };
 
-const approveSuggestion = (index) => {
-  if (!currentEditorState?.suggestions?.[index]) return;
-  currentEditorState.suggestions[index].approved = true;
-  clearSuggestionPreviewLayers();
-  renderSuggestionPreviewLayers();
-  updateSidePanel();
-};
-
-const rejectSuggestion = (index) => {
-  if (!currentEditorState?.suggestions?.[index]) return;
-  currentEditorState.suggestions[index].approved = false;
-  clearSuggestionPreviewLayers();
-  renderSuggestionPreviewLayers();
-  updateSidePanel();
-};
-
 const toggleSuggestionApproval = (index) => {
   if (!currentEditorState?.suggestions?.[index]) return;
   currentEditorState.suggestions[index].approved = !currentEditorState.suggestions[index].approved;
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  updateSidePanel();
+  updateBottomBar();
 };
 
 const approveAllSuggestions = () => {
@@ -1182,10 +1440,10 @@ const approveAllSuggestions = () => {
   }
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  updateSidePanel();
+  updateBottomBar();
 };
 
-const saveSuggestions = async () => {
+const saveQuickSuggestions = async () => {
   if (!currentEditorState?.suggestions) return;
 
   const approved = currentEditorState.suggestions.filter((s) => s.approved);
@@ -1194,7 +1452,7 @@ const saveSuggestions = async () => {
     return;
   }
 
-  setAdminMapToolsStatus("Guardando sugerencias aprobadas...");
+  setAdminMapToolsStatus("Guardando sugerencias...");
 
   try {
     const response = await fetch(`${getApiUrl()}/api/room-layouts/bulk-save`, {
@@ -1220,7 +1478,7 @@ const saveSuggestions = async () => {
 
     clearSuggestionPreviewLayers();
     currentEditorState.suggestions = [];
-    currentEditorState.mode = "select";
+    currentEditorState.suggestionPreviewLayers = [];
 
     await loadRoomsForFloor(currentEditorState.buildingExternalId, currentEditorState.selectedFloor);
     renderRooms();
