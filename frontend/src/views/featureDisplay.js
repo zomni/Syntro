@@ -1432,6 +1432,22 @@ const buildDashboardBuildingEditLink = (buildingId) => {
   `;
 };
 
+const buildRoomEditorButton = (buildingId) => {
+  const value = String(buildingId || "").trim();
+  if (!value) return "";
+  return `
+    <button
+      class="floorButton"
+      style="${getActionButtonStyle()}"
+      title="Editor visual de salas"
+      aria-label="Editor visual de salas"
+      onclick="window.openRoomEditor('${escapeHtml(value)}')"
+    >
+      Editar salas
+    </button>
+  `;
+};
+
 const buildKeyValueRow = (label, value) => {
   return `<div style="margin-bottom:3px;"><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</div>`;
 };
@@ -1896,7 +1912,9 @@ const getFeaturePopupHtml = async (feature) => {
   const floors = Array.isArray(building?.floors) ? building.floors.join(", ") : "";
   const searchPopupContent = building?.searchPopupContent || "";
   const isBackendAdmin = Boolean(backendSession?.isAdmin);
-  const adminActionsHtml = isBackendAdmin ? buildDashboardBuildingEditLink(featureId) : "";
+  const adminActionsHtml = isBackendAdmin
+    ? buildDashboardBuildingEditLink(featureId) + buildRoomEditorButton(featureId)
+    : "";
 
   let detailsHtml = `
     <div style="${popupShellStyle}">

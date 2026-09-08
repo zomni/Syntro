@@ -8,12 +8,14 @@ const footerId = "admin-map-tools-footer";
 const sectionDefinitions = {
   dimensions: ["Dimensiones", "&#9638;"],
   buildings: ["Edificios", "&#9634;"],
+  rooms: ["Salas", "&#9635;"],
   routes: ["Rutas", "&#8734;"],
 };
 const activeModes = new Map([
   ["manual-building", "manual-building-editor-toggle"],
   ["geometry-shape", "building-shape-editor-button"],
   ["geometry-move", "building-move-editor-button"],
+  ["room-edit", "room-editor-toggle"],
   ["walking-routes", "walking-route-editor-toggle"],
   ["walking-route-delete", "walking-route-delete-toggle"],
   ["walking-route-split", "walking-route-split-toggle"],

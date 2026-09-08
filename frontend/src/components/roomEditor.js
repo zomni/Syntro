@@ -1,0 +1,782 @@
+import { map, BACKEND_API_URL } from "../views/map.js";
+import {
+  requestAdminMapToolMode,
+  setAdminMapToolsStatus,
+} from "./adminMapToolsPanel.js";
+
+const EDITOR_OVERLAY_CLASS = "room-editor-overlay";
+const VERTEX_CLASS = "room-editor-vertex-marker";
+const PREVIEW_CLASS = "room-editor-preview-polygon";
+const SELECTED_CLASS = "room-editor-selected";
+const ROOM_LAYER_CLASS = "room-editor-room-layer";
+
+let currentEditorState = null;
+let undoStack = [];
+let redoStack = [];
+
+const getApiUrl = () => {
+  return BACKEND_API_URL || "http://localhost:5002";
+};
+
+export const initRoomEditor = () => {
+  window.openRoomEditor = openRoomEditor;
+  window.selectRoomEditorFloor = selectRoomEditorFloor;
+  window.startRoomDrawRect = startRoomDrawRect;
+  window.startRoomDrawPolygon = startRoomDrawPolygon;
+  window.selectRoomMode = selectRoomMode;
+  window.deleteSelectedRoom = deleteSelectedRoom;
+  window.saveRoomEditor = saveRoomEditor;
+  window.cancelRoomEditor = cancelRoomEditor;
+  window.undoRoomEditor = undoRoomEditor;
+  window.redoRoomEditor = redoRoomEditor;
+  window.updateRoomProperty = updateRoomProperty;
+};
+
+const openRoomEditor = async (buildingExternalId) => {
+  if (!buildingExternalId) return;
+
+  setAdminMapToolsStatus("Abriendo editor de salas...");
+
+  try {
+    const buildingData = await fetchBuildingGeometry(buildingExternalId);
+    const floorsData = await fetchBuildingFloors(buildingExternalId);
+
+    const floors = floorsData.length > 0 ? floorsData : [{ floor: 0, totalCount: 0 }];
+    const selectedFloor = floors[0].floor;
+
+    currentEditorState = {
+      buildingExternalId,
+      buildingGeometry: buildingData,
+      floors,
+      selectedFloor,
+      rooms: [],
+      selectedRoom: null,
+      mode: "select",
+      isDirty: false,
+      buildingPolygonLayer: null,
+      roomLayers: [],
+      vertexMarkers: [],
+      previewLayer: null,
+      drawPoints: [],
+      drawPreviewLine: null,
+    };
+
+    undoStack = [];
+    redoStack = [];
+
+    zoomToBuilding(buildingData);
+    showEditorModal();
+    await loadRoomsForFloor(buildingExternalId, selectedFloor);
+    renderBuildingBoundary(buildingData);
+    renderRooms();
+    renderEditorContent();
+
+    setAdminMapToolsStatus("Editor de salas abierto.");
+    requestAdminMapToolMode("room-edit");
+  } catch (error) {
+    console.error("Error opening room editor:", error);
+    setAdminMapToolsStatus("Error al abrir editor de salas.");
+  }
+};
+
+const fetchBuildingGeometry = async (buildingExternalId) => {
+  const response = await fetch(
+    `${getApiUrl()}/api/synced-buildings/${encodeURIComponent(buildingExternalId)}/geometry`,
+    { credentials: "include", cache: "no-store" }
+  );
+  if (!response.ok) throw new Error("No se pudo cargar la geometria del edificio");
+  return response.json();
+};
+
+const fetchBuildingFloors = async (buildingExternalId) => {
+  const response = await fetch(
+    `${getApiUrl()}/api/room-layouts/${encodeURIComponent(buildingExternalId)}/floors`,
+    { credentials: "include", cache: "no-store" }
+  );
+  if (!response.ok) return [];
+  return response.json();
+};
+
+const fetchRoomsForFloor = async (buildingExternalId, floor) => {
+  const response = await fetch(
+    `${getApiUrl()}/api/room-layouts?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
+    { credentials: "include", cache: "no-store" }
+  );
+  if (!response.ok) return [];
+  return response.json();
+};
+
+const loadRoomsForFloor = async (buildingExternalId, floor) => {
+  currentEditorState.rooms = await fetchRoomsForFloor(buildingExternalId, floor);
+};
+
+const zoomToBuilding = (geometry) => {
+  if (!geometry || !geometry.coordinates) return;
+  const coords = geometry.coordinates[0];
+  if (!coords || coords.length === 0) return;
+
+  const latLngs = coords.map((c) => [c[1], c[0]]);
+  const bounds = L.latLngBounds(latLngs);
+  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
+};
+
+const showEditorModal = () => {
+  removeEditorModal();
+
+  const backdrop = document.createElement("div");
+  backdrop.id = "room-editor-backdrop";
+  backdrop.className = "room-editor-backdrop";
+  backdrop.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 1500;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 60px;
+  `;
+
+  const modal = document.createElement("div");
+  modal.id = "room-editor-modal";
+  modal.className = "room-editor-modal";
+  modal.style.cssText = `
+    background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 120px);
+    overflow-y: auto; font-family: inherit;
+  `;
+
+  backdrop.appendChild(modal);
+  document.body.appendChild(backdrop);
+
+  backdrop.addEventListener("click", (e) => {
+    if (e.target === backdrop) cancelRoomEditor();
+  });
+};
+
+const removeEditorModal = () => {
+  document.getElementById("room-editor-backdrop")?.remove();
+};
+
+const renderEditorContent = () => {
+  const modal = document.getElementById("room-editor-modal");
+  if (!modal || !currentEditorState) return;
+
+  const { buildingExternalId, floors, selectedFloor, rooms, selectedRoom, mode } = currentEditorState;
+  const floorSummary = floors.find((f) => f.floor === selectedFloor);
+  const roomCount = floorSummary?.totalCount || rooms.length;
+
+  modal.innerHTML = `
+    <div style="padding: 16px; border-bottom: 1px solid #e5e7eb;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Editor de Salas</h3>
+        <button onclick="cancelRoomEditor()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280;">&times;</button>
+      </div>
+      <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
+        Edificio: ${buildingExternalId}
+      </div>
+    </div>
+
+    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <span style="font-size: 13px; font-weight: 500;">Piso:</span>
+        ${floors
+          .map(
+            (f) => `
+          <button onclick="selectRoomEditorFloor(${f.floor})"
+            style="padding: 4px 12px; border-radius: 16px; border: 1px solid ${f.floor === selectedFloor ? "#2563eb" : "#d1d5db"};
+            background: ${f.floor === selectedFloor ? "#2563eb" : "white"}; color: ${f.floor === selectedFloor ? "white" : "#374151"};
+            font-size: 12px; cursor: pointer;">
+          ${f.floor >= 0 ? f.floor : "S" + Math.abs(f.floor)} (${f.totalCount})
+        </button>`
+          )
+          .join("")}
+      </div>
+      <div style="font-size: 12px; color: #6b7280; margin-top: 6px;">
+        ${roomCount} sala(s) en este piso
+      </div>
+    </div>
+
+    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        <button onclick="selectRoomMode('select')" class="room-tool-btn ${mode === "select" ? "active" : ""}"
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "select" ? "#2563eb" : "#d1d5db"};
+          background: ${mode === "select" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
+          &#128070; Seleccionar
+        </button>
+        <button onclick="startRoomDrawRect()" class="room-tool-btn ${mode === "draw-rect" ? "active" : ""}"
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "draw-rect" ? "#2563eb" : "#d1d5db"};
+          background: ${mode === "draw-rect" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
+          &#9645; Rectangulo
+        </button>
+        <button onclick="startRoomDrawPolygon()" class="room-tool-btn ${mode === "draw-polygon" ? "active" : ""}"
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "draw-polygon" ? "#2563eb" : "#d1d5db"};
+          background: ${mode === "draw-polygon" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
+          &#9651; Poligono
+        </button>
+        <button onclick="deleteSelectedRoom()" ${!selectedRoom ? "disabled" : ""}
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid #d1d5db;
+          background: white; font-size: 12px; cursor: ${selectedRoom ? "pointer" : "not-allowed"}; opacity: ${selectedRoom ? 1 : 0.5};">
+          &#128465; Eliminar
+        </button>
+        <button onclick="undoRoomEditor()" ${undoStack.length === 0 ? "disabled" : ""}
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid #d1d5db;
+          background: white; font-size: 12px; cursor: ${undoStack.length > 0 ? "pointer" : "not-allowed"}; opacity: ${undoStack.length > 0 ? 1 : 0.5};">
+          &#8617; Deshacer
+        </button>
+      </div>
+    </div>
+
+    ${selectedRoom ? renderPropertiesPanel(selectedRoom) : '<div style="padding: 16px; color: #9ca3af; font-size: 13px; text-align: center;">Selecciona una sala para ver sus propiedades</div>'}
+
+    <div style="padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; justify-content: flex-end;">
+      <button onclick="cancelRoomEditor()"
+        style="padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; background: white; font-size: 13px; cursor: pointer;">
+        Cancelar
+      </button>
+      <button onclick="saveRoomEditor()"
+        style="padding: 8px 16px; border-radius: 6px; border: none; background: #15803d; color: white; font-size: 13px; cursor: pointer;">
+        Guardar
+      </button>
+    </div>
+  `;
+};
+
+const renderPropertiesPanel = (room) => {
+  if (!room) return "";
+
+  return `
+    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
+      <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Propiedades</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Nombre *</label>
+          <input value="${escapeHtml(room.displayName || "")}" onchange="updateRoomProperty('displayName', this.value)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Tipo</label>
+          <select onchange="updateRoomProperty('type', this.value)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+            <option value="sala" ${room.type === "sala" ? "selected" : ""}>Sala</option>
+            <option value="oficina" ${room.type === "oficina" ? "selected" : ""}>Oficina</option>
+            <option value="box" ${room.type === "box" ? "selected" : ""}>Box</option>
+            <option value="bodega" ${room.type === "bodega" ? "selected" : ""}>Bodega</option>
+            <option value="estacion_enfermeria" ${room.type === "estacion_enfermeria" ? "selected" : ""}>Est. Enfermeria</option>
+            <option value="pasillo" ${room.type === "pasillo" ? "selected" : ""}>Pasillo</option>
+            <option value="otro" ${room.type === "otro" ? "selected" : ""}>Otro</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Unidad</label>
+          <input value="${escapeHtml(room.unit || "")}" onchange="updateRoomProperty('unit', this.value)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Servicio</label>
+          <input value="${escapeHtml(room.service || "")}" onchange="updateRoomProperty('service', this.value)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Estado</label>
+          <select onchange="updateRoomProperty('status', this.value)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+            <option value="active" ${room.status === "active" ? "selected" : ""}>Activa</option>
+            <option value="closed" ${room.status === "closed" ? "selected" : ""}>Cerrada</option>
+            <option value="review" ${room.status === "review" ? "selected" : ""}>En revision</option>
+            <option value="temporary" ${room.status === "temporary" ? "selected" : ""}>Temporal</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Capacidad</label>
+          <input type="number" value="${room.capacity || ""}" onchange="updateRoomProperty('capacity', parseInt(this.value) || null)"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+      </div>
+      <div style="margin-top: 8px;">
+        <label style="font-size: 11px; color: #6b7280; display: block;">Notas</label>
+        <textarea onchange="updateRoomProperty('notes', this.value)"
+          style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; min-height: 40px;"
+        >${escapeHtml(room.notes || "")}</textarea>
+      </div>
+      <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
+        Fuente: ${room.source || "synced"} | ID: ${room.externalId}
+      </div>
+    </div>
+  `;
+};
+
+const renderBuildingBoundary = (geometry) => {
+  clearBuildingBoundary();
+
+  if (!geometry || !geometry.coordinates) return;
+
+  const coords = geometry.coordinates[0];
+  const latLngs = coords.map((c) => [c[1], c[0]]);
+
+  currentEditorState.buildingPolygonLayer = L.polygon(latLngs, {
+    color: "#1e40af",
+    weight: 3,
+    fillColor: "#1e40af",
+    fillOpacity: 0.08,
+    dashArray: "8 4",
+    interactive: false,
+  }).addTo(map);
+};
+
+const clearBuildingBoundary = () => {
+  if (currentEditorState?.buildingPolygonLayer) {
+    map.removeLayer(currentEditorState.buildingPolygonLayer);
+    currentEditorState.buildingPolygonLayer = null;
+  }
+};
+
+const renderRooms = () => {
+  clearRoomLayers();
+
+  if (!currentEditorState) return;
+
+  for (const room of currentEditorState.rooms) {
+    if (!room.geometryJson) continue;
+
+    try {
+      const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+      if (!geom.coordinates) continue;
+
+      const coords = geom.coordinates[0];
+      const latLngs = coords.map((c) => [c[1], c[0]]);
+
+      const isSelected = currentEditorState.selectedRoom?.externalId === room.externalId;
+
+      const layer = L.polygon(latLngs, {
+        color: isSelected ? "#f59e0b" : "#059669",
+        weight: isSelected ? 3 : 2,
+        fillColor: isSelected ? "#f59e0b" : "#059669",
+        fillOpacity: isSelected ? 0.3 : 0.2,
+        className: ROOM_LAYER_CLASS,
+      }).addTo(map);
+
+      layer.on("click", (e) => {
+        L.DomEvent.stop(e);
+        if (currentEditorState.mode === "select") {
+          selectRoom(room);
+        }
+      });
+
+      layer.roomData = room;
+      currentEditorState.roomLayers.push(layer);
+
+      if (isSelected) {
+        renderVertexMarkers(latLngs, room);
+      }
+    } catch (e) {
+      console.warn("Error rendering room:", room.externalId, e);
+    }
+  }
+};
+
+const clearRoomLayers = () => {
+  if (!currentEditorState) return;
+  for (const layer of currentEditorState.roomLayers) {
+    map.removeLayer(layer);
+  }
+  currentEditorState.roomLayers = [];
+  clearVertexMarkers();
+};
+
+const renderVertexMarkers = (latLngs, room) => {
+  clearVertexMarkers();
+
+  for (let i = 0; i < latLngs.length - 1; i++) {
+    const marker = L.marker(latLngs[i], {
+      icon: L.divIcon({
+        className: VERTEX_CLASS,
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+      draggable: true,
+    }).addTo(map);
+
+    const idx = i;
+    marker.on("drag", (e) => {
+      latLngs[idx] = e.target.getLatLng();
+      if (currentEditorState.selectedRoom?.externalId === room.externalId) {
+        const roomLayer = currentEditorState.roomLayers.find((l) => l.roomData?.externalId === room.externalId);
+        if (roomLayer) roomLayer.setLatLngs(latLngs);
+      }
+    });
+
+    marker.on("dragend", () => {
+      pushUndo({
+        type: "move-vertex",
+        roomExternalId: room.externalId,
+        vertexIndex: idx,
+        previousLatLng: latLngs[idx],
+        newLatLng: marker.getLatLng(),
+      });
+    });
+
+    currentEditorState.vertexMarkers.push(marker);
+  }
+};
+
+const clearVertexMarkers = () => {
+  if (!currentEditorState) return;
+  for (const marker of currentEditorState.vertexMarkers) {
+    map.removeLayer(marker);
+  }
+  currentEditorState.vertexMarkers = [];
+};
+
+const selectRoom = (room) => {
+  if (!currentEditorState) return;
+  currentEditorState.selectedRoom = room;
+  renderRooms();
+  renderEditorContent();
+};
+
+const selectRoomEditorFloor = async (floor) => {
+  if (!currentEditorState) return;
+  currentEditorState.selectedFloor = floor;
+  currentEditorState.selectedRoom = null;
+  clearDrawState();
+  await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
+  renderRooms();
+  renderEditorContent();
+};
+
+const selectRoomMode = (mode) => {
+  if (!currentEditorState) return;
+  clearDrawState();
+  currentEditorState.mode = mode;
+  renderEditorContent();
+};
+
+const startRoomDrawRect = () => {
+  if (!currentEditorState) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-rect";
+  currentEditorState.drawPoints = [];
+  setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
+  renderEditorContent();
+
+  const onClick = (e) => {
+    currentEditorState.drawPoints.push(e.latlng);
+    if (currentEditorState.drawPoints.length === 1) {
+      setAdminMapToolsStatus("Ahora haz clic para colocar la esquina inferior derecha.");
+      currentEditorState.drawPreviewLine = L.circleMarker(e.latlng, {
+        radius: 4, color: "#f59e0b", fillColor: "#f59e0b", fillOpacity: 1,
+      }).addTo(map);
+    } else if (currentEditorState.drawPoints.length === 2) {
+      map.off("click", onClick);
+      map.off("mousemove", onMove);
+      if (currentEditorState.drawPreviewLine) {
+        map.removeLayer(currentEditorState.drawPreviewLine);
+        currentEditorState.drawPreviewLine = null;
+      }
+      finishRectDraw();
+    }
+  };
+
+  const onMove = (e) => {
+    if (currentEditorState.drawPoints.length === 1 && currentEditorState.previewLayer) {
+      const p1 = currentEditorState.drawPoints[0];
+      const p2 = e.latlng;
+      const rectCoords = [
+        [p1.lat, p1.lng],
+        [p1.lat, p2.lng],
+        [p2.lat, p2.lng],
+        [p2.lat, p1.lng],
+        [p1.lat, p1.lng],
+      ];
+      currentEditorState.previewLayer.setLatLngs(rectCoords);
+    }
+  };
+
+  map.on("click", onClick);
+  map.on("mousemove", onMove);
+
+  const p = currentEditorState.drawPoints[0] || map.getCenter();
+  currentEditorState.previewLayer = L.polygon(
+    [[p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng]],
+    { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
+  ).addTo(map);
+};
+
+const finishRectDraw = () => {
+  if (!currentEditorState || currentEditorState.drawPoints.length < 2) return;
+
+  const p1 = currentEditorState.drawPoints[0];
+  const p2 = currentEditorState.drawPoints[1];
+
+  const coords = [
+    [p1.lng, p1.lat],
+    [p2.lng, p1.lat],
+    [p2.lng, p2.lat],
+    [p1.lng, p2.lat],
+    [p1.lng, p1.lat],
+  ];
+
+  createNewRoom(coords);
+};
+
+const startRoomDrawPolygon = () => {
+  if (!currentEditorState) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-polygon";
+  currentEditorState.drawPoints = [];
+  setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
+  renderEditorContent();
+
+  const tempLatLngs = [];
+
+  const onClick = (e) => {
+    currentEditorState.drawPoints.push(e.latlng);
+    tempLatLngs.push([e.latlng.lat, e.latlng.lng]);
+
+    if (currentEditorState.previewLayer) {
+      currentEditorState.previewLayer.setLatLngs(tempLatLngs.length >= 3 ? tempLatLngs : tempLatLngs.concat([tempLatLngs[0]]));
+    } else if (tempLatLngs.length >= 3) {
+      currentEditorState.previewLayer = L.polygon(tempLatLngs, {
+        color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false,
+      }).addTo(map);
+    }
+  };
+
+  const onDblClick = (e) => {
+    L.DomEvent.stop(e);
+    map.off("click", onClick);
+    map.off("dblclick", onDblClick);
+
+    if (currentEditorState.previewLayer) {
+      map.removeLayer(currentEditorState.previewLayer);
+      currentEditorState.previewLayer = null;
+    }
+
+    if (tempLatLngs.length >= 3) {
+      const closedRing = [...tempLatLngs, tempLatLngs[0]];
+      const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
+      createNewRoom(geoJsonCoords);
+    }
+  };
+
+  map.on("click", onClick);
+  map.on("dblclick", onDblClick);
+};
+
+const createNewRoom = (geoJsonCoords) => {
+  if (!currentEditorState) return;
+
+  const newRoom = {
+    externalId: `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}`,
+    buildingExternalId: currentEditorState.buildingExternalId,
+    floor: currentEditorState.selectedFloor,
+    displayName: `Sala ${currentEditorState.rooms.length + 1}`,
+    shortName: "",
+    type: "sala",
+    unit: "",
+    service: "",
+    status: "active",
+    capacity: null,
+    geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
+    source: "manual",
+    notes: "",
+    isNew: true,
+  };
+
+  pushUndo({ type: "create-room", room: newRoom });
+
+  currentEditorState.rooms.push(newRoom);
+  currentEditorState.selectedRoom = newRoom;
+  currentEditorState.isDirty = true;
+  clearDrawState();
+  currentEditorState.mode = "select";
+  renderRooms();
+  renderEditorContent();
+  setAdminMapToolsStatus("Sala creada. Completa las propiedades y guarda.");
+};
+
+const clearDrawState = () => {
+  if (!currentEditorState) return;
+  if (currentEditorState.previewLayer) {
+    map.removeLayer(currentEditorState.previewLayer);
+    currentEditorState.previewLayer = null;
+  }
+  if (currentEditorState.drawPreviewLine) {
+    map.removeLayer(currentEditorState.drawPreviewLine);
+    currentEditorState.drawPreviewLine = null;
+  }
+  currentEditorState.drawPoints = [];
+  map.off("click");
+  map.off("dblclick");
+  map.off("mousemove");
+};
+
+const deleteSelectedRoom = () => {
+  if (!currentEditorState?.selectedRoom) return;
+
+  const room = currentEditorState.selectedRoom;
+  pushUndo({ type: "delete-room", room });
+
+  currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== room.externalId);
+  currentEditorState.selectedRoom = null;
+  currentEditorState.isDirty = true;
+  renderRooms();
+  renderEditorContent();
+  setAdminMapToolsStatus("Sala eliminada.");
+};
+
+const updateRoomProperty = (property, value) => {
+  if (!currentEditorState?.selectedRoom) return;
+
+  const room = currentEditorState.selectedRoom;
+  const prevValue = room[property];
+  room[property] = value;
+  currentEditorState.isDirty = true;
+
+  pushUndo({ type: "update-property", roomExternalId: room.externalId, property, prevValue, newValue: value });
+
+  if (property === "displayName" || property === "type") {
+    renderRooms();
+  }
+};
+
+const pushUndo = (action) => {
+  undoStack.push(action);
+  redoStack = [];
+};
+
+const undoRoomEditor = () => {
+  if (undoStack.length === 0 || !currentEditorState) return;
+  const action = undoStack.pop();
+  redoStack.push(action);
+
+  switch (action.type) {
+    case "create-room":
+      currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== action.room.externalId);
+      if (currentEditorState.selectedRoom?.externalId === action.room.externalId) {
+        currentEditorState.selectedRoom = null;
+      }
+      break;
+    case "delete-room":
+      currentEditorState.rooms.push(action.room);
+      break;
+    case "update-property": {
+      const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
+      if (room) room[action.property] = action.prevValue;
+      break;
+    }
+  }
+
+  renderRooms();
+  renderEditorContent();
+};
+
+const redoRoomEditor = () => {
+  if (redoStack.length === 0 || !currentEditorState) return;
+  const action = redoStack.pop();
+  undoStack.push(action);
+
+  switch (action.type) {
+    case "create-room":
+      currentEditorState.rooms.push(action.room);
+      break;
+    case "delete-room":
+      currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== action.room.externalId);
+      break;
+    case "update-property": {
+      const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
+      if (room) room[action.property] = action.newValue;
+      break;
+    }
+  }
+
+  renderRooms();
+  renderEditorContent();
+};
+
+const saveRoomEditor = async () => {
+  if (!currentEditorState) return;
+
+  setAdminMapToolsStatus("Guardando salas...");
+
+  try {
+    for (const room of currentEditorState.rooms) {
+      const coordinates = parseGeometryToCoordinates(room.geometryJson);
+
+      if (room.isNew) {
+        await fetch(`${getApiUrl()}/api/manual-rooms`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            externalId: room.externalId,
+            buildingExternalId: room.buildingExternalId,
+            floor: room.floor,
+            displayName: room.displayName,
+            shortName: room.shortName,
+            type: room.type,
+            unit: room.unit,
+            service: room.service,
+            status: room.status,
+            capacity: room.capacity,
+            coordinates,
+            notes: room.notes,
+          }),
+        });
+      } else {
+        await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            displayName: room.displayName,
+            shortName: room.shortName,
+            floor: room.floor,
+            type: room.type,
+            unit: room.unit,
+            service: room.service,
+            status: room.status,
+            capacity: room.capacity,
+            coordinates,
+            notes: room.notes,
+          }),
+        });
+      }
+    }
+
+    setAdminMapToolsStatus("Salas guardadas correctamente.");
+    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState.buildingExternalId } }));
+
+    setTimeout(() => {
+      cancelRoomEditor();
+    }, 1000);
+  } catch (error) {
+    console.error("Error saving rooms:", error);
+    setAdminMapToolsStatus("Error al guardar salas.");
+  }
+};
+
+const cancelRoomEditor = () => {
+  clearDrawState();
+  clearRoomLayers();
+  clearBuildingBoundary();
+  removeEditorModal();
+  currentEditorState = null;
+  undoStack = [];
+  redoStack = [];
+  requestAdminMapToolMode(null);
+  setAdminMapToolsStatus("");
+};
+
+const parseGeometryToCoordinates = (geometryJson) => {
+  if (!geometryJson) return [];
+  try {
+    const geom = typeof geometryJson === "string" ? JSON.parse(geometryJson) : geometryJson;
+    if (!geom.coordinates || !geom.coordinates[0]) return [];
+    return geom.coordinates[0].map((c) => [c[0], c[1]]);
+  } catch {
+    return [];
+  }
+};
+
+const escapeHtml = (str) => {
+  if (!str) return "";
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+};

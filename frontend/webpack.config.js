@@ -38,6 +38,7 @@ module.exports = {
       "@app/adminMapToolsPanel": src("components", "adminMapToolsPanel.js"),
       "@app/networkTelemetryPanel": src("components", "networkTelemetryPanel.js"),
       "@app/siteViewportPanel": src("components", "siteViewportPanel.js"),
+      "@app/roomEditor": src("components", "roomEditor.js"),
     },
   },
   module: {

@@ -512,6 +512,67 @@ public static class ExtendedSchemaInitializer
                 """);
 
             await context.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS ManualRooms (
+                    Id INTEGER NOT NULL CONSTRAINT PK_ManualRooms PRIMARY KEY AUTOINCREMENT,
+                    ExternalId TEXT NOT NULL,
+                    BuildingExternalId TEXT NOT NULL,
+                    Floor INTEGER NOT NULL,
+                    DisplayName TEXT NOT NULL,
+                    ShortName TEXT NOT NULL,
+                    Type TEXT NOT NULL,
+                    Unit TEXT NOT NULL,
+                    Service TEXT NOT NULL,
+                    Status TEXT NOT NULL,
+                    Capacity INTEGER NULL,
+                    GeometryJson TEXT NOT NULL,
+                    Source TEXT NOT NULL,
+                    Notes TEXT NOT NULL,
+                    IsActive INTEGER NOT NULL DEFAULT 1,
+                    DeletedAtUtc TEXT NULL,
+                    DeletedBy TEXT NULL,
+                    CreatedBy TEXT NOT NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedBy TEXT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 0
+                );
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_ManualRooms_ExternalId
+                ON ManualRooms (ExternalId);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS IX_ManualRooms_BuildingExternalId_Floor
+                ON ManualRooms (BuildingExternalId, Floor);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS RoomGeometryOverrides (
+                    Id INTEGER NOT NULL CONSTRAINT PK_RoomGeometryOverrides PRIMARY KEY AUTOINCREMENT,
+                    RoomExternalId TEXT NOT NULL,
+                    BuildingExternalId TEXT NOT NULL,
+                    GeometryJson TEXT NOT NULL,
+                    CentroidLatitude REAL NULL,
+                    CentroidLongitude REAL NULL,
+                    IsActive INTEGER NOT NULL DEFAULT 1,
+                    DeletedAtUtc TEXT NULL,
+                    DeletedBy TEXT NULL,
+                    CreatedBy TEXT NOT NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedBy TEXT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 0
+                );
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_RoomGeometryOverrides_RoomExternalId
+                ON RoomGeometryOverrides (RoomExternalId);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS WalkingRouteNodes (
                     Id INTEGER NOT NULL CONSTRAINT PK_WalkingRouteNodes PRIMARY KEY AUTOINCREMENT,
                     ExternalId TEXT NOT NULL,

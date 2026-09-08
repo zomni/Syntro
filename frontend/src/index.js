@@ -34,6 +34,9 @@ import { initNetworkTelemetryPanel } from "@app/networkTelemetryPanel";
 // Site zoom range (min/max) editing from the map
 import { initSiteViewportPanel } from "@app/siteViewportPanel";
 
+// Room editor for admins
+import { initRoomEditor } from "@app/roomEditor";
+
 applyBrandingTheme();
 
 const bootstrapLoadingOverlay = document.getElementById("map-loading-overlay");
@@ -76,5 +79,6 @@ initWalkingRouteLayer();
 initNetworkTelemetryPanel();
 initManualBuildingEditor();
 initBuildingGeometryEditor();
+initRoomEditor();
 initWalkingRouteEditor();
 initSiteViewportPanel();
