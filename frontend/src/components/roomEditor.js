@@ -10,6 +10,20 @@ const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
 const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
+const addDrawVertexMarker = (latlng) => {
+  if (!currentEditorState || !popupMap) return;
+  const marker = L.circleMarker(latlng, {
+    radius: 5,
+    color: "#f59e0b",
+    fillColor: "#f59e0b",
+    fillOpacity: 0.8,
+    weight: 2,
+    interactive: false,
+    className: VERTEX_CLASS,
+  }).addTo(popupMap);
+  currentEditorState.drawVertexMarkers.push(marker);
+};
+
 const ICONS = {
   select: "&#9757;",
   square: "&#9633;",
@@ -21,6 +35,8 @@ const ICONS = {
   undo: "&#8630;",
   suggest: "&#10024;",
   save: "&#10003;",
+  copy: "&#10697;",
+  paste: "&#9654;",
 };
 
 let currentEditorState = null;
@@ -33,6 +49,7 @@ let bottomBarEl = null;
 let sidePanelEl = null;
 let mapContainerEl = null;
 let keydownHandler = null;
+let copiedRoomData = null;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
@@ -49,6 +66,8 @@ export const initRoomEditor = () => {
   window.approveAllSuggestions = approveAllSuggestions;
   window.saveQuickSuggestions = saveQuickSuggestions;
   window.updateRoomTransform = updateRoomTransform;
+  window.copySelectedRoom = copySelectedRoom;
+  window.pasteRoom = pasteRoom;
 
   createToggleButton();
   listenForBuildingClick();
@@ -135,6 +154,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       roomLayers: [],
       previewLayer: null,
       drawPoints: [],
+      drawVertexMarkers: [],
       suggestions: [],
       suggestionPreviewLayers: [],
       dragging: null,
@@ -169,7 +189,13 @@ const installKeyboardShortcuts = () => {
       if (currentEditorState.mode !== "select") {
         clearDrawState();
         currentEditorState.mode = "select";
+        currentEditorState.selectedRoom = null;
+        if (popupMap) {
+          popupMap.dragging.enable();
+          popupMap.keyboard.enable();
+        }
         updatePopupContent();
+        updateSidePanel();
         setAdminMapToolsStatus("Dibujo cancelado.");
       }
     } else if (e.key === "Enter") {
@@ -178,6 +204,12 @@ const installKeyboardShortcuts = () => {
       if (mode === "draw-polygon" || mode === "draw-free") {
         finishCurrentPolygonDraw();
       }
+    } else if (e.key === "c" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      copySelectedRoom();
+    } else if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      pasteRoom();
     }
   };
   document.addEventListener("keydown", keydownHandler);
@@ -414,6 +446,24 @@ const updateBottomBar = () => {
   deleteBtn.disabled = !selectedRoom;
   deleteBtn.addEventListener("click", () => deleteSelectedRoom());
   tools.appendChild(deleteBtn);
+
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "room-editor-tool-btn is-icon-only";
+  copyBtn.innerHTML = `<span>${ICONS.copy}</span>`;
+  copyBtn.title = "Copiar sala (Ctrl+C)";
+  copyBtn.disabled = !selectedRoom;
+  copyBtn.addEventListener("click", () => copySelectedRoom());
+  tools.appendChild(copyBtn);
+
+  const pasteBtn = document.createElement("button");
+  pasteBtn.type = "button";
+  pasteBtn.className = "room-editor-tool-btn is-icon-only";
+  pasteBtn.innerHTML = `<span>${ICONS.paste}</span>`;
+  pasteBtn.title = "Pegar sala (Ctrl+V)";
+  pasteBtn.disabled = !copiedRoomData;
+  pasteBtn.addEventListener("click", () => pasteRoom());
+  tools.appendChild(pasteBtn);
 
   const undoBtn = document.createElement("button");
   undoBtn.type = "button";
@@ -657,14 +707,16 @@ const renderRooms = () => {
       }).addTo(popupMap);
 
       layer.on("mousedown", (e) => {
-        L.DomEvent.stop(e);
         const oe = e.originalEvent;
 
         if (oe.ctrlKey) {
+          L.DomEvent.stop(e);
           enableDragLayer(layer, room, e);
         } else if (oe.shiftKey) {
+          L.DomEvent.stop(e);
           enableRotateLayer(layer, room, e);
         } else if (currentEditorState.mode === "select") {
+          L.DomEvent.stop(e);
           selectRoom(room);
         }
       });
@@ -798,6 +850,15 @@ const clearRoomLayers = () => {
 const selectRoom = (room) => {
   if (!currentEditorState) return;
   currentEditorState.selectedRoom = room;
+  if (popupMap) {
+    if (room) {
+      popupMap.dragging.disable();
+      popupMap.keyboard.disable();
+    } else {
+      popupMap.dragging.enable();
+      popupMap.keyboard.enable();
+    }
+  }
   renderRooms();
   updateSidePanel();
 };
@@ -816,6 +877,11 @@ const selectRoomMode = (mode) => {
   if (!currentEditorState) return;
   clearDrawState();
   currentEditorState.mode = mode;
+  currentEditorState.selectedRoom = null;
+  if (popupMap) {
+    popupMap.dragging.enable();
+    popupMap.keyboard.enable();
+  }
   updateBottomBar();
   updateSidePanel();
 
@@ -998,6 +1064,7 @@ const startDrawPolygon = () => {
 
   const onClick = (e) => {
     currentEditorState.drawPoints.push(e.latlng);
+    addDrawVertexMarker(e.latlng);
     const pts = currentEditorState.drawPoints;
 
     if (currentEditorState.previewLayer) {
@@ -1027,6 +1094,7 @@ const startDrawFree = () => {
 
   const onClick = (e) => {
     currentEditorState.drawPoints.push(e.latlng);
+    addDrawVertexMarker(e.latlng);
     const pts = currentEditorState.drawPoints;
 
     if (currentEditorState.previewLayer) {
@@ -1054,6 +1122,10 @@ const clearDrawState = () => {
     popupMap.removeLayer(currentEditorState.previewLayer);
     currentEditorState.previewLayer = null;
   }
+  for (const marker of (currentEditorState.drawVertexMarkers || [])) {
+    popupMap.removeLayer(marker);
+  }
+  currentEditorState.drawVertexMarkers = [];
   currentEditorState.drawPoints = [];
   popupMap.off("click");
   popupMap.off("dblclick");
@@ -1106,9 +1178,47 @@ const deleteSelectedRoom = () => {
   currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== room.externalId);
   currentEditorState.selectedRoom = null;
   currentEditorState.isDirty = true;
+  if (popupMap) {
+    popupMap.dragging.enable();
+    popupMap.keyboard.enable();
+  }
   renderRooms();
   updatePopupContent();
+  updateSidePanel();
   setAdminMapToolsStatus("Sala eliminada.");
+};
+
+const copySelectedRoom = () => {
+  if (!currentEditorState?.selectedRoom) return;
+  const room = currentEditorState.selectedRoom;
+  copiedRoomData = {
+    geometryJson: room.geometryJson,
+    type: room.type,
+  };
+  setAdminMapToolsStatus("Sala copiada. Ctrl+V para pegar.");
+};
+
+const pasteRoom = () => {
+  if (!currentEditorState || !copiedRoomData) {
+    setAdminMapToolsStatus("No hay sala copiada.");
+    return;
+  }
+
+  const geom = typeof copiedRoomData.geometryJson === "string"
+    ? JSON.parse(copiedRoomData.geometryJson)
+    : copiedRoomData.geometryJson;
+
+  if (!geom?.coordinates?.[0]) return;
+
+  const OFFSET = 0.0001;
+  const newCoords = geom.coordinates[0].map((c) => [c[0] + OFFSET, c[1] + OFFSET]);
+  newCoords.push(newCoords[0]);
+
+  createNewRoom(newCoords);
+  if (currentEditorState?.selectedRoom) {
+    currentEditorState.selectedRoom.type = copiedRoomData.type;
+  }
+  setAdminMapToolsStatus("Sala pegada. Ctrl+drag para mover.");
 };
 
 const updateRoomProperty = (property, value) => {
@@ -1183,6 +1293,7 @@ const redoRoomEditor = () => {
 const saveRoomEditor = async () => {
   if (!currentEditorState) return;
 
+  const savedBuildingId = currentEditorState.buildingExternalId;
   setAdminMapToolsStatus("Guardando salas...");
 
   try {
@@ -1190,7 +1301,7 @@ const saveRoomEditor = async () => {
       const coordinates = parseGeometryToCoordinates(room.geometryJson);
 
       if (room.isNew) {
-        await fetch(`${getApiUrl()}/api/manual-rooms`, {
+        const res = await fetch(`${getApiUrl()}/api/manual-rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -1209,8 +1320,13 @@ const saveRoomEditor = async () => {
             notes: room.notes,
           }),
         });
+        if (!res.ok) {
+          let msg = `Error al crear sala '${room.displayName}'.`;
+          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+          throw new Error(msg);
+        }
       } else {
-        await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
+        const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -1227,6 +1343,11 @@ const saveRoomEditor = async () => {
             notes: room.notes,
           }),
         });
+        if (!res.ok) {
+          let msg = `Error al actualizar sala '${room.displayName}'.`;
+          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+          throw new Error(msg);
+        }
       }
     }
 
@@ -1239,15 +1360,19 @@ const saveRoomEditor = async () => {
 
     refreshCurrentMapData();
 
-    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState?.buildingExternalId } }));
+    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: savedBuildingId } }));
   } catch (error) {
     console.error("Error saving rooms:", error);
-    setAdminMapToolsStatus("Error al guardar salas.");
+    setAdminMapToolsStatus(error.message || "Error al guardar salas.");
   }
 };
 
 const cancelRoomEditor = () => {
   clearDrawState();
+  if (popupMap) {
+    popupMap.dragging.enable();
+    popupMap.keyboard.enable();
+  }
   destroyPopup();
   clearRoomEditorState();
   requestAdminMapToolMode(null);
@@ -1306,9 +1431,24 @@ const runQuickSuggestion = async () => {
       }),
     });
 
-    if (!response.ok) throw new Error("Error al generar sugerencias");
+    if (response.status === 401) {
+      setAdminMapToolsStatus("Sesion expirada. Recarga la pagina.");
+      return;
+    }
+    if (!response.ok) {
+      let msg = "Error al generar sugerencias.";
+      try { const body = await response.json(); if (body.message) msg += " " + body.message; } catch {}
+      setAdminMapToolsStatus(msg);
+      return;
+    }
 
     const suggestions = await response.json();
+
+    if (!suggestions || suggestions.length === 0) {
+      setAdminMapToolsStatus("El edificio es muy pequeno para generar salas con los parametros actuales.");
+      return;
+    }
+
     currentEditorState.suggestions = suggestions.map((s, i) => ({
       ...s,
       approved: true,
@@ -1321,7 +1461,7 @@ const runQuickSuggestion = async () => {
     setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en el check para guardarlas.`);
   } catch (error) {
     console.error("Error running suggestion:", error);
-    setAdminMapToolsStatus("Error al generar sugerencias.");
+    setAdminMapToolsStatus("Error al conectar con el servidor.");
   }
 };
 

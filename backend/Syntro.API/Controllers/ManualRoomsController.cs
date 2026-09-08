@@ -65,7 +65,7 @@ public class ManualRoomsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public async Task<IActionResult> Create(
         [FromBody] CreateManualRoomRequest request,
         CancellationToken cancellationToken)
@@ -131,7 +131,7 @@ public class ManualRoomsController : ControllerBase
     }
 
     [HttpPut("{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public async Task<IActionResult> Update(
         string externalId,
         [FromBody] UpdateManualRoomRequest request,
@@ -189,7 +189,7 @@ public class ManualRoomsController : ControllerBase
     }
 
     [HttpDelete("{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public async Task<IActionResult> Delete(
         string externalId,
         CancellationToken cancellationToken)
