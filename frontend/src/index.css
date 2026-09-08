@@ -1015,80 +1015,247 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     background: var(--pi-surface);
 }
 
-.room-editor-controls {
-    padding: 0;
+.room-editor-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1500;
+    pointer-events: none;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
-.room-editor-header {
+.room-editor-top-bar {
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: auto;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 6px 0;
-    border-bottom: 1px solid var(--pi-border, #e5e7eb);
-    margin-bottom: 6px;
+    gap: 12px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    padding: 8px 16px;
+    z-index: 10;
 }
 
-.room-editor-floor-row {
+.room-editor-building-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    white-space: nowrap;
+}
+
+.room-editor-floor-selector {
     display: flex;
     gap: 4px;
-    flex-wrap: wrap;
-    margin-bottom: 6px;
 }
 
 .room-editor-floor-btn {
-    font-size: 11px !important;
-    padding: 2px 8px !important;
-    min-height: 24px !important;
+    padding: 4px 10px;
+    border-radius: 14px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
 }
 
-.room-editor-tools-row {
+.room-editor-floor-btn:hover {
+    background: #f3f4f6;
+}
+
+.room-editor-floor-btn.is-active {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: white;
+}
+
+.room-editor-close-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.room-editor-close-btn:hover {
+    background: #e5e7eb;
+    color: #1f2937;
+}
+
+.room-editor-bottom-bar {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    padding: 8px 12px;
+    z-index: 10;
+}
+
+.room-editor-tools {
     display: flex;
     gap: 4px;
-    flex-wrap: wrap;
-    margin-bottom: 6px;
 }
 
 .room-editor-tool-btn {
-    font-size: 11px !important;
-    padding: 2px 6px !important;
-    min-height: 22px !important;
-}
-
-.room-editor-hint {
-    font-size: 11px;
-    color: #9ca3af;
-    text-align: center;
-    padding: 8px 0;
-}
-
-.room-editor-actions {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+    font-size: 12px;
+    cursor: pointer;
     display: flex;
-    gap: 6px;
-    justify-content: flex-end;
-    padding-top: 6px;
-    border-top: 1px solid var(--pi-border, #e5e7eb);
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
 }
 
-.room-editor-properties {
-    padding: 6px 0;
-    border-top: 1px solid var(--pi-border, #e5e7eb);
+.room-editor-tool-btn:hover {
+    background: #f3f4f6;
+}
+
+.room-editor-tool-btn.is-active {
+    background: #eff6ff;
+    border-color: #2563eb;
+    color: #1d4ed8;
+}
+
+.room-editor-tool-btn.is-suggest {
+    border-color: #7c3aed;
+    color: #7c3aed;
+}
+
+.room-editor-tool-btn.is-suggest.is-active {
+    background: #f5f3ff;
+    border-color: #7c3aed;
+    color: #7c3aed;
+}
+
+.room-editor-tool-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.room-editor-divider {
+    width: 1px;
+    height: 24px;
+    background: #e5e7eb;
+    margin: 0 4px;
+}
+
+.room-editor-save-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: #15803d;
+    color: white;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.room-editor-save-btn:hover {
+    background: #166534;
+}
+
+.room-editor-side-panel {
+    position: absolute;
+    top: 60px;
+    right: 12px;
+    bottom: 60px;
+    width: 280px;
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    z-index: 10;
+    overflow-y: auto;
+    display: none;
+}
+
+.room-editor-side-panel.is-visible {
+    display: block;
+}
+
+.room-editor-side-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    position: sticky;
+    top: 0;
+    background: rgba(255, 255, 255, 0.95);
+    z-index: 1;
+}
+
+.room-editor-side-panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.room-editor-side-panel-close {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: #f3f4f6;
+    color: #6b7280;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.room-editor-side-panel-close:hover {
+    background: #e5e7eb;
+}
+
+.room-editor-side-panel-body {
+    padding: 12px 14px;
 }
 
 .room-editor-section-title {
     font-size: 12px;
     font-weight: 600;
-    margin-bottom: 6px;
+    margin-bottom: 8px;
+    color: #374151;
 }
 
 .room-editor-form-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: 8px;
+    margin-bottom: 8px;
 }
 
-.room-editor-form-grid label,
-.room-editor-full-label {
+.room-editor-form-grid label {
     display: flex;
     flex-direction: column;
     font-size: 10px;
@@ -1096,36 +1263,52 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .room-editor-form-grid input,
-.room-editor-form-grid select,
-.room-editor-full-label input,
-.room-editor-full-label textarea {
-    padding: 3px 6px;
+.room-editor-form-grid select {
+    padding: 4px 8px;
     border: 1px solid #d1d5db;
-    border-radius: 3px;
-    font-size: 11px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.room-editor-full-label {
+    display: flex;
+    flex-direction: column;
+    font-size: 10px;
+    color: #6b7280;
+    margin-bottom: 8px;
 }
 
 .room-editor-full-label textarea {
-    min-height: 32px;
+    padding: 4px 8px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 12px;
+    min-height: 36px;
     resize: vertical;
 }
 
 .room-editor-meta {
     font-size: 10px;
     color: #9ca3af;
-    margin-top: 4px;
+    margin-top: 6px;
+}
+
+.room-editor-hint {
+    font-size: 12px;
+    color: #9ca3af;
+    text-align: center;
+    padding: 16px 0;
 }
 
 .room-editor-suggestion-panel {
-    padding: 6px 0;
-    border-top: 1px solid var(--pi-border, #e5e7eb);
     background: #f5f3ff;
-    margin: 0 -8px;
-    padding: 6px 8px;
+    margin: -12px -14px;
+    padding: 12px 14px;
+    border-top: 1px solid #e5e7eb;
 }
 
 .room-editor-suggestion-list {
-    max-height: 150px;
+    max-height: 180px;
     overflow-y: auto;
 }
 
@@ -1133,10 +1316,37 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 0;
+    padding: 4px 0;
     border-bottom: 1px solid #e5e7eb;
     font-size: 11px;
     cursor: pointer;
+}
+
+.room-editor-suggestion-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.room-editor-suggestion-actions button {
+    flex: 1;
+    padding: 5px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.room-editor-action-cancel {
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #374151;
+}
+
+.room-editor-action-save {
+    border: none;
+    background: #15803d;
+    color: white;
+    font-weight: 600;
 }
 
 .room-editor-vertex-marker {
