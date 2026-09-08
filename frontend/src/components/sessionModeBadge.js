@@ -1,4 +1,4 @@
-import { BACKEND_API_URL } from "../views/map.js";
+import { BACKEND_API_URL, map, osmLayer, satelliteLayer } from "../views/map.js";
 import { identifiers } from "../utils/identifiers.js";
 import { goTo } from "@app/goToCampus";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
@@ -9,6 +9,7 @@ const sessionPollMs = 10000;
 let lastSessionKey = "";
 let pollHandle = null;
 let minimalMapMode = false;
+let satelliteActive = false;
 
 const updateMinimalMapMode = () => {
   document.body.classList.toggle("map-ui-minimal", minimalMapMode);
@@ -92,9 +93,14 @@ const renderBadge = (badge, session) => {
     <div class="session-mode-info">
       <div class="session-mode-heading">
         <span class="session-mode-label">${buildLabel(session)}</span>
-        <button type="button" class="session-mode-visibility" aria-pressed="false" title="Ocultar controles del mapa" aria-label="Ocultar controles del mapa">
-          <span class="session-mode-eye-icon" aria-hidden="true"></span>
-        </button>
+        <div class="session-mode-heading-buttons">
+          <button type="button" class="session-mode-globe" aria-pressed="false" title="Vista satelital" aria-label="Vista satelital">
+            <span class="session-mode-globe-icon" aria-hidden="true"></span>
+          </button>
+          <button type="button" class="session-mode-visibility" aria-pressed="false" title="Ocultar controles del mapa" aria-label="Ocultar controles del mapa">
+            <span class="session-mode-eye-icon" aria-hidden="true"></span>
+          </button>
+        </div>
       </div>
       ${userLabel}
     </div>
@@ -122,6 +128,25 @@ const renderBadge = (badge, session) => {
     minimalMapMode = !minimalMapMode;
     updateMinimalMapMode();
   });
+
+  badge.querySelector(".session-mode-globe")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    satelliteActive = !satelliteActive;
+    if (satelliteActive) {
+      osmLayer.remove();
+      satelliteLayer.addTo(map);
+    } else {
+      satelliteLayer.remove();
+      osmLayer.addTo(map);
+    }
+    const btn = badge.querySelector(".session-mode-globe");
+    if (btn) {
+      btn.classList.toggle("is-active", satelliteActive);
+      btn.setAttribute("aria-pressed", String(satelliteActive));
+    }
+  });
+
   updateMinimalMapMode();
 };
 

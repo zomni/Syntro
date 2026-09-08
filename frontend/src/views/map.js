@@ -30,13 +30,20 @@ export const map = L.map("map", {
   maxBoundsViscosity: 1.0,
 }).setView(firstCampus.center, firstCampus.zoom);
 
-L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19,
+  keepBuffer: 8,
+  updateWhenIdle: false,
+  updateWhenZooming: true,
+}).addTo(map);
+
+export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
   maxZoom: 23,
   keepBuffer: 8,
   updateWhenIdle: false,
   updateWhenZooming: true,
   attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGPSW, and the GIS User Community",
-}).addTo(map);
+});
 
 let locationTrackingActive = false;
 let userLocationMarker = null;

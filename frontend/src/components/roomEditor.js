@@ -8,7 +8,7 @@ import {
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
-const TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 const addDrawVertexMarker = (latlng) => {
   if (!currentEditorState || !popupMap) return;
@@ -327,12 +327,11 @@ const initPopupMap = (geometry) => {
   });
 
   L.tileLayer(TILE_URL, {
-    maxZoom: 23,
+    maxZoom: 19,
     minZoom: 12,
     keepBuffer: 8,
     updateWhenIdle: false,
     updateWhenZooming: true,
-    attribution: "Tiles &copy; Esri",
   }).addTo(popupMap);
 
   if (geometry && geometry.coordinates) {

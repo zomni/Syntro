@@ -1837,6 +1837,59 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     transform: rotate(-35deg);
 }
 
+.session-mode-heading-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.session-mode-globe {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid rgba(var(--pi-surface-rgb), 0.42);
+    border-radius: 999px;
+    background: rgba(var(--pi-surface-rgb), 0.16);
+    color: var(--pi-surface);
+    cursor: pointer;
+}
+
+.session-mode-globe:hover,
+.session-mode-globe.is-active {
+    background: rgba(var(--pi-surface-rgb), 0.28);
+}
+
+.session-mode-globe-icon {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.session-mode-globe-icon::before {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 6px;
+    height: 10px;
+    border: 1.5px solid currentColor;
+    border-radius: 50%;
+}
+
+.session-mode-globe-icon::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: -1px;
+    width: 16px;
+    height: 0;
+    border-top: 1.5px solid currentColor;
+}
+
 .network-telemetry-top-header::-webkit-details-marker {
     display: none;
 }
