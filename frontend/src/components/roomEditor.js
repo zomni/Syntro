@@ -1,4 +1,5 @@
-import { map, BACKEND_API_URL } from "../views/map.js";
+import { BACKEND_API_URL } from "../views/map.js";
+import { refreshCurrentMapData } from "@app/goToCampus";
 import {
   requestAdminMapToolMode,
   setAdminMapToolsStatus,
@@ -7,14 +8,17 @@ import {
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
+const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 let currentEditorState = null;
 let undoStack = [];
 let redoStack = [];
-let overlayEl = null;
+let popupContainer = null;
+let popupMap = null;
 let topBarEl = null;
 let bottomBarEl = null;
 let sidePanelEl = null;
+let mapContainerEl = null;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
@@ -118,12 +122,12 @@ const openRoomEditor = async (buildingExternalId) => {
     undoStack = [];
     redoStack = [];
 
-    zoomToBuilding(buildingData);
+    createPopup();
+    initPopupMap(buildingData);
     await loadRoomsForFloor(buildingExternalId, selectedFloor);
     renderBuildingBoundary(buildingData);
     renderRooms();
-    createOverlay();
-    updateOverlayContent();
+    updatePopupContent();
 
     setAdminMapToolsStatus("Editor de salas abierto.");
     requestAdminMapToolMode("room-edit");
@@ -164,51 +168,77 @@ const loadRoomsForFloor = async (buildingExternalId, floor) => {
   currentEditorState.rooms = await fetchRoomsForFloor(buildingExternalId, floor);
 };
 
-const zoomToBuilding = (geometry) => {
-  if (!geometry || !geometry.coordinates) return;
-  const coords = geometry.coordinates[0];
-  if (!coords || coords.length === 0) return;
+const createPopup = () => {
+  destroyPopup();
 
-  const latLngs = coords.map((c) => [c[1], c[0]]);
-  const bounds = L.latLngBounds(latLngs);
-  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
-};
-
-const createOverlay = () => {
-  removeOverlay();
-
-  overlayEl = document.createElement("div");
-  overlayEl.id = "room-editor-overlay";
-  overlayEl.className = "room-editor-overlay";
+  popupContainer = document.createElement("div");
+  popupContainer.id = "room-editor-popup";
+  popupContainer.className = "room-editor-popup";
 
   topBarEl = document.createElement("div");
   topBarEl.className = "room-editor-top-bar";
-  overlayEl.appendChild(topBarEl);
+  popupContainer.appendChild(topBarEl);
 
-  bottomBarEl = document.createElement("div");
-  bottomBarEl.className = "room-editor-bottom-bar";
-  overlayEl.appendChild(bottomBarEl);
+  mapContainerEl = document.createElement("div");
+  mapContainerEl.className = "room-editor-popup-map";
+  popupContainer.appendChild(mapContainerEl);
 
   sidePanelEl = document.createElement("div");
   sidePanelEl.className = "room-editor-side-panel";
-  overlayEl.appendChild(sidePanelEl);
+  mapContainerEl.appendChild(sidePanelEl);
 
-  document.body.appendChild(overlayEl);
+  bottomBarEl = document.createElement("div");
+  bottomBarEl.className = "room-editor-bottom-bar";
+  popupContainer.appendChild(bottomBarEl);
+
+  document.body.appendChild(popupContainer);
 };
 
-const removeOverlay = () => {
-  if (overlayEl) {
-    overlayEl.remove();
-    overlayEl = null;
+const destroyPopup = () => {
+  if (popupMap) {
+    popupMap.remove();
+    popupMap = null;
+  }
+  if (popupContainer) {
+    popupContainer.remove();
+    popupContainer = null;
     topBarEl = null;
     bottomBarEl = null;
     sidePanelEl = null;
+    mapContainerEl = null;
   }
 };
 
-const updateOverlayContent = () => {
-  if (!overlayEl || !currentEditorState) return;
+const initPopupMap = (geometry) => {
+  if (!mapContainerEl) return;
 
+  popupMap = L.map(mapContainerEl, {
+    zoomControl: false,
+    attributionControl: false,
+  });
+
+  L.tileLayer(TILE_URL, {
+    maxZoom: 19,
+    keepBuffer: 8,
+    updateWhenIdle: false,
+    updateWhenZooming: true,
+  }).addTo(popupMap);
+
+  if (geometry && geometry.coordinates) {
+    const coords = geometry.coordinates[0];
+    if (coords && coords.length > 0) {
+      const latLngs = coords.map((c) => [c[1], c[0]]);
+      const bounds = L.latLngBounds(latLngs);
+      popupMap.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
+    }
+  }
+
+  popupMap.whenReady(() => {
+    popupMap.invalidateSize();
+  });
+};
+
+const updatePopupContent = () => {
   updateTopBar();
   updateBottomBar();
   updateSidePanel();
@@ -467,7 +497,6 @@ const buildSuggestionPanel = () => {
 
   const genBtn = document.createElement("button");
   genBtn.type = "button";
-  genBtn.className = "room-editor-action-save";
   genBtn.style.cssText = "width:100%;margin:8px 0;padding:6px;border-radius:4px;border:none;background:#7c3aed;color:white;font-size:12px;cursor:pointer;";
   genBtn.textContent = "Generar sugerencia";
   genBtn.addEventListener("click", () => runSuggestion());
@@ -532,7 +561,7 @@ const buildSuggestionPanel = () => {
 const renderBuildingBoundary = (geometry) => {
   clearBuildingBoundary();
 
-  if (!geometry || !geometry.coordinates) return;
+  if (!geometry || !geometry.coordinates || !popupMap) return;
 
   const coords = geometry.coordinates[0];
   const latLngs = coords.map((c) => [c[1], c[0]]);
@@ -544,12 +573,12 @@ const renderBuildingBoundary = (geometry) => {
     fillOpacity: 0.08,
     dashArray: "8 4",
     interactive: false,
-  }).addTo(map);
+  }).addTo(popupMap);
 };
 
 const clearBuildingBoundary = () => {
-  if (currentEditorState?.buildingPolygonLayer) {
-    map.removeLayer(currentEditorState.buildingPolygonLayer);
+  if (currentEditorState?.buildingPolygonLayer && popupMap) {
+    popupMap.removeLayer(currentEditorState.buildingPolygonLayer);
     currentEditorState.buildingPolygonLayer = null;
   }
 };
@@ -557,7 +586,7 @@ const clearBuildingBoundary = () => {
 const renderRooms = () => {
   clearRoomLayers();
 
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
 
   for (const room of currentEditorState.rooms) {
     if (!room.geometryJson) continue;
@@ -577,7 +606,7 @@ const renderRooms = () => {
         fillColor: isSelected ? "#f59e0b" : "#059669",
         fillOpacity: isSelected ? 0.3 : 0.2,
         className: ROOM_LAYER_CLASS,
-      }).addTo(map);
+      }).addTo(popupMap);
 
       layer.on("click", (e) => {
         L.DomEvent.stop(e);
@@ -599,9 +628,9 @@ const renderRooms = () => {
 };
 
 const clearRoomLayers = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   for (const layer of currentEditorState.roomLayers) {
-    map.removeLayer(layer);
+    popupMap.removeLayer(layer);
   }
   currentEditorState.roomLayers = [];
   clearVertexMarkers();
@@ -609,6 +638,8 @@ const clearRoomLayers = () => {
 
 const renderVertexMarkers = (latLngs, room) => {
   clearVertexMarkers();
+
+  if (!popupMap) return;
 
   for (let i = 0; i < latLngs.length - 1; i++) {
     const marker = L.marker(latLngs[i], {
@@ -618,7 +649,7 @@ const renderVertexMarkers = (latLngs, room) => {
         iconAnchor: [6, 6],
       }),
       draggable: true,
-    }).addTo(map);
+    }).addTo(popupMap);
 
     const idx = i;
     marker.on("drag", (e) => {
@@ -644,9 +675,9 @@ const renderVertexMarkers = (latLngs, room) => {
 };
 
 const clearVertexMarkers = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   for (const marker of currentEditorState.vertexMarkers) {
-    map.removeLayer(marker);
+    popupMap.removeLayer(marker);
   }
   currentEditorState.vertexMarkers = [];
 };
@@ -665,7 +696,7 @@ const selectRoomEditorFloor = async (floor) => {
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
-  updateOverlayContent();
+  updatePopupContent();
 };
 
 const selectRoomMode = (mode) => {
@@ -687,7 +718,7 @@ const selectRoomMode = (mode) => {
 };
 
 const startRoomDrawRect = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-rect";
   currentEditorState.drawPoints = [];
@@ -698,12 +729,12 @@ const startRoomDrawRect = () => {
       setAdminMapToolsStatus("Ahora haz clic para colocar la esquina inferior derecha.");
       currentEditorState.drawPreviewLine = L.circleMarker(e.latlng, {
         radius: 4, color: "#f59e0b", fillColor: "#f59e0b", fillOpacity: 1,
-      }).addTo(map);
+      }).addTo(popupMap);
     } else if (currentEditorState.drawPoints.length === 2) {
-      map.off("click", onClick);
-      map.off("mousemove", onMove);
+      popupMap.off("click", onClick);
+      popupMap.off("mousemove", onMove);
       if (currentEditorState.drawPreviewLine) {
-        map.removeLayer(currentEditorState.drawPreviewLine);
+        popupMap.removeLayer(currentEditorState.drawPreviewLine);
         currentEditorState.drawPreviewLine = null;
       }
       finishRectDraw();
@@ -725,14 +756,14 @@ const startRoomDrawRect = () => {
     }
   };
 
-  map.on("click", onClick);
-  map.on("mousemove", onMove);
+  popupMap.on("click", onClick);
+  popupMap.on("mousemove", onMove);
 
-  const p = map.getCenter();
+  const p = popupMap.getCenter();
   currentEditorState.previewLayer = L.polygon(
     [[p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng]],
     { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
-  ).addTo(map);
+  ).addTo(popupMap);
 };
 
 const finishRectDraw = () => {
@@ -753,7 +784,7 @@ const finishRectDraw = () => {
 };
 
 const startRoomDrawPolygon = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   clearDrawState();
   currentEditorState.mode = "draw-polygon";
   currentEditorState.drawPoints = [];
@@ -769,17 +800,17 @@ const startRoomDrawPolygon = () => {
     } else if (tempLatLngs.length >= 3) {
       currentEditorState.previewLayer = L.polygon(tempLatLngs, {
         color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false,
-      }).addTo(map);
+      }).addTo(popupMap);
     }
   };
 
   const onDblClick = (e) => {
     L.DomEvent.stop(e);
-    map.off("click", onClick);
-    map.off("dblclick", onDblClick);
+    popupMap.off("click", onClick);
+    popupMap.off("dblclick", onDblClick);
 
     if (currentEditorState.previewLayer) {
-      map.removeLayer(currentEditorState.previewLayer);
+      popupMap.removeLayer(currentEditorState.previewLayer);
       currentEditorState.previewLayer = null;
     }
 
@@ -790,8 +821,8 @@ const startRoomDrawPolygon = () => {
     }
   };
 
-  map.on("click", onClick);
-  map.on("dblclick", onDblClick);
+  popupMap.on("click", onClick);
+  popupMap.on("dblclick", onDblClick);
 };
 
 const createNewRoom = (geoJsonCoords) => {
@@ -822,24 +853,24 @@ const createNewRoom = (geoJsonCoords) => {
   clearDrawState();
   currentEditorState.mode = "select";
   renderRooms();
-  updateOverlayContent();
+  updatePopupContent();
   setAdminMapToolsStatus("Sala creada. Completa las propiedades y guarda.");
 };
 
 const clearDrawState = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   if (currentEditorState.previewLayer) {
-    map.removeLayer(currentEditorState.previewLayer);
+    popupMap.removeLayer(currentEditorState.previewLayer);
     currentEditorState.previewLayer = null;
   }
   if (currentEditorState.drawPreviewLine) {
-    map.removeLayer(currentEditorState.drawPreviewLine);
+    popupMap.removeLayer(currentEditorState.drawPreviewLine);
     currentEditorState.drawPreviewLine = null;
   }
   currentEditorState.drawPoints = [];
-  map.off("click");
-  map.off("dblclick");
-  map.off("mousemove");
+  popupMap.off("click");
+  popupMap.off("dblclick");
+  popupMap.off("mousemove");
 };
 
 const deleteSelectedRoom = () => {
@@ -852,7 +883,7 @@ const deleteSelectedRoom = () => {
   currentEditorState.selectedRoom = null;
   currentEditorState.isDirty = true;
   renderRooms();
-  updateOverlayContent();
+  updatePopupContent();
   setAdminMapToolsStatus("Sala eliminada.");
 };
 
@@ -899,7 +930,7 @@ const undoRoomEditor = () => {
   }
 
   renderRooms();
-  updateOverlayContent();
+  updatePopupContent();
 };
 
 const redoRoomEditor = () => {
@@ -922,7 +953,7 @@ const redoRoomEditor = () => {
   }
 
   renderRooms();
-  updateOverlayContent();
+  updatePopupContent();
 };
 
 const saveRoomEditor = async () => {
@@ -976,11 +1007,15 @@ const saveRoomEditor = async () => {
     }
 
     setAdminMapToolsStatus("Salas guardadas correctamente.");
-    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState.buildingExternalId } }));
 
-    setTimeout(() => {
-      cancelRoomEditor();
-    }, 1000);
+    destroyPopup();
+    clearRoomEditorState();
+    requestAdminMapToolMode(null);
+    setAdminMapToolsStatus("");
+
+    refreshCurrentMapData();
+
+    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState?.buildingExternalId } }));
   } catch (error) {
     console.error("Error saving rooms:", error);
     setAdminMapToolsStatus("Error al guardar salas.");
@@ -989,9 +1024,7 @@ const saveRoomEditor = async () => {
 
 const cancelRoomEditor = () => {
   clearDrawState();
-  clearRoomLayers();
-  clearBuildingBoundary();
-  removeOverlay();
+  destroyPopup();
   clearRoomEditorState();
   requestAdminMapToolMode(null);
   setAdminMapToolsStatus("");
@@ -1085,7 +1118,7 @@ const runSuggestion = async () => {
 };
 
 const renderSuggestionPreviewLayers = () => {
-  if (!currentEditorState?.suggestions) return;
+  if (!currentEditorState?.suggestions || !popupMap) return;
 
   for (let i = 0; i < currentEditorState.suggestions.length; i++) {
     const sug = currentEditorState.suggestions[i];
@@ -1099,7 +1132,7 @@ const renderSuggestionPreviewLayers = () => {
       fillOpacity: 0.2,
       dashArray: "6 4",
       className: "room-editor-suggestion-layer",
-    }).addTo(map);
+    }).addTo(popupMap);
 
     layer.on("click", (e) => {
       L.DomEvent.stop(e);
@@ -1111,9 +1144,9 @@ const renderSuggestionPreviewLayers = () => {
 };
 
 const clearSuggestionPreviewLayers = () => {
-  if (!currentEditorState) return;
+  if (!currentEditorState || !popupMap) return;
   for (const layer of currentEditorState.suggestionPreviewLayers || []) {
-    map.removeLayer(layer);
+    popupMap.removeLayer(layer);
   }
   currentEditorState.suggestionPreviewLayers = [];
 };
@@ -1191,7 +1224,7 @@ const saveSuggestions = async () => {
 
     await loadRoomsForFloor(currentEditorState.buildingExternalId, currentEditorState.selectedFloor);
     renderRooms();
-    updateOverlayContent();
+    updatePopupContent();
 
     window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState.buildingExternalId } }));
   } catch (error) {
