@@ -2,40 +2,83 @@ import { map, BACKEND_API_URL } from "../views/map.js";
 import {
   requestAdminMapToolMode,
   setAdminMapToolsStatus,
+  getAdminMapToolSection,
 } from "./adminMapToolsPanel.js";
 
-const EDITOR_OVERLAY_CLASS = "room-editor-overlay";
 const VERTEX_CLASS = "room-editor-vertex-marker";
-const PREVIEW_CLASS = "room-editor-preview-polygon";
-const SELECTED_CLASS = "room-editor-selected";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
 
 let currentEditorState = null;
 let undoStack = [];
 let redoStack = [];
+let controlsWrapper = null;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
 };
 
 export const initRoomEditor = () => {
-  window.openRoomEditor = openRoomEditor;
   window.selectRoomEditorFloor = selectRoomEditorFloor;
   window.startRoomDrawRect = startRoomDrawRect;
   window.startRoomDrawPolygon = startRoomDrawPolygon;
   window.selectRoomMode = selectRoomMode;
   window.deleteSelectedRoom = deleteSelectedRoom;
-  window.saveRoomEditor = saveRoomEditor;
-  window.cancelRoomEditor = cancelRoomEditor;
   window.undoRoomEditor = undoRoomEditor;
   window.redoRoomEditor = redoRoomEditor;
   window.updateRoomProperty = updateRoomProperty;
-  window.showSuggestionPanel = showSuggestionPanel;
   window.runSuggestion = runSuggestion;
   window.approveSuggestion = approveSuggestion;
   window.rejectSuggestion = rejectSuggestion;
   window.approveAllSuggestions = approveAllSuggestions;
-  window.saveSuggestions = saveSuggestions;
+
+  createToggleButton();
+  listenForBuildingClick();
+};
+
+const createToggleButton = () => {
+  const sectionBody = getAdminMapToolSection("rooms");
+  if (!sectionBody) return;
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "admin-map-tools-group";
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = "room-editor-toggle";
+  button.className = "dashboard-link manual-building-editor-button building-tool-button";
+  button.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#9635;</span><span>Editar forma</span>';
+  button.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleRoomEditor();
+  });
+
+  wrapper.appendChild(button);
+  sectionBody.appendChild(wrapper);
+};
+
+const toggleRoomEditor = () => {
+  if (currentEditorState) {
+    cancelRoomEditor();
+    return;
+  }
+  clearRoomEditorState();
+  setAdminMapToolsStatus("Haz click sobre el edificio que quieres editar.");
+  requestAdminMapToolMode("room-edit");
+};
+
+const listenForBuildingClick = () => {
+  window.addEventListener("syntro-building-layer-click", (event) => {
+    const mode = window.syntroAdminMapToolMode;
+    if (mode === "room-edit" && !currentEditorState) {
+      event.preventDefault();
+      event.stopPropagation();
+      const featureId = event.detail?.featureId;
+      if (featureId) {
+        openRoomEditor(featureId);
+      }
+    }
+  });
 };
 
 const openRoomEditor = async (buildingExternalId) => {
@@ -65,17 +108,19 @@ const openRoomEditor = async (buildingExternalId) => {
       previewLayer: null,
       drawPoints: [],
       drawPreviewLine: null,
+      suggestions: [],
+      suggestionPreviewLayers: [],
     };
 
     undoStack = [];
     redoStack = [];
 
     zoomToBuilding(buildingData);
-    showEditorModal();
     await loadRoomsForFloor(buildingExternalId, selectedFloor);
     renderBuildingBoundary(buildingData);
     renderRooms();
-    renderEditorContent();
+    createEditorControls();
+    updateControlsContent();
 
     setAdminMapToolsStatus("Editor de salas abierto.");
     requestAdminMapToolMode("room-edit");
@@ -126,276 +171,291 @@ const zoomToBuilding = (geometry) => {
   map.fitBounds(bounds, { padding: [50, 50], maxZoom: 18 });
 };
 
-const showEditorModal = () => {
-  removeEditorModal();
+const createEditorControls = () => {
+  removeEditorControls();
 
-  const backdrop = document.createElement("div");
-  backdrop.id = "room-editor-backdrop";
-  backdrop.className = "room-editor-backdrop";
-  backdrop.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5); z-index: 1500;
-    display: flex; align-items: flex-start; justify-content: center;
-    padding-top: 60px;
-  `;
+  const sectionBody = getAdminMapToolSection("rooms");
+  if (!sectionBody) return;
 
-  const modal = document.createElement("div");
-  modal.id = "room-editor-modal";
-  modal.className = "room-editor-modal";
-  modal.style.cssText = `
-    background: white; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    width: min(480px, calc(100vw - 24px)); max-height: calc(100vh - 120px);
-    overflow-y: auto; font-family: inherit;
-  `;
-
-  backdrop.appendChild(modal);
-  document.body.appendChild(backdrop);
-
-  backdrop.addEventListener("click", (e) => {
-    if (e.target === backdrop) cancelRoomEditor();
-  });
+  controlsWrapper = document.createElement("div");
+  controlsWrapper.className = "room-editor-controls";
+  sectionBody.appendChild(controlsWrapper);
 };
 
-const removeEditorModal = () => {
-  document.getElementById("room-editor-backdrop")?.remove();
+const removeEditorControls = () => {
+  if (controlsWrapper) {
+    controlsWrapper.remove();
+    controlsWrapper = null;
+  }
 };
 
-const renderEditorContent = () => {
-  const modal = document.getElementById("room-editor-modal");
-  if (!modal || !currentEditorState) return;
+const updateControlsContent = () => {
+  if (!controlsWrapper || !currentEditorState) return;
 
   const { buildingExternalId, floors, selectedFloor, rooms, selectedRoom, mode } = currentEditorState;
   const floorSummary = floors.find((f) => f.floor === selectedFloor);
   const roomCount = floorSummary?.totalCount || rooms.length;
 
-  modal.innerHTML = `
-    <div style="padding: 16px; border-bottom: 1px solid #e5e7eb;">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Editor de Salas</h3>
-        <button onclick="cancelRoomEditor()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #6b7280;">&times;</button>
-      </div>
-      <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
-        Edificio: ${buildingExternalId}
-      </div>
-    </div>
+  controlsWrapper.innerHTML = "";
 
-    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
-      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <span style="font-size: 13px; font-weight: 500;">Piso:</span>
-        ${floors
-          .map(
-            (f) => `
-          <button onclick="selectRoomEditorFloor(${f.floor})"
-            style="padding: 4px 12px; border-radius: 16px; border: 1px solid ${f.floor === selectedFloor ? "#2563eb" : "#d1d5db"};
-            background: ${f.floor === selectedFloor ? "#2563eb" : "white"}; color: ${f.floor === selectedFloor ? "white" : "#374151"};
-            font-size: 12px; cursor: pointer;">
-          ${f.floor >= 0 ? f.floor : "S" + Math.abs(f.floor)} (${f.totalCount})
-        </button>`
-          )
-          .join("")}
-      </div>
-      <div style="font-size: 12px; color: #6b7280; margin-top: 6px;">
-        ${roomCount} sala(s) en este piso
-      </div>
-    </div>
-
-    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
-      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-        <button onclick="selectRoomMode('select')" class="room-tool-btn ${mode === "select" ? "active" : ""}"
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "select" ? "#2563eb" : "#d1d5db"};
-          background: ${mode === "select" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
-          &#128070; Seleccionar
-        </button>
-        <button onclick="startRoomDrawRect()" class="room-tool-btn ${mode === "draw-rect" ? "active" : ""}"
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "draw-rect" ? "#2563eb" : "#d1d5db"};
-          background: ${mode === "draw-rect" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
-          &#9645; Rectangulo
-        </button>
-        <button onclick="startRoomDrawPolygon()" class="room-tool-btn ${mode === "draw-polygon" ? "active" : ""}"
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "draw-polygon" ? "#2563eb" : "#d1d5db"};
-          background: ${mode === "draw-polygon" ? "#eff6ff" : "white"}; font-size: 12px; cursor: pointer;">
-          &#9651; Poligono
-        </button>
-        <button onclick="deleteSelectedRoom()" ${!selectedRoom ? "disabled" : ""}
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid #d1d5db;
-          background: white; font-size: 12px; cursor: ${selectedRoom ? "pointer" : "not-allowed"}; opacity: ${selectedRoom ? 1 : 0.5};">
-          &#128465; Eliminar
-        </button>
-        <button onclick="undoRoomEditor()" ${undoStack.length === 0 ? "disabled" : ""}
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid #d1d5db;
-          background: white; font-size: 12px; cursor: ${undoStack.length > 0 ? "pointer" : "not-allowed"}; opacity: ${undoStack.length > 0 ? 1 : 0.5};">
-          &#8617; Deshacer
-        </button>
-        <button onclick="showSuggestionPanel()" class="room-tool-btn ${mode === "suggest" ? "active" : ""}"
-          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "suggest" ? "#7c3aed" : "#d1d5db"};
-          background: ${mode === "suggest" ? "#f5f3ff" : "white"}; font-size: 12px; cursor: pointer;">
-          &#10024; Sugerir
-        </button>
-      </div>
-    </div>
-
-    ${mode === "suggest" ? renderSuggestionPanel() : ""}
-
-    ${mode !== "suggest" ? (selectedRoom ? renderPropertiesPanel(selectedRoom) : '<div style="padding: 16px; color: #9ca3af; font-size: 13px; text-align: center;">Selecciona una sala para ver sus propiedades</div>') : ""}
-
-    <div style="padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; justify-content: flex-end;">
-      <button onclick="cancelRoomEditor()"
-        style="padding: 8px 16px; border-radius: 6px; border: 1px solid #d1d5db; background: white; font-size: 13px; cursor: pointer;">
-        Cancelar
-      </button>
-      <button onclick="saveRoomEditor()"
-        style="padding: 8px 16px; border-radius: 6px; border: none; background: #15803d; color: white; font-size: 13px; cursor: pointer;">
-        Guardar
-      </button>
-    </div>
+  const header = document.createElement("div");
+  header.className = "room-editor-header";
+  header.innerHTML = `
+    <span style="font-size: 13px; font-weight: 600;">Editor: ${escapeHtml(buildingExternalId)}</span>
+    <span style="font-size: 12px; color: #6b7280;">${roomCount} sala(s) piso ${selectedFloor >= 0 ? selectedFloor : "S" + Math.abs(selectedFloor)}</span>
   `;
+  controlsWrapper.appendChild(header);
+
+  const floorRow = document.createElement("div");
+  floorRow.className = "room-editor-floor-row";
+  for (const f of floors) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `dashboard-link room-editor-floor-btn${f.floor === selectedFloor ? " is-active" : ""}`;
+    btn.textContent = `${f.floor >= 0 ? f.floor : "S" + Math.abs(f.floor)} (${f.totalCount})`;
+    btn.addEventListener("click", () => selectRoomEditorFloor(f.floor));
+    floorRow.appendChild(btn);
+  }
+  controlsWrapper.appendChild(floorRow);
+
+  const toolsRow = document.createElement("div");
+  toolsRow.className = "room-editor-tools-row";
+
+  const toolDefs = [
+    { id: "select", label: "Seleccionar", icon: "&#128070;" },
+    { id: "draw-rect", label: "Rectangulo", icon: "&#9645;" },
+    { id: "draw-polygon", label: "Poligono", icon: "&#9651;" },
+  ];
+
+  for (const t of toolDefs) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `dashboard-link building-tool-button room-editor-tool-btn${mode === t.id ? " is-active" : ""}`;
+    btn.innerHTML = `<span class="map-tool-button-icon" aria-hidden="true">${t.icon}</span><span>${t.label}</span>`;
+    btn.addEventListener("click", () => selectRoomMode(t.id));
+    toolsRow.appendChild(btn);
+  }
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "dashboard-link building-tool-button room-editor-tool-btn";
+  deleteBtn.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#128465;</span><span>Eliminar</span>';
+  deleteBtn.disabled = !selectedRoom;
+  deleteBtn.style.opacity = selectedRoom ? "1" : "0.5";
+  deleteBtn.addEventListener("click", () => deleteSelectedRoom());
+  toolsRow.appendChild(deleteBtn);
+
+  const undoBtn = document.createElement("button");
+  undoBtn.type = "button";
+  undoBtn.className = "dashboard-link building-tool-button room-editor-tool-btn";
+  undoBtn.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#8617;</span><span>Deshacer</span>';
+  undoBtn.disabled = undoStack.length === 0;
+  undoBtn.style.opacity = undoStack.length > 0 ? "1" : "0.5";
+  undoBtn.addEventListener("click", () => undoRoomEditor());
+  toolsRow.appendChild(undoBtn);
+
+  const suggestBtn = document.createElement("button");
+  suggestBtn.type = "button";
+  suggestBtn.className = `dashboard-link building-tool-button room-editor-tool-btn${mode === "suggest" ? " is-active" : ""}`;
+  suggestBtn.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#10024;</span><span>Sugerir</span>';
+  suggestBtn.addEventListener("click", () => showSuggestionPanel());
+  toolsRow.appendChild(suggestBtn);
+
+  controlsWrapper.appendChild(toolsRow);
+
+  if (mode === "suggest") {
+    controlsWrapper.appendChild(buildSuggestionPanel());
+  } else if (selectedRoom) {
+    controlsWrapper.appendChild(buildPropertiesPanel(selectedRoom));
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "room-editor-hint";
+    hint.textContent = "Selecciona una sala para ver sus propiedades";
+    controlsWrapper.appendChild(hint);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "room-editor-actions";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "dashboard-link action-cancel-button";
+  cancelBtn.textContent = "Cancelar";
+  cancelBtn.addEventListener("click", () => cancelRoomEditor());
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.className = "dashboard-link action-save-button";
+  saveBtn.textContent = "Guardar";
+  saveBtn.addEventListener("click", () => saveRoomEditor());
+
+  actions.appendChild(cancelBtn);
+  actions.appendChild(saveBtn);
+  controlsWrapper.appendChild(actions);
 };
 
-const renderPropertiesPanel = (room) => {
-  if (!room) return "";
+const buildPropertiesPanel = (room) => {
+  const container = document.createElement("div");
+  container.className = "room-editor-properties";
 
-  return `
-    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f9fafb;">
-      <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">Propiedades</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Nombre *</label>
-          <input value="${escapeHtml(room.displayName || "")}" onchange="updateRoomProperty('displayName', this.value)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Tipo</label>
-          <select onchange="updateRoomProperty('type', this.value)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
-            <option value="sala" ${room.type === "sala" ? "selected" : ""}>Sala</option>
-            <option value="oficina" ${room.type === "oficina" ? "selected" : ""}>Oficina</option>
-            <option value="box" ${room.type === "box" ? "selected" : ""}>Box</option>
-            <option value="bodega" ${room.type === "bodega" ? "selected" : ""}>Bodega</option>
-            <option value="estacion_enfermeria" ${room.type === "estacion_enfermeria" ? "selected" : ""}>Est. Enfermeria</option>
-            <option value="pasillo" ${room.type === "pasillo" ? "selected" : ""}>Pasillo</option>
-            <option value="otro" ${room.type === "otro" ? "selected" : ""}>Otro</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Unidad</label>
-          <input value="${escapeHtml(room.unit || "")}" onchange="updateRoomProperty('unit', this.value)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Servicio</label>
-          <input value="${escapeHtml(room.service || "")}" onchange="updateRoomProperty('service', this.value)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Estado</label>
-          <select onchange="updateRoomProperty('status', this.value)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
-            <option value="active" ${room.status === "active" ? "selected" : ""}>Activa</option>
-            <option value="closed" ${room.status === "closed" ? "selected" : ""}>Cerrada</option>
-            <option value="review" ${room.status === "review" ? "selected" : ""}>En revision</option>
-            <option value="temporary" ${room.status === "temporary" ? "selected" : ""}>Temporal</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Capacidad</label>
-          <input type="number" value="${room.capacity || ""}" onchange="updateRoomProperty('capacity', parseInt(this.value) || null)"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-      </div>
-      <div style="margin-top: 8px;">
-        <label style="font-size: 11px; color: #6b7280; display: block;">Notas</label>
-        <textarea onchange="updateRoomProperty('notes', this.value)"
-          style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; min-height: 40px;"
-        >${escapeHtml(room.notes || "")}</textarea>
-      </div>
-      <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
-        Fuente: ${room.source || "synced"} | ID: ${room.externalId}
-      </div>
+  container.innerHTML = `
+    <div class="room-editor-section-title">Propiedades</div>
+    <div class="room-editor-form-grid">
+      <label>Nombre *
+        <input value="${escapeHtml(room.displayName || "")}" data-prop="displayName" />
+      </label>
+      <label>Tipo
+        <select data-prop="type">
+          <option value="sala" ${room.type === "sala" ? "selected" : ""}>Sala</option>
+          <option value="oficina" ${room.type === "oficina" ? "selected" : ""}>Oficina</option>
+          <option value="box" ${room.type === "box" ? "selected" : ""}>Box</option>
+          <option value="bodega" ${room.type === "bodega" ? "selected" : ""}>Bodega</option>
+          <option value="estacion_enfermeria" ${room.type === "estacion_enfermeria" ? "selected" : ""}>Est. Enfermeria</option>
+          <option value="pasillo" ${room.type === "pasillo" ? "selected" : ""}>Pasillo</option>
+          <option value="otro" ${room.type === "otro" ? "selected" : ""}>Otro</option>
+        </select>
+      </label>
+      <label>Unidad
+        <input value="${escapeHtml(room.unit || "")}" data-prop="unit" />
+      </label>
+      <label>Servicio
+        <input value="${escapeHtml(room.service || "")}" data-prop="service" />
+      </label>
+      <label>Estado
+        <select data-prop="status">
+          <option value="active" ${room.status === "active" ? "selected" : ""}>Activa</option>
+          <option value="closed" ${room.status === "closed" ? "selected" : ""}>Cerrada</option>
+          <option value="review" ${room.status === "review" ? "selected" : ""}>En revision</option>
+          <option value="temporary" ${room.status === "temporary" ? "selected" : ""}>Temporal</option>
+        </select>
+      </label>
+      <label>Capacidad
+        <input type="number" value="${room.capacity || ""}" data-prop="capacity" />
+      </label>
     </div>
+    <label class="room-editor-full-label">Notas
+      <textarea data-prop="notes">${escapeHtml(room.notes || "")}</textarea>
+    </label>
+    <div class="room-editor-meta">Fuente: ${room.source || "synced"} | ID: ${room.externalId}</div>
   `;
+
+  container.querySelectorAll("[data-prop]").forEach((el) => {
+    const prop = el.dataset.prop;
+    const handler = () => {
+      let val = el.value;
+      if (prop === "capacity") val = parseInt(val) || null;
+      updateRoomProperty(prop, val);
+    };
+    el.addEventListener("change", handler);
+    if (el.tagName === "INPUT" && el.type !== "number") {
+      el.addEventListener("input", handler);
+    }
+  });
+
+  return container;
 };
 
-const renderSuggestionPanel = () => {
+const buildSuggestionPanel = () => {
   const suggestions = currentEditorState?.suggestions || [];
   const approvedCount = suggestions.filter((s) => s.approved).length;
 
-  return `
-    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f5f3ff;">
-      <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #7c3aed;">&#10024; Sugerencia de distribucion</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Patron</label>
-          <select id="suggest-pattern"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
-            <option value="grid">Cuadricula</option>
-            <option value="corridor-central">Pasillo central</option>
-            <option value="corridor-lateral">Pasillo lateral</option>
-            <option value="perimeter">Perimetral</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Cantidad</label>
-          <input id="suggest-count" type="number" value="6" min="1" max="100"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Pasillo (m)</label>
-          <input id="suggest-corridor" type="number" value="1.5" min="0" step="0.5"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Prefijo</label>
-          <input id="suggest-prefix" value="Box"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Tipo</label>
-          <select id="suggest-type"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
-            <option value="box">Box</option>
-            <option value="sala">Sala</option>
-            <option value="oficina">Oficina</option>
-          </select>
-        </div>
-        <div>
-          <label style="font-size: 11px; color: #6b7280; display: block;">Filas (0=auto)</label>
-          <input id="suggest-rows" type="number" value="0" min="0"
-            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
-        </div>
-      </div>
-      <button onclick="runSuggestion()"
-        style="width: 100%; padding: 8px; border-radius: 6px; border: none; background: #7c3aed; color: white; font-size: 12px; cursor: pointer; margin-bottom: 8px;">
-        Generar sugerencia
-      </button>
-      ${suggestions.length > 0 ? `
-        <div style="font-size: 12px; color: #374151; margin-bottom: 6px;">
-          ${approvedCount} de ${suggestions.length} sala(s) aprobada(s)
-        </div>
-        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
-          <button onclick="approveAllSuggestions()"
-            style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #d1d5db; background: white; font-size: 11px; cursor: pointer;">
-            Aprobar todas
-          </button>
-          <button onclick="saveSuggestions()"
-            style="flex: 1; padding: 6px; border-radius: 4px; border: none; background: #15803d; color: white; font-size: 11px; cursor: pointer;">
-            Guardar aprobadas
-          </button>
-        </div>
-        <div style="max-height: 200px; overflow-y: auto;">
-          ${suggestions.map((s, i) => `
-            <div style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #e5e7eb; font-size: 12px;">
-              <input type="checkbox" ${s.approved ? "checked" : ""}
-                onchange="${s.approved ? `rejectSuggestion(${i})` : `approveSuggestion(${i})`}"
-                style="cursor: pointer;" />
-              <span style="flex: 1; ${s.approved ? "" : "text-decoration: line-through; color: #9ca3af;"}">
-                ${escapeHtml(s.displayName)} (${s.type})
-              </span>
-            </div>
-          `).join("")}
-        </div>
-      ` : '<div style="font-size: 12px; color: #9ca3af; text-align: center;">Configura los parametros y haz clic en "Generar sugerencia"</div>'}
+  const container = document.createElement("div");
+  container.className = "room-editor-suggestion-panel";
+
+  container.innerHTML = `
+    <div class="room-editor-section-title" style="color:#7c3aed;">&#10024; Sugerencia de distribucion</div>
+    <div class="room-editor-form-grid">
+      <label>Patron
+        <select data-suggest="pattern">
+          <option value="grid">Cuadricula</option>
+          <option value="corridor-central">Pasillo central</option>
+          <option value="corridor-lateral">Pasillo lateral</option>
+          <option value="perimeter">Perimetral</option>
+        </select>
+      </label>
+      <label>Cantidad
+        <input type="number" value="6" min="1" max="100" data-suggest="count" />
+      </label>
+      <label>Pasillo (m)
+        <input type="number" value="1.5" min="0" step="0.5" data-suggest="corridor" />
+      </label>
+      <label>Prefijo
+        <input value="Box" data-suggest="prefix" />
+      </label>
+      <label>Tipo
+        <select data-suggest="type">
+          <option value="box">Box</option>
+          <option value="sala">Sala</option>
+          <option value="oficina">Oficina</option>
+        </select>
+      </label>
+      <label>Filas (0=auto)
+        <input type="number" value="0" min="0" data-suggest="rows" />
+      </label>
     </div>
   `;
+
+  const genBtn = document.createElement("button");
+  genBtn.type = "button";
+  genBtn.className = "dashboard-link action-save-button";
+  genBtn.style.cssText = "width:100%;margin-bottom:8px;";
+  genBtn.textContent = "Generar sugerencia";
+  genBtn.addEventListener("click", () => runSuggestion());
+  container.appendChild(genBtn);
+
+  if (suggestions.length > 0) {
+    const info = document.createElement("div");
+    info.className = "room-editor-hint";
+    info.textContent = `${approvedCount} de ${suggestions.length} sala(s) aprobada(s)`;
+    container.appendChild(info);
+
+    const btnRow = document.createElement("div");
+    btnRow.className = "room-editor-actions";
+
+    const approveAllBtn = document.createElement("button");
+    approveAllBtn.type = "button";
+    approveAllBtn.className = "dashboard-link action-cancel-button";
+    approveAllBtn.textContent = "Aprobar todas";
+    approveAllBtn.addEventListener("click", () => approveAllSuggestions());
+
+    const saveSugBtn = document.createElement("button");
+    saveSugBtn.type = "button";
+    saveSugBtn.className = "dashboard-link action-save-button";
+    saveSugBtn.textContent = "Guardar aprobadas";
+    saveSugBtn.addEventListener("click", () => saveSuggestions());
+
+    btnRow.appendChild(approveAllBtn);
+    btnRow.appendChild(saveSugBtn);
+    container.appendChild(btnRow);
+
+    const list = document.createElement("div");
+    list.className = "room-editor-suggestion-list";
+    suggestions.forEach((s, i) => {
+      const row = document.createElement("label");
+      row.className = "room-editor-suggestion-item";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = s.approved;
+      cb.addEventListener("change", () => {
+        if (s.approved) rejectSuggestion(i);
+        else approveSuggestion(i);
+      });
+      const span = document.createElement("span");
+      span.textContent = `${s.displayName} (${s.type})`;
+      if (!s.approved) span.style.cssText = "text-decoration:line-through;color:#9ca3af;";
+      row.appendChild(cb);
+      row.appendChild(span);
+      list.appendChild(row);
+    });
+    container.appendChild(list);
+  } else {
+    const hint = document.createElement("div");
+    hint.className = "room-editor-hint";
+    hint.textContent = 'Configura los parametros y haz clic en "Generar sugerencia"';
+    container.appendChild(hint);
+  }
+
+  return container;
 };
 
 const renderBuildingBoundary = (geometry) => {
@@ -524,7 +584,7 @@ const selectRoom = (room) => {
   if (!currentEditorState) return;
   currentEditorState.selectedRoom = room;
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const selectRoomEditorFloor = async (floor) => {
@@ -534,14 +594,24 @@ const selectRoomEditorFloor = async (floor) => {
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const selectRoomMode = (mode) => {
   if (!currentEditorState) return;
   clearDrawState();
   currentEditorState.mode = mode;
-  renderEditorContent();
+  updateControlsContent();
+
+  if (mode === "draw-rect") {
+    setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
+    startRoomDrawRect();
+  } else if (mode === "draw-polygon") {
+    setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
+    startRoomDrawPolygon();
+  } else {
+    setAdminMapToolsStatus("Modo seleccion. Click en una sala para editarla.");
+  }
 };
 
 const startRoomDrawRect = () => {
@@ -549,8 +619,6 @@ const startRoomDrawRect = () => {
   clearDrawState();
   currentEditorState.mode = "draw-rect";
   currentEditorState.drawPoints = [];
-  setAdminMapToolsStatus("Haz clic para colocar la esquina superior izquierda del rectangulo.");
-  renderEditorContent();
 
   const onClick = (e) => {
     currentEditorState.drawPoints.push(e.latlng);
@@ -588,7 +656,7 @@ const startRoomDrawRect = () => {
   map.on("click", onClick);
   map.on("mousemove", onMove);
 
-  const p = currentEditorState.drawPoints[0] || map.getCenter();
+  const p = map.getCenter();
   currentEditorState.previewLayer = L.polygon(
     [[p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng], [p.lat, p.lng]],
     { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
@@ -617,8 +685,6 @@ const startRoomDrawPolygon = () => {
   clearDrawState();
   currentEditorState.mode = "draw-polygon";
   currentEditorState.drawPoints = [];
-  setAdminMapToolsStatus("Haz clic para agregar puntos. Doble clic para cerrar el poligono.");
-  renderEditorContent();
 
   const tempLatLngs = [];
 
@@ -684,7 +750,7 @@ const createNewRoom = (geoJsonCoords) => {
   clearDrawState();
   currentEditorState.mode = "select";
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
   setAdminMapToolsStatus("Sala creada. Completa las propiedades y guarda.");
 };
 
@@ -714,7 +780,7 @@ const deleteSelectedRoom = () => {
   currentEditorState.selectedRoom = null;
   currentEditorState.isDirty = true;
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
   setAdminMapToolsStatus("Sala eliminada.");
 };
 
@@ -761,7 +827,7 @@ const undoRoomEditor = () => {
   }
 
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const redoRoomEditor = () => {
@@ -784,7 +850,7 @@ const redoRoomEditor = () => {
   }
 
   renderRooms();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const saveRoomEditor = async () => {
@@ -853,12 +919,16 @@ const cancelRoomEditor = () => {
   clearDrawState();
   clearRoomLayers();
   clearBuildingBoundary();
-  removeEditorModal();
+  removeEditorControls();
+  clearRoomEditorState();
+  requestAdminMapToolMode(null);
+  setAdminMapToolsStatus("");
+};
+
+const clearRoomEditorState = () => {
   currentEditorState = null;
   undoStack = [];
   redoStack = [];
-  requestAdminMapToolMode(null);
-  setAdminMapToolsStatus("");
 };
 
 const parseGeometryToCoordinates = (geometryJson) => {
@@ -882,19 +952,18 @@ const showSuggestionPanel = () => {
   currentEditorState.mode = "suggest";
   currentEditorState.suggestions = [];
   currentEditorState.suggestionPreviewLayers = [];
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const runSuggestion = async () => {
   if (!currentEditorState) return;
 
-  const pattern = document.getElementById("suggest-pattern")?.value || "grid";
-  const count = parseInt(document.getElementById("suggest-count")?.value) || 6;
-  const corridor = parseFloat(document.getElementById("suggest-corridor")?.value) || 1.5;
-  const prefix = document.getElementById("suggest-prefix")?.value || "Box";
-  const roomType = document.getElementById("suggest-type")?.value || "box";
-  const rows = parseInt(document.getElementById("suggest-rows")?.value) || 0;
-  const cols = parseInt(document.getElementById("suggest-cols")?.value) || 0;
+  const pattern = controlsWrapper?.querySelector("[data-suggest='pattern']")?.value || "grid";
+  const count = parseInt(controlsWrapper?.querySelector("[data-suggest='count']")?.value) || 6;
+  const corridor = parseFloat(controlsWrapper?.querySelector("[data-suggest='corridor']")?.value) || 1.5;
+  const prefix = controlsWrapper?.querySelector("[data-suggest='prefix']")?.value || "Box";
+  const roomType = controlsWrapper?.querySelector("[data-suggest='type']")?.value || "box";
+  const rows = parseInt(controlsWrapper?.querySelector("[data-suggest='rows']")?.value) || 0;
 
   setAdminMapToolsStatus("Generando sugerencias...");
 
@@ -915,7 +984,7 @@ const runSuggestion = async () => {
         roomCount: count,
         pattern,
         rows,
-        columns: cols,
+        columns: 0,
         corridorWidth: corridor,
         roomType,
         namePrefix: prefix,
@@ -934,7 +1003,7 @@ const runSuggestion = async () => {
 
     clearSuggestionPreviewLayers();
     renderSuggestionPreviewLayers();
-    renderEditorContent();
+    updateControlsContent();
     setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Revisa y aprueba las que desees guardar.`);
   } catch (error) {
     console.error("Error running suggestion:", error);
@@ -981,7 +1050,7 @@ const approveSuggestion = (index) => {
   currentEditorState.suggestions[index].approved = true;
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const rejectSuggestion = (index) => {
@@ -989,7 +1058,7 @@ const rejectSuggestion = (index) => {
   currentEditorState.suggestions[index].approved = false;
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const toggleSuggestionApproval = (index) => {
@@ -997,7 +1066,7 @@ const toggleSuggestionApproval = (index) => {
   currentEditorState.suggestions[index].approved = !currentEditorState.suggestions[index].approved;
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const approveAllSuggestions = () => {
@@ -1007,7 +1076,7 @@ const approveAllSuggestions = () => {
   }
   clearSuggestionPreviewLayers();
   renderSuggestionPreviewLayers();
-  renderEditorContent();
+  updateControlsContent();
 };
 
 const saveSuggestions = async () => {
@@ -1049,7 +1118,7 @@ const saveSuggestions = async () => {
 
     await loadRoomsForFloor(currentEditorState.buildingExternalId, currentEditorState.selectedFloor);
     renderRooms();
-    renderEditorContent();
+    updateControlsContent();
 
     window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState.buildingExternalId } }));
   } catch (error) {
