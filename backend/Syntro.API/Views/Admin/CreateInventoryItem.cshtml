@@ -5,23 +5,6 @@
     Layout = "~/Views/Shared/_Layout.cshtml";
 }
 
-@if (Model.HasNoPackage)
-{
-    <div id="no-package-overlay" style="position:fixed;inset:0;z-index:10000;background:rgba(15,23,42,0.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;">
-        <div style="background:#fff;border-radius:16px;padding:2rem 2.5rem;max-width:420px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.25);">
-            <div style="width:56px;height:56px;margin:0 auto 1rem;background:#fef3c7;border-radius:50%;display:grid;place-items:center;">
-                <i class="bi bi-exclamation-triangle" style="font-size:1.5rem;color:#d97706;"></i>
-            </div>
-            <h5 class="fw-bold mb-2">No hay paquete cargado</h5>
-            <p style="color:#64748b;font-size:0.9rem;margin-bottom:1.25rem;">Debes iniciar un paquete completo antes de agregar equipos. Sube un paquete .zip o importa un archivo Excel desde el dashboard.</p>
-            <div class="d-flex gap-2 justify-content-center">
-                <a href="/dashboard" class="btn btn-primary fw-semibold"><i class="bi bi-upload me-1"></i> Ir al Dashboard</a>
-                <a href="/admin/inventory" class="btn btn-outline-secondary fw-semibold">Cancelar</a>
-            </div>
-        </div>
-    </div>
-}
-
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="fw-bold mb-1">Agregar equipo al inventario</h2>

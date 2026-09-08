@@ -64,10 +64,15 @@ public class AdminController : Controller
 
         var databaseFileInfo = GetDatabaseFileInfo();
         var databaseBackups = GetDatabaseBackupFiles();
+        var activeSourceFileName = await GetActivePackageSourceAsync();
 
         var buildingsQuery = _context.SyncedBuildings.AsNoTracking();
         var roomsQuery = _context.SyncedRooms.AsNoTracking();
         var inventoryQuery = _context.ImportedInventoryItems.AsNoTracking();
+        var hasNoPackage = await HasNoPackageDataAsync(cancellationToken);
+
+        var hasActiveSource = !string.IsNullOrWhiteSpace(activeSourceFileName)
+            && databaseBackups.Any(f => string.Equals(f.Name, activeSourceFileName, StringComparison.OrdinalIgnoreCase));
 
         var model = new AdminDashboardViewModel
         {
@@ -87,25 +92,41 @@ public class AdminController : Controller
             DatabaseFileSizeBytes = databaseFileInfo?.Length ?? 0,
             DatabaseLastWriteUtc = databaseFileInfo?.LastWriteTimeUtc,
             FrontendMapUrl = ResolveFrontendMapUrl(),
-            DatabaseBackups = new[]
-            {
-                new DatabaseBackupViewModel
-                {
-                    FileName = databaseFileInfo?.Name ?? "syntro.db",
-                    SizeBytes = databaseFileInfo?.Length ?? 0,
-                    LastWriteUtc = databaseFileInfo?.LastWriteTimeUtc ?? DateTime.MinValue,
-                    IsCurrent = true
-                }
-            }
-            .Concat(databaseBackups.Select(file => new DatabaseBackupViewModel
-            {
-                FileName = file.Name,
-                SizeBytes = file.Length,
-                LastWriteUtc = file.LastWriteTimeUtc,
-                IsCurrent = false
-            }))
-            .ToList(),
+            HasNoPackage = hasNoPackage,
             HasNoBackups = databaseBackups.Count == 0,
+            DatabaseBackups = (hasNoPackage
+                ? Array.Empty<DatabaseBackupViewModel>()
+                : hasActiveSource
+                    ? new[]
+                    {
+                        new DatabaseBackupViewModel
+                        {
+                            FileName = activeSourceFileName!,
+                            SizeBytes = databaseBackups.First(f => string.Equals(f.Name, activeSourceFileName!, StringComparison.OrdinalIgnoreCase)).Length,
+                            LastWriteUtc = databaseBackups.First(f => string.Equals(f.Name, activeSourceFileName!, StringComparison.OrdinalIgnoreCase)).LastWriteTimeUtc,
+                            IsCurrent = true
+                        }
+                    }
+                    : new[]
+                    {
+                        new DatabaseBackupViewModel
+                        {
+                            FileName = databaseFileInfo?.Name ?? "syntro.db",
+                            SizeBytes = databaseFileInfo?.Length ?? 0,
+                            LastWriteUtc = databaseFileInfo?.LastWriteTimeUtc ?? DateTime.MinValue,
+                            IsCurrent = true
+                        }
+                    })
+            .Concat(databaseBackups
+                .Where(f => !hasActiveSource || !string.Equals(f.Name, activeSourceFileName, StringComparison.OrdinalIgnoreCase))
+                .Select(file => new DatabaseBackupViewModel
+                {
+                    FileName = file.Name,
+                    SizeBytes = file.Length,
+                    LastWriteUtc = file.LastWriteTimeUtc,
+                    IsCurrent = false
+                }))
+            .ToList(),
             CategoryBreakdown = await inventoryQuery
                 .AsNoTracking()
                 .GroupBy(i => i.InferredCategory == "" ? "sin-categoria" : i.InferredCategory)
@@ -834,7 +855,7 @@ public class AdminController : Controller
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [HttpPost("/admin/database/backups/{fileName}/restore")]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> RestoreDatabaseBackup(string fileName)
+    public async Task<IActionResult> RestoreDatabaseBackup(string fileName, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(fileName))
         {
@@ -842,7 +863,8 @@ public class AdminController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), Path.GetFileName(fileName));
+        var safeFileName = Path.GetFileName(fileName);
+        var backupPath = Path.Combine(GetDatabaseBackupDirectory(), safeFileName);
         if (!System.IO.File.Exists(backupPath))
         {
             TempData["ErrorMessage"] = "No se encontro el respaldo seleccionado.";
@@ -851,13 +873,31 @@ public class AdminController : Controller
 
         try
         {
-            ValidateSqliteFile(backupPath);
-            await RestoreDatabaseFromFileAsync(backupPath);
-            TempData["SuccessMessage"] = $"Respaldo restaurado correctamente: {Path.GetFileName(backupPath)}";
+            if (safeFileName.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-restore-{Guid.NewGuid():N}");
+                try
+                {
+                    ZipFile.ExtractToDirectory(backupPath, tempRoot);
+                    await RestoreProjectPackageAsync(tempRoot, cancellationToken);
+                }
+                finally
+                {
+                    TryDeleteDirectory(tempRoot);
+                }
+            }
+            else
+            {
+                ValidateSqliteFile(backupPath);
+                await RestoreDatabaseFromFileAsync(backupPath);
+            }
+
+            TempData["SuccessMessage"] = $"Respaldo restaurado correctamente: {safeFileName}";
+            await SetActivePackageSourceAsync(safeFileName);
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "database-restore",
                 resource: "database-backup",
-                summary: $"Respaldo restaurado {fileName}",
+                summary: $"Respaldo restaurado {safeFileName}",
                 details: "Se reemplazo la base actual usando un respaldo.",
                 result: "success",
                 severity: "critical",
@@ -869,7 +909,7 @@ public class AdminController : Controller
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "database-restore",
                 resource: "database-backup",
-                summary: $"Error al restaurar respaldo {fileName}",
+                summary: $"Error al restaurar respaldo {safeFileName}",
                 details: ex.Message,
                 result: "failure",
                 severity: "critical",
@@ -906,6 +946,12 @@ public class AdminController : Controller
             if (fileExisted)
             {
                 System.IO.File.Delete(backupPath);
+            }
+
+            var activeSource = await GetActivePackageSourceAsync();
+            if (string.Equals(activeSource, safeFileName, StringComparison.OrdinalIgnoreCase))
+            {
+                await SetActivePackageSourceAsync(null);
             }
 
             var historyRecord = await _context.BackupHistories
@@ -953,8 +999,8 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ClearActiveDatabase(CancellationToken cancellationToken)
     {
-        await _databaseBackupService.CreateBackupAsync(
-            User.Identity?.Name ?? "admin", "before-clear", cancellationToken);
+        var packageName = await TryAutoBackupPackageAsync(cancellationToken);
+        await SetActivePackageSourceAsync(null);
 
         await _context.Database.ExecuteSqlRawAsync("""
             PRAGMA foreign_keys = OFF;
@@ -987,7 +1033,9 @@ public class AdminController : Controller
             actionType: "package-clear",
             resource: "database",
             summary: "Paquete activo eliminado (datos vaciados)",
-            details: "Se vaciaron todas las tablas de datos y se ejecuto VACUUM.",
+            details: packageName != null
+                ? $"Se guardo el respaldo automatico como {packageName} y se vaciaron las tablas."
+                : "Se vaciaron todas las tablas de datos y se ejecuto VACUUM.",
             result: "success",
             severity: "warning",
             changedByUsername: User.Identity?.Name ?? "admin");
@@ -996,7 +1044,82 @@ public class AdminController : Controller
     }
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
-    [HttpPost("/admin/database/upload")]
+    [HttpPost("/admin/database/new")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateNewBlankDatabase(CancellationToken cancellationToken)
+    {
+        var packageName = await TryAutoBackupPackageAsync(cancellationToken);
+        await SetActivePackageSourceAsync(null);
+
+        await _context.Database.ExecuteSqlRawAsync("""
+            PRAGMA foreign_keys = OFF;
+            BEGIN;
+            DELETE FROM NetworkTelemetryObservations;
+            DELETE FROM NetworkTelemetrySnapshots;
+            DELETE FROM ScheduledScanRuns;
+            DELETE FROM InventoryDocuments;
+            DELETE FROM ImportedInventoryItems;
+            DELETE FROM InventoryAliasRules;
+            DELETE FROM SyncedRooms;
+            DELETE FROM SyncedEquipments;
+            DELETE FROM WalkingRouteEdges;
+            DELETE FROM WalkingRouteNodes;
+            DELETE FROM BuildingGeometryOverrides;
+            DELETE FROM ManualBuildings;
+            DELETE FROM SyncedBuildings;
+            DELETE FROM Locations;
+            DELETE FROM Equipments;
+            DELETE FROM MlTrainingRuns;
+            COMMIT;
+            PRAGMA foreign_keys = ON;
+            """, cancellationToken);
+
+        await _context.Database.ExecuteSqlRawAsync("VACUUM;", cancellationToken);
+        _context.ChangeTracker.Clear();
+
+        var defaultBuilding = new SyncedBuilding
+        {
+            Id = Guid.NewGuid(),
+            ExternalId = "default-building",
+            DisplayName = "Edificio principal",
+            ManualDisplayName = "Edificio principal",
+            ShortName = "Default",
+            Campus = "default",
+            IsActive = true,
+            SyncedAtUtc = DateTime.UtcNow
+        };
+        _context.SyncedBuildings.Add(defaultBuilding);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var defaultRoom = new SyncedRoom
+        {
+            Id = Guid.NewGuid(),
+            ExternalId = "default-room",
+            SyncedBuildingId = defaultBuilding.Id,
+            BuildingExternalId = defaultBuilding.ExternalId,
+            Name = "Sala principal",
+            Floor = 1,
+            SyncedAtUtc = DateTime.UtcNow
+        };
+        _context.SyncedRooms.Add(defaultRoom);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        TempData["SuccessMessage"] = "Nuevo paquete creado. Podes empezar a agregar datos desde el mapa.";
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "package-new-blank",
+            resource: "database",
+            summary: "Nuevo paquete en blanco creado",
+            details: packageName != null
+                ? $"Se guardo el respaldo automatico como {packageName} y se creo un paquete vacio."
+                : "Se creo un paquete vacio sin respaldo automatico.",
+            result: "success",
+            severity: "info",
+            changedByUsername: User.Identity?.Name ?? "admin");
+
+        return Redirect(ResolveFrontendMapUrl());
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(100_000_000)]
     public async Task<IActionResult> UploadDatabase(IFormFile? databaseFile)
@@ -1170,11 +1293,18 @@ public class AdminController : Controller
             ZipFile.ExtractToDirectory(tempZipPath, extractRoot, overwriteFiles: true);
             await RestoreProjectPackageAsync(extractRoot, cancellationToken);
 
+            var backupDirectory = GetDatabaseBackupDirectory();
+            Directory.CreateDirectory(backupDirectory);
+            var savedFileName = $"syntro-upload-{Path.GetFileNameWithoutExtension(packageFile.FileName)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
+            var savedPath = Path.Combine(backupDirectory, savedFileName);
+            System.IO.File.Copy(tempZipPath, savedPath, overwrite: true);
+            await SetActivePackageSourceAsync(savedFileName);
+
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "project-package-import",
                 resource: "project-package",
                 summary: $"Paquete restaurado desde {packageFile.FileName}",
-                details: "Se restauraron DB, formularios PDF, claves de sesion/MFA y respaldos offline del frontend.",
+                details: $"Se restauraron DB, formularios PDF, claves de sesion/MFA y respaldos offline del frontend. Respaldo guardado como {savedFileName}.",
                 result: "success",
                 severity: "warning",
                 changedByUsername: User.Identity?.Name ?? "admin",
@@ -4562,6 +4692,86 @@ public class AdminController : Controller
             && !await _context.ImportedInventoryItems.AnyAsync(ct);
     }
 
+    private async Task<string?> GetActivePackageSourceAsync()
+    {
+        var markerPath = Path.Combine(GetDatabaseBackupDirectory(), "active-package-source.txt");
+        if (!System.IO.File.Exists(markerPath))
+            return null;
+
+        var content = await System.IO.File.ReadAllTextAsync(markerPath);
+        var name = content.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+            return null;
+
+        var fullPath = Path.Combine(GetDatabaseBackupDirectory(), name);
+        return System.IO.File.Exists(fullPath) ? name : null;
+    }
+
+    private async Task SetActivePackageSourceAsync(string? fileName)
+    {
+        var backupDirectory = GetDatabaseBackupDirectory();
+        Directory.CreateDirectory(backupDirectory);
+        var markerPath = Path.Combine(backupDirectory, "active-package-source.txt");
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            if (System.IO.File.Exists(markerPath))
+                System.IO.File.Delete(markerPath);
+        }
+        else
+        {
+            await System.IO.File.WriteAllTextAsync(markerPath, fileName);
+        }
+    }
+
+    private async Task<string?> TryAutoBackupPackageAsync(CancellationToken ct = default)
+    {
+        var hasRealData = await _context.ImportedInventoryItems.AnyAsync(ct)
+            || await _context.SyncedBuildings.AnyAsync(b => b.IsActive && b.ExternalId != "default-building", ct)
+            || await _context.SyncedRooms.AnyAsync(r => r.ExternalId != "default-room", ct);
+
+        if (!hasRealData || GetDatabaseBackupFiles().Count > 0)
+            return null;
+
+        var backupDirectory = GetDatabaseBackupDirectory();
+        Directory.CreateDirectory(backupDirectory);
+        var packageName = $"syntro-autobackup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
+        var backupPath = Path.Combine(backupDirectory, packageName);
+
+        var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-backup-staging-{Guid.NewGuid():N}");
+        var stagingRoot = Path.Combine(tempRoot, "package");
+        var backendStaging = Path.Combine(stagingRoot, "backend-data");
+        var frontendStaging = Path.Combine(stagingRoot, "frontend-data");
+
+        try
+        {
+            Directory.CreateDirectory(backendStaging);
+            Directory.CreateDirectory(frontendStaging);
+
+            CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
+            CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
+            CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
+            CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
+
+            var frontendDataDirectory = ResolveFrontendDataDirectory();
+            if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendDataDirectory))
+            {
+                CopyDirectoryContents(frontendDataDirectory, frontendStaging);
+            }
+
+            var viewportOverridesPath = _viewportOverridesService.GetOverridesFilePath();
+            CopyFileIfExists(viewportOverridesPath, Path.Combine(backendStaging, "site-viewport-overrides.json"));
+
+            ZipFile.CreateFromDirectory(stagingRoot, backupPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+        }
+        finally
+        {
+            TryDeleteDirectory(tempRoot);
+        }
+
+        return packageName;
+    }
+
     private string GetDatabaseFilePath()
     {
         var environment = HttpContext.RequestServices.GetRequiredService<IWebHostEnvironment>();
@@ -4581,7 +4791,7 @@ public class AdminController : Controller
             return [];
 
         return new DirectoryInfo(backupDirectory)
-            .GetFiles("*.db", SearchOption.TopDirectoryOnly)
+            .GetFiles("*.zip", SearchOption.TopDirectoryOnly)
             .OrderByDescending(file => file.LastWriteTimeUtc)
             .Take(15)
             .ToList();

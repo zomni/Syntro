@@ -197,7 +197,7 @@
     </div>
 }
 
-@if (Model.TotalImportedItems == 0 && Model.SyncedBuildings == 0)
+@if (Model.HasNoPackage)
 {
     <div class="alert alert-info d-flex align-items-center gap-3 mb-4 border-0 shadow-sm" style="background: linear-gradient(135deg, #e0f2fe, #f0f9ff); border-left: 4px solid #0ea5e9 !important;">
         <div class="bg-info bg-opacity-10 rounded-3 p-3">
@@ -207,9 +207,9 @@
             <div class="fw-bold text-dark fs-5">No hay un paquete cargado</div>
             <div class="text-muted small mb-2">Suba un paquete completo (.zip) o importe un archivo Excel para comenzar a usar la plataforma.</div>
         </div>
-        <a href="@Model.FrontendMapUrl" class="btn btn-info text-white fw-semibold" target="syntro-map">
-            <i class="bi bi-upload me-1"></i> Ir al mapa para subir
-        </a>
+        <button onclick="document.getElementById('database-card').scrollIntoView({behavior:'smooth'})" class="btn btn-info text-white fw-semibold">
+            <i class="bi bi-upload me-1"></i> Empezar nuevo paquete
+        </button>
     </div>
 }
 
@@ -520,212 +520,153 @@
             <div class="card dashboard-card" id="database-card">
                 <div class="card-header bg-white fw-semibold">Base de datos</div>
                 <div class="card-body">
-                    <div class="row g-4 align-items-start">
-                        <div class="col-lg-5">
-                            <div class="fw-semibold mb-1">Paquete completo</div>
-                            <div class="form-text mb-3">Descarga el paquete con todos los datos y restaura la aplicacion completa con un solo archivo.</div>
+                    <div class="row g-4 align-items-start mb-4">
+                        <div class="col-lg-4">
+                            <div class="fw-semibold mb-1">Descargar paquete completo</div>
+                            <div class="form-text mb-3">Descarga el paquete con todos los datos.</div>
                             <div class="d-grid gap-2">
                                 <a href="/dashboard/project-package/download" class="btn btn-outline-dark" id="projectPackageDownloadButton">
                                     <i class="bi bi-box-seam me-1"></i> Descargar paquete completo
                                 </a>
                             </div>
-                            <div class="form-text mt-2">El paquete completo incluye DB, formularios PDF, documentos de equipos, claves locales de sesion/MFA y respaldos offline del frontend.</div>
+                            <div class="form-text mt-2">Incluye DB, formularios PDF, documentos, claves y respaldos del frontend.</div>
                         </div>
-                        <div class="col-lg-7">
-                            <div class="small text-muted mb-2">Restaurar paquete completo</div>
+                        <div class="col-lg-4">
+                            <div class="fw-semibold mb-1">Subir paquete existente</div>
+                            <div class="form-text mb-3">Restaura un paquete completo (.zip) desde tu PC.</div>
                             <form id="projectPackageUploadForm" method="post" action="/dashboard/project-package/upload" enctype="multipart/form-data" class="row g-3">
                                 @Html.AntiForgeryToken()
                                 <div class="col-md-8">
                                     <input id="projectPackageFileInput" type="file" name="packageFile" class="form-control" accept=".zip" required />
-                                    <div class="form-text">Restaura DB, formularios PDF, claves locales y los respaldos offline del frontend.</div>
                                 </div>
                                 <div class="col-md-4 d-grid">
                                     <button id="projectPackageUploadButton" type="submit" class="btn btn-secondary" disabled>
-                                        <i class="bi bi-box-arrow-in-up me-1"></i> Subir paquete
+                                        <i class="bi bi-box-arrow-in-up me-1"></i> Subir
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="fw-semibold mb-1">Nuevo paquete</div>
+                            <div class="form-text mb-3">Guarda un respaldo y crea uno nuevo vacio.</div>
+                            <form method="post" action="/admin/database/new" onsubmit="return confirm('Se guardara un respaldo del paquete actual y se creara uno nuevo vacio. \u00bfContinuar?');">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-dark">
+                                    <i class="bi bi-plus-circle me-1"></i> Crear nuevo en blanco
+                                </button>
+                            </form>
+                        </div>
+                    </div>
 
-                            <div id="projectPackageLoadingOverlay" class="d-none"
-                                 style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999;
-                                        background:rgba(0,0,0,0.75); display:flex; align-items:center;
-                                        justify-content:center; cursor:default;">
-                                <div class="text-center text-white p-4" style="max-width:420px; width:100%;">
-                                    <div class="spinner-border spinner-border-lg mb-3" role="status" style="width:3.5rem; height:3.5rem;"></div>
-                                    <div class="fw-semibold mb-1" id="packageOverlayTitle">Restaurando paquete completo</div>
-                                    <div class="small text-white-50 mb-3" id="packageOverlaySubtitle">Este proceso puede tardar varios minutos. No cierres la pesta&ntilde;a ni navegues a otra p&aacute;gina.</div>
-                                    <div class="progress mb-3" style="height:8px; background:rgba(255,255,255,0.15);">
-                                        <div id="packageProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%;"></div>
-                                    </div>
-                                    <div class="small text-white-50 mb-3" id="packageOverlayPercent">0%</div>
-                                    <button id="packageCancelButton" type="button" class="btn btn-outline-light btn-sm" style="min-width:140px;">
-                                        <i class="bi bi-x-circle me-1"></i> Cancelar
-                                    </button>
-                                </div>
+                    <div id="projectPackageLoadingOverlay" class="d-none"
+                         style="position:fixed; top:0; left:0; right:0; bottom:0; z-index:99999;
+                                background:rgba(0,0,0,0.75); display:flex; align-items:center;
+                                justify-content:center; cursor:default;">
+                        <div class="text-center text-white p-4" style="max-width:420px; width:100%;">
+                            <div class="spinner-border spinner-border-lg mb-3" role="status" style="width:3.5rem; height:3.5rem;"></div>
+                            <div class="fw-semibold mb-1" id="packageOverlayTitle">Restaurando paquete completo</div>
+                            <div class="small text-white-50 mb-3" id="packageOverlaySubtitle">Este proceso puede tardar varios minutos. No cierres la pesta&ntilde;a ni navegues a otra p&aacute;gina.</div>
+                            <div class="progress mb-3" style="height:8px; background:rgba(255,255,255,0.15);">
+                                <div id="packageProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width:0%;"></div>
                             </div>
+                            <div class="small text-white-50 mb-3" id="packageOverlayPercent">0%</div>
+                            <button id="packageCancelButton" type="button" class="btn btn-outline-light btn-sm" style="min-width:140px;">
+                                <i class="bi bi-x-circle me-1"></i> Cancelar
+                            </button>
+                        </div>
+                    </div>
 
-                            <div class="mt-4">
-                                <div class="small text-muted mb-2">Respaldos disponibles</div>
-                                @if (Model.DatabaseBackups.Count == 0)
+                    <div class="mt-2">
+                        <div class="small text-muted mb-2">Paquetes disponibles</div>
+                        @if (Model.DatabaseBackups.Count == 0)
+                        {
+                            <div class="text-muted small">No hay paquetes. Sube uno existente o crea uno nuevo para comenzar.</div>
+                        }
+                        else
+                        {
+                            var allBackups = Model.DatabaseBackups.ToList();
+                            var hasMoreBackups = allBackups.Count > 3;
+                            <div class="d-flex gap-3 align-items-start">
+                                <div class="table-responsive flex-grow-1">
+                                    <table class="table table-sm align-middle mb-0" id="backups-table">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Paquete</th>
+                                                <th>Fecha</th>
+                                                <th>Tamano</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="backups-tbody">
+                                            @for (var i = 0; i < allBackups.Count; i++)
+                                            {
+                                                var backup = allBackups[i];
+                                                var hidden = i >= 3 ? "style=\"display:none\"" : "";
+                                                <tr class="backup-row" @Html.Raw(hidden) data-index="@i">
+                                                    <td class="small fw-semibold">
+                                                        @backup.FileName
+                                                        @if (backup.IsCurrent)
+                                                        {
+                                                            <span class="badge bg-success ms-1" style="font-size:0.65rem;">Activo</span>
+                                                        }
+                                                    </td>
+                                                    <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                                    <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
+                                                    <td class="text-end">
+                                                        <div class="d-flex gap-2 justify-content-end">
+                                                            @if (backup.IsCurrent)
+                                                            {
+                                                                <a href="/dashboard/project-package/download" class="btn btn-sm btn-outline-secondary">
+                                                                    Descargar
+                                                                </a>
+                                                                <form method="post" action="/admin/database/clear" onsubmit="return confirm('Se guardara un respaldo del paquete actual y se vaciaran todos los datos. \u00bfContinuar?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                        Eliminar
+                                                                    </button>
+                                                                </form>
+                                                            }
+                                                            else
+                                                            {
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. \u00bfContinuar?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <button type="submit" class="btn btn-sm btn-outline-warning">
+                                                                        Restaurar
+                                                                    </button>
+                                                                </form>
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. \u00bfContinuar?');">
+                                                                    @Html.AntiForgeryToken()
+                                                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                        Eliminar
+                                                                    </button>
+                                                                </form>
+                                                            }
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                @if (hasMoreBackups)
                                 {
-                                    <div class="text-muted small">Todavia no hay respaldos guardados.</div>
-                                }
-                                else
-                                {
-                                    var allBackups = Model.DatabaseBackups.ToList();
-                                    var hasMoreBackups = allBackups.Count > 3;
-                                    <div class="d-flex gap-3 align-items-start">
-                                        <div class="table-responsive flex-grow-1">
-                                            <table class="table table-sm align-middle mb-0" id="backups-table">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th>Archivo</th>
-                                                        <th>Fecha</th>
-                                                        <th>Tamano</th>
-                                                        <th></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="backups-tbody">
-                                                    @for (var i = 0; i < allBackups.Count; i++)
-                                                    {
-                                                        var backup = allBackups[i];
-                                                        var hidden = i >= 3 ? "style=\"display:none\"" : "";
-                                                        <tr class="backup-row" @Html.Raw(hidden) data-index="@i">
-                                                            <td class="small fw-semibold">
-                                                                @backup.FileName
-                                                                @if (backup.IsCurrent)
-                                                                {
-                                                                    <span class="badge bg-success ms-1" style="font-size:0.65rem;">Activo</span>
-                                                                }
-                                                            </td>
-                                                            <td class="small">@backup.LastWriteUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</td>
-                                                            <td class="small">@($"{backup.SizeBytes / 1024.0 / 1024.0:F2} MB")</td>
-                                                            <td class="text-end">
-                                                                <div class="d-flex gap-2 justify-content-end">
-                                                                    <a href="@(backup.IsCurrent ? "/admin/database/download" : $"/dashboard/database/backups/{backup.FileName}")" class="btn btn-sm btn-outline-secondary">
-                                                                        Descargar
-                                                                    </a>
-                                                                    @if (backup.IsCurrent)
-                                                                    {
-                                                                        <form method="post" action="/admin/database/clear" onsubmit="return confirm('Se guardara un respaldo automatico del estado actual y luego se vaciaran todos los datos (inventario, edificios, salas, telemetria). La aplicacion quedara sin datos. \u00bfContinuar?');">
-                                                                            @Html.AntiForgeryToken()
-                                                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                                                Eliminar
-                                                                            </button>
-                                                                        </form>
-                                                                    }
-                                                                    else
-                                                                    {
-                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. \u00bfContinuar?');">
-                                                                            @Html.AntiForgeryToken()
-                                                                            <button type="submit" class="btn btn-sm btn-outline-warning">
-                                                                                Restaurar
-                                                                            </button>
-                                                                        </form>
-                                                                        <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. \u00bfContinuar?');">
-                                                                            @Html.AntiForgeryToken()
-                                                                            <button type="submit" class="btn btn-sm btn-outline-danger">
-                                                                                Eliminar
-                                                                            </button>
-                                                                        </form>
-                                                                    }
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    }
-                                                </tbody>
-                                            </table>
+                                    <div class="d-flex flex-column align-items-center gap-2" style="flex-shrink:0;">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-toggle-btn" onclick="toggleBackups()">
+                                            <i class="bi bi-chevron-down me-1"></i>Ver todos (<span id="backups-total-count">@allBackups.Count</span>)
+                                        </button>
+                                        <div id="backups-pagination" class="d-flex align-items-center gap-1" style="display:none !important">
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-prev-btn" onclick="backupsPage(-1)" disabled>
+                                                <i class="bi bi-chevron-left"></i>
+                                            </button>
+                                            <span class="small text-muted" id="backups-page-info"></span>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-next-btn" onclick="backupsPage(1)">
+                                                <i class="bi bi-chevron-right"></i>
+                                            </button>
                                         </div>
-                                        @if (hasMoreBackups)
-                                        {
-                                            <div class="d-flex flex-column align-items-center gap-2" style="flex-shrink:0;">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-toggle-btn" onclick="toggleBackups()">
-                                                    <i class="bi bi-chevron-down me-1"></i>Ver todos (<span id="backups-total-count">@allBackups.Count</span>)
-                                                </button>
-                                                <div id="backups-pagination" class="d-flex align-items-center gap-1" style="display:none !important">
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-prev-btn" onclick="backupsPage(-1)" disabled>
-                                                        <i class="bi bi-chevron-left"></i>
-                                                    </button>
-                                                    <span class="small text-muted" id="backups-page-info"></span>
-                                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="backups-next-btn" onclick="backupsPage(1)">
-                                                        <i class="bi bi-chevron-right"></i>
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        }
                                     </div>
                                 }
                             </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-}
-
-@if (isAdmin)
-{
-    <div class="row g-4 mt-1">
-        <div class="col-12">
-            <div class="card dashboard-card">
-                <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-cpu me-2"></i>Machine Learning</span>
-                    <span id="ml-status-badge" class="badge bg-secondary">Cargando...</span>
-                </div>
-                <div class="card-body">
-                    <div class="row g-4">
-                        <div class="col-md-6">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div>
-                                    <div class="fw-semibold">Clasificacion de inventario</div>
-                                    <div class="text-muted small">SdcaMaximumEntropy con TF-IDF</div>
-                                </div>
-                                <span id="ml-class-status" class="badge bg-secondary">--</span>
-                            </div>
-                            <div class="text-muted small mb-2">
-                                Archivo: <span id="ml-class-file">--</span> |
-                                Tamano: <span id="ml-class-size">--</span> |
-                                Actualizado: <span id="ml-class-date">--</span>
-                            </div>
-                            <div class="text-muted small mt-2" id="ml-class-metrics" style="display:none">
-                                Accuracy: <span id="ml-class-accuracy">--</span> |
-                                F1: <span id="ml-class-f1">--</span>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div>
-                                    <div class="fw-semibold">Prediccion de riesgo</div>
-                                    <div class="text-muted small">SdcaLogisticRegression + reglas hibridas</div>
-                                </div>
-                                <span id="ml-risk-status" class="badge bg-secondary">--</span>
-                            </div>
-                            <div class="text-muted small mb-2">
-                                Archivo: <span id="ml-risk-file">--</span> |
-                                Tamano: <span id="ml-risk-size">--</span> |
-                                Actualizado: <span id="ml-risk-date">--</span>
-                            </div>
-                            <div class="text-muted small mb-2" id="ml-weights-row" style="display:none">
-                                Peso ML: <span id="ml-ml-weight">--</span> |
-                                Peso reglas: <span id="ml-rule-weight">--</span>
-                            </div>
-                            <div class="text-muted small mt-2" id="ml-risk-metrics" style="display:none">
-                                Accuracy: <span id="ml-risk-accuracy">--</span> |
-                                F1: <span id="ml-risk-f1">--</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="text-muted small mt-3" id="ml-training-data">
-                        Datos de entrenamiento: <span id="ml-items-count">--</span> items importados, <span id="ml-obs-count">--</span> observaciones de red
-                    </div>
-                    <div class="text-muted small mt-1" id="ml-usage-stats" style="display:none">
-                        Uso ML: <span id="ml-classified-items">--</span> items clasificados por ML, <span id="ml-scored-devices">--</span> dispositivos scored por ML
-                    </div>
-                    <div class="text-muted small mt-1" id="ml-last-training" style="display:none">
-                        Ultimo entrenamiento: <span id="ml-last-train-date">--</span> |
-                        Accuracy: <span id="ml-last-train-accuracy">--</span><span id="ml-last-train-acc-std"></span> |
-                        F1: <span id="ml-last-train-f1">--</span><span id="ml-last-train-f1-std"></span>
+                        }
                     </div>
                 </div>
             </div>
@@ -943,22 +884,6 @@
                 xhr.send(formData);
             });
 
-            const packageDownloadButton = document.getElementById("projectPackageDownloadButton");
-            if (packageDownloadButton) {
-                packageDownloadButton.addEventListener("click", function () {
-                    var btn = this;
-                    btn.dataset.origHtml = btn.innerHTML;
-                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status"></span> Generando paquete...';
-                    btn.classList.add("disabled");
-                    btn.setAttribute("aria-disabled", "true");
-                    setTimeout(function () {
-                        btn.innerHTML = btn.dataset.origHtml;
-                        btn.classList.remove("disabled");
-                        btn.removeAttribute("aria-disabled");
-                    }, 30000);
-                });
-            }
-
             document.addEventListener("click", (event) => {
                 const anchor = event.target.closest("a[href]");
                 if (!anchor) {
@@ -1066,111 +991,5 @@
             if (nextBtn) nextBtn.disabled = backupsPageIndex >= totalPages - 1;
         }
     </script>
-    @if (isAdmin)
-    {
-    <script>
-        const mlStatusBadge = document.getElementById("ml-status-badge");
-        const mlClassStatus = document.getElementById("ml-class-status");
-        const mlClassFile = document.getElementById("ml-class-file");
-        const mlClassSize = document.getElementById("ml-class-size");
-        const mlClassDate = document.getElementById("ml-class-date");
-        const mlRiskStatus = document.getElementById("ml-risk-status");
-        const mlRiskFile = document.getElementById("ml-risk-file");
-        const mlRiskSize = document.getElementById("ml-risk-size");
-        const mlRiskDate = document.getElementById("ml-risk-date");
-        const mlWeightsRow = document.getElementById("ml-weights-row");
-        const mlMlWeight = document.getElementById("ml-ml-weight");
-        const mlRuleWeight = document.getElementById("ml-rule-weight");
-        const mlItemsCount = document.getElementById("ml-items-count");
-        const mlObsCount = document.getElementById("ml-obs-count");
-        const mlClassMetrics = document.getElementById("ml-class-metrics");
-        const mlClassAccuracy = document.getElementById("ml-class-accuracy");
-        const mlClassF1 = document.getElementById("ml-class-f1");
-        const mlRiskMetrics = document.getElementById("ml-risk-metrics");
-        const mlRiskAccuracy = document.getElementById("ml-risk-accuracy");
-        const mlRiskF1 = document.getElementById("ml-risk-f1");
-        const mlUsageStats = document.getElementById("ml-usage-stats");
-        const mlClassifiedItems = document.getElementById("ml-classified-items");
-        const mlScoredDevices = document.getElementById("ml-scored-devices");
-        const mlLastTraining = document.getElementById("ml-last-training");
-        const mlLastTrainDate = document.getElementById("ml-last-train-date");
-        const mlLastTrainAccuracy = document.getElementById("ml-last-train-accuracy");
-        const mlLastTrainF1 = document.getElementById("ml-last-train-f1");
-        const mlLastTrainAccStd = document.getElementById("ml-last-train-acc-std");
-        const mlLastTrainF1Std = document.getElementById("ml-last-train-f1-std");
-
-        function mlFormatBytes(b) {
-            if (!b) return "--";
-            if (b < 1024) return b + " B";
-            if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
-            return (b / 1048576).toFixed(2) + " MB";
-        }
-
-        function mlFormatDate(utc) {
-            if (!utc) return "--";
-            var d = new Date(utc);
-            return d.toLocaleDateString("es-CL") + " " + d.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" });
-        }
-
-        function mlRenderStatus(s) {
-            mlStatusBadge.textContent = s.enabled ? "Activo" : "Inactivo";
-            mlStatusBadge.className = "badge " + (s.enabled ? "bg-success" : "bg-secondary");
-
-            var ic = s.itemClassification;
-            mlClassStatus.textContent = ic.loaded ? "Cargado" : ic.fileExists ? "Disponible" : "Sin modelo";
-            mlClassStatus.className = "badge " + (ic.loaded ? "bg-success" : ic.fileExists ? "bg-info" : "bg-secondary");
-            mlClassFile.textContent = ic.fileExists ? "item-classification.zip" : "--";
-            mlClassSize.textContent = mlFormatBytes(ic.fileSizeBytes);
-            mlClassDate.textContent = mlFormatDate(ic.lastModifiedUtc);
-
-            var rp = s.riskPrediction;
-            mlRiskStatus.textContent = rp.loaded ? "Cargado" : rp.fileExists ? "Disponible" : "Sin modelo";
-            mlRiskStatus.className = "badge " + (rp.loaded ? "bg-success" : rp.fileExists ? "bg-info" : "bg-secondary");
-            mlRiskFile.textContent = rp.fileExists ? "risk-prediction.zip" : "--";
-            mlRiskSize.textContent = mlFormatBytes(rp.fileSizeBytes);
-            mlRiskDate.textContent = mlFormatDate(rp.lastModifiedUtc);
-
-            if (rp.mlWeight !== undefined && rp.ruleWeight !== undefined) {
-                mlWeightsRow.style.display = "";
-                mlMlWeight.textContent = (rp.mlWeight * 100).toFixed(0) + "%";
-                mlRuleWeight.textContent = (rp.ruleWeight * 100).toFixed(0) + "%";
-            }
-
-            var td = s.trainingData;
-            mlItemsCount.textContent = td.importedItemsCount;
-            mlObsCount.textContent = td.telemetryObservationsCount;
-
-            if (td.mlClassifiedItems !== undefined) {
-                mlUsageStats.style.display = "";
-                mlClassifiedItems.textContent = td.mlClassifiedItems;
-                mlScoredDevices.textContent = td.mlScoredDevices;
-            }
-
-            var lastClass = ic.lastTraining;
-            var lastRisk = rp.lastTraining;
-            var lastTrain = lastClass || lastRisk;
-            if (lastTrain && lastTrain.createdAtUtc) {
-                mlLastTraining.style.display = "";
-                mlLastTrainDate.textContent = mlFormatDate(lastTrain.createdAtUtc);
-                mlLastTrainAccuracy.textContent = (lastTrain.accuracy * 100).toFixed(1) + "%";
-                mlLastTrainF1.textContent = (lastTrain.f1Score * 100).toFixed(1) + "%";
-                var accStd = lastTrain.accuracyStdDev || lastTrain.accuracyStd || 0;
-                var f1Std = lastTrain.f1ScoreStdDev || lastTrain.f1ScoreStd || 0;
-                mlLastTrainAccStd.textContent = accStd > 0 ? " \u00B1 " + (accStd * 100).toFixed(1) + "%" : "";
-                mlLastTrainF1Std.textContent = f1Std > 0 ? " \u00B1 " + (f1Std * 100).toFixed(1) + "%" : "";
-            }
-        }
-
-        async function mlFetchStatus() {
-            try {
-                var r = await fetch("/api/ml/status");
-                if (!r.ok) return;
-                mlRenderStatus(await r.json());
-            } catch (e) { console.error("ML status error:", e); }
-        }
-
-        mlFetchStatus();
-    </script>
-    }
 }
 

@@ -568,59 +568,6 @@ const updateExportBackupButtonVisibility = () => {
   panel.exportBackupButton.hidden = !(backendSessionIsAdmin && panel.root.dataset.backendState === "online");
 };
 
-let noDataOverlay = null;
-
-const ensureNoDataOverlay = () => {
-  if (noDataOverlay && noDataOverlay.isConnected) return noDataOverlay;
-
-  const overlay = document.createElement("div");
-  overlay.id = "syntro-no-data-overlay";
-  overlay.style.cssText = `
-    position: fixed; inset: 0; z-index: 10000;
-    background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(6px);
-    display: flex; align-items: center; justify-content: center;
-    font-family: system-ui, -apple-system, sans-serif;
-  `;
-  overlay.innerHTML = `
-    <div style="background: #fff; border-radius: 16px; padding: 2.5rem; max-width: 440px; text-align: center; box-shadow: 0 25px 60px rgba(0,0,0,0.3);">
-      <div style="width: 64px; height: 64px; margin: 0 auto 1rem; background: #e0f2fe; border-radius: 50%; display: grid; place-items: center;">
-        <i class="bi bi-cloud-upload" style="font-size: 1.75rem; color: #0ea5e9;"></i>
-      </div>
-      <h3 style="font-weight: 700; color: #0f172a; margin-bottom: 0.5rem;">No hay datos cargados</h3>
-      <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem;">
-        Suba un paquete completo (.zip) o importe un archivo Excel desde el dashboard para comenzar.
-      </p>
-      <div style="display: flex; gap: 0.75rem; justify-content: center;">
-        <a id="syntro-no-data-dashboard-btn" href="${BACKEND_API_URL}/dashboard" target="_blank"
-           style="display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.6rem 1.25rem; background: #0ea5e9; color: #fff; border: none; border-radius: 8px; font-weight: 600; text-decoration: none; cursor: pointer; font-size: 0.9rem;">
-          <i class="bi bi-box-arrow-up-right"></i> Ir al Dashboard
-        </a>
-        <button id="syntro-no-data-dismiss-btn"
-                style="padding: 0.6rem 1.25rem; background: #f1f5f9; color: #475569; border: none; border-radius: 8px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">
-          Cerrar
-        </button>
-      </div>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-  noDataOverlay = overlay;
-
-  overlay.querySelector("#syntro-no-data-dismiss-btn")?.addEventListener("click", () => {
-    overlay.remove();
-    noDataOverlay = null;
-  });
-
-  return overlay;
-};
-
-const removeNoDataOverlay = () => {
-  if (noDataOverlay && noDataOverlay.isConnected) {
-    noDataOverlay.remove();
-    noDataOverlay = null;
-  }
-};
-
 const refreshBackendSessionForExport = async () => {
   const session = await loadBackendSession();
   backendSessionIsAdmin = !!session?.isAdmin;
@@ -633,16 +580,9 @@ const updateBackendStatusPanel = (syncState) => {
 
   const isOnline = !!syncState;
   const hasPendingChanges = !!pendingEquipmentRevision;
-  const hasData = syncState?.hasData !== false;
 
   panel.root.dataset.backendState = isOnline ? "online" : "offline";
   panel.root.dataset.pendingChanges = hasPendingChanges ? "true" : "false";
-
-  if (isOnline && !hasData) {
-    ensureNoDataOverlay();
-  } else {
-    removeNoDataOverlay();
-  }
 
   if (!isOnline) {
     panel.statusText.textContent = "Sin conexion con la API";
