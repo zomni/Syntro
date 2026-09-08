@@ -821,15 +821,15 @@ const selectRoomMode = (mode) => {
 
   switch (mode) {
     case "draw-square":
-      setAdminMapToolsStatus("Mantén click y arrastra para definir el tamano del cuadrado.");
+      setAdminMapToolsStatus("Click para colocar la primera esquina. Luego click para la segunda esquina.");
       startDrawSquare();
       break;
     case "draw-rect":
-      setAdminMapToolsStatus("Mantén click y arrastra para definir el rectangulo.");
+      setAdminMapToolsStatus("Click para colocar la primera esquina. Luego click para la segunda esquina.");
       startDrawRect();
       break;
     case "draw-circle":
-      setAdminMapToolsStatus("Mantén click y arrastra para definir el radio del circulo.");
+      setAdminMapToolsStatus("Click para colocar el centro. Luego click para definir el radio.");
       startDrawCircle();
       break;
     case "draw-polygon":
@@ -850,50 +850,50 @@ const startDrawSquare = () => {
   clearDrawState();
   currentEditorState.mode = "draw-square";
 
-  let startLatLng = null;
+  let p1 = null;
 
-  const onDown = (e) => {
+  const onClick = (e) => {
     L.DomEvent.stop(e);
-    startLatLng = e.latlng;
-    currentEditorState.previewLayer = L.polygon(
-      [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
-       [startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng]],
-      { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
-    ).addTo(popupMap);
-    popupMap.on("mousemove", onMove);
-    popupMap.once("mouseup", onUp);
-  };
-
-  const onMove = (e) => {
-    if (!startLatLng || !currentEditorState.previewLayer) return;
-    const dLat = Math.abs(e.latlng.lat - startLatLng.lat);
-    const dLng = Math.abs(e.latlng.lng - startLatLng.lng);
-    const d = Math.max(dLat, dLng);
-    const sLat = e.latlng.lat >= startLatLng.lat ? 1 : -1;
-    const sLng = e.latlng.lng >= startLatLng.lng ? 1 : -1;
-    currentEditorState.previewLayer.setLatLngs([
-      [startLatLng.lat + d * sLat, startLatLng.lng - d * sLng],
-      [startLatLng.lat + d * sLat, startLatLng.lng + d * sLng],
-      [startLatLng.lat - d * sLat, startLatLng.lng + d * sLng],
-      [startLatLng.lat - d * sLat, startLatLng.lng - d * sLng],
-    ]);
-  };
-
-  const onUp = () => {
-    popupMap.off("mousemove", onMove);
-    if (currentEditorState.previewLayer) {
-      const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
-      popupMap.removeLayer(currentEditorState.previewLayer);
-      currentEditorState.previewLayer = null;
-      if (latLngs && latLngs.length >= 4) {
-        const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
-        ring.push(ring[0]);
-        createNewRoom(ring);
+    if (!p1) {
+      p1 = e.latlng;
+      setAdminMapToolsStatus("Click para colocar la esquina opuesta del cuadrado.");
+      currentEditorState.previewLayer = L.polygon(
+        [[p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng]],
+        { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
+      ).addTo(popupMap);
+      popupMap.on("mousemove", onMove);
+    } else {
+      popupMap.off("click", onClick);
+      popupMap.off("mousemove", onMove);
+      if (currentEditorState.previewLayer) {
+        const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
+        popupMap.removeLayer(currentEditorState.previewLayer);
+        currentEditorState.previewLayer = null;
+        if (latLngs && latLngs.length >= 4) {
+          const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
+          ring.push(ring[0]);
+          createNewRoom(ring);
+        }
       }
     }
   };
 
-  popupMap.on("mousedown", onDown);
+  const onMove = (e) => {
+    if (!p1 || !currentEditorState.previewLayer) return;
+    const dLat = Math.abs(e.latlng.lat - p1.lat);
+    const dLng = Math.abs(e.latlng.lng - p1.lng);
+    const d = Math.max(dLat, dLng);
+    const sLat = e.latlng.lat >= p1.lat ? 1 : -1;
+    const sLng = e.latlng.lng >= p1.lng ? 1 : -1;
+    currentEditorState.previewLayer.setLatLngs([
+      [p1.lat + d * sLat, p1.lng - d * sLng],
+      [p1.lat + d * sLat, p1.lng + d * sLng],
+      [p1.lat - d * sLat, p1.lng + d * sLng],
+      [p1.lat - d * sLat, p1.lng - d * sLng],
+    ]);
+  };
+
+  popupMap.on("click", onClick);
 };
 
 const startDrawRect = () => {
@@ -901,45 +901,45 @@ const startDrawRect = () => {
   clearDrawState();
   currentEditorState.mode = "draw-rect";
 
-  let startLatLng = null;
+  let p1 = null;
 
-  const onDown = (e) => {
+  const onClick = (e) => {
     L.DomEvent.stop(e);
-    startLatLng = e.latlng;
-    currentEditorState.previewLayer = L.polygon(
-      [[startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng],
-       [startLatLng.lat, startLatLng.lng], [startLatLng.lat, startLatLng.lng]],
-      { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
-    ).addTo(popupMap);
-    popupMap.on("mousemove", onMove);
-    popupMap.once("mouseup", onUp);
-  };
-
-  const onMove = (e) => {
-    if (!startLatLng || !currentEditorState.previewLayer) return;
-    currentEditorState.previewLayer.setLatLngs([
-      [startLatLng.lat, startLatLng.lng],
-      [startLatLng.lat, e.latlng.lng],
-      [e.latlng.lat, e.latlng.lng],
-      [e.latlng.lat, startLatLng.lng],
-    ]);
-  };
-
-  const onUp = () => {
-    popupMap.off("mousemove", onMove);
-    if (currentEditorState.previewLayer) {
-      const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
-      popupMap.removeLayer(currentEditorState.previewLayer);
-      currentEditorState.previewLayer = null;
-      if (latLngs && latLngs.length >= 4) {
-        const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
-        ring.push(ring[0]);
-        createNewRoom(ring);
+    if (!p1) {
+      p1 = e.latlng;
+      setAdminMapToolsStatus("Click para colocar la esquina opuesta del rectangulo.");
+      currentEditorState.previewLayer = L.polygon(
+        [[p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng]],
+        { color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false }
+      ).addTo(popupMap);
+      popupMap.on("mousemove", onMove);
+    } else {
+      popupMap.off("click", onClick);
+      popupMap.off("mousemove", onMove);
+      if (currentEditorState.previewLayer) {
+        const latLngs = currentEditorState.previewLayer.getLatLngs()[0];
+        popupMap.removeLayer(currentEditorState.previewLayer);
+        currentEditorState.previewLayer = null;
+        if (latLngs && latLngs.length >= 4) {
+          const ring = latLngs.map((ll) => [ll.lng, ll.lat]);
+          ring.push(ring[0]);
+          createNewRoom(ring);
+        }
       }
     }
   };
 
-  popupMap.on("mousedown", onDown);
+  const onMove = (e) => {
+    if (!p1 || !currentEditorState.previewLayer) return;
+    currentEditorState.previewLayer.setLatLngs([
+      [p1.lat, p1.lng],
+      [p1.lat, e.latlng.lng],
+      [e.latlng.lat, e.latlng.lng],
+      [e.latlng.lat, p1.lng],
+    ]);
+  };
+
+  popupMap.on("click", onClick);
 };
 
 const startDrawCircle = () => {
@@ -949,15 +949,37 @@ const startDrawCircle = () => {
 
   let center = null;
 
-  const onDown = (e) => {
+  const onClick = (e) => {
     L.DomEvent.stop(e);
-    center = e.latlng;
-    currentEditorState.previewLayer = L.circle(center, {
-      radius: 1, color: "#f59e0b", weight: 2, fillColor: "#f59e0b",
-      fillOpacity: 0.25, dashArray: "6 6", interactive: false,
-    }).addTo(popupMap);
-    popupMap.on("mousemove", onMove);
-    popupMap.once("mouseup", onUp);
+    if (!center) {
+      center = e.latlng;
+      setAdminMapToolsStatus("Click para definir el radio del circulo.");
+      currentEditorState.previewLayer = L.circle(center, {
+        radius: 1, color: "#f59e0b", weight: 2, fillColor: "#f59e0b",
+        fillOpacity: 0.25, dashArray: "6 6", interactive: false,
+      }).addTo(popupMap);
+      popupMap.on("mousemove", onMove);
+    } else {
+      popupMap.off("click", onClick);
+      popupMap.off("mousemove", onMove);
+      if (currentEditorState.previewLayer) {
+        const radius = currentEditorState.previewLayer.getRadius();
+        popupMap.removeLayer(currentEditorState.previewLayer);
+        currentEditorState.previewLayer = null;
+        if (radius > 1) {
+          const numPoints = 36;
+          const ring = [];
+          for (let i = 0; i < numPoints; i++) {
+            const angle = (i / numPoints) * 2 * Math.PI;
+            const lat = center.lat + (radius / 111320) * Math.cos(angle);
+            const lng = center.lng + (radius / (111320 * Math.cos((center.lat * Math.PI) / 180))) * Math.sin(angle);
+            ring.push([lng, lat]);
+          }
+          ring.push(ring[0]);
+          createNewRoom(ring);
+        }
+      }
+    }
   };
 
   const onMove = (e) => {
@@ -965,28 +987,7 @@ const startDrawCircle = () => {
     currentEditorState.previewLayer.setRadius(center.distanceTo(e.latlng));
   };
 
-  const onUp = () => {
-    popupMap.off("mousemove", onMove);
-    if (currentEditorState.previewLayer && center) {
-      const radius = currentEditorState.previewLayer.getRadius();
-      popupMap.removeLayer(currentEditorState.previewLayer);
-      currentEditorState.previewLayer = null;
-      if (radius > 1) {
-        const numPoints = 36;
-        const ring = [];
-        for (let i = 0; i < numPoints; i++) {
-          const angle = (i / numPoints) * 2 * Math.PI;
-          const lat = center.lat + (radius / 111320) * Math.cos(angle);
-          const lng = center.lng + (radius / (111320 * Math.cos((center.lat * Math.PI) / 180))) * Math.sin(angle);
-          ring.push([lng, lat]);
-        }
-        ring.push(ring[0]);
-        createNewRoom(ring);
-      }
-    }
-  };
-
-  popupMap.on("mousedown", onDown);
+  popupMap.on("click", onClick);
 };
 
 const startDrawPolygon = () => {
