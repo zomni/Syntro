@@ -172,7 +172,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
     updatePopupContent();
     installKeyboardShortcuts();
 
-    setAdminMapToolsStatus("Editor de salas abierto. Ctrl+click para mover, Shift+click para rotar.");
+    setAdminMapToolsStatus("Editor de salas abierto. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
     requestAdminMapToolMode("room-edit");
   } catch (error) {
     console.error("Error opening room editor:", error);
@@ -210,6 +210,12 @@ const installKeyboardShortcuts = () => {
     } else if (e.key === "v" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       pasteRoom();
+    } else if (e.key === "z" && (e.ctrlKey || e.metaKey) && !e.shiftKey) {
+      e.preventDefault();
+      undoRoomEditor();
+    } else if ((e.key === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey) || (e.key === "y" && (e.ctrlKey || e.metaKey))) {
+      e.preventDefault();
+      redoRoomEditor();
     }
   };
   document.addEventListener("keydown", keydownHandler);
@@ -317,10 +323,12 @@ const initPopupMap = (geometry) => {
   popupMap = L.map(mapContainerEl, {
     zoomControl: false,
     attributionControl: false,
+    boxZoom: false,
+    keyboard: false,
   });
 
   L.tileLayer(TILE_URL, {
-    maxZoom: 22,
+    maxZoom: 19,
     minZoom: 12,
     keepBuffer: 8,
     updateWhenIdle: false,
@@ -338,6 +346,20 @@ const initPopupMap = (geometry) => {
 
   popupMap.whenReady(() => {
     popupMap.invalidateSize();
+  });
+
+  popupMap.on("click", (e) => {
+    if (!currentEditorState || currentEditorState.mode !== "select") return;
+    const clickedOnRoom = currentEditorState.roomLayers?.some((layer) =>
+      layer.getBounds?.().contains(e.latlng)
+    );
+    if (!clickedOnRoom && currentEditorState.selectedRoom) {
+      currentEditorState.selectedRoom = null;
+      popupMap.dragging.enable();
+      popupMap.keyboard.enable();
+      renderRooms();
+      updateSidePanel();
+    }
   });
 };
 
@@ -767,7 +789,13 @@ const enableDragLayer = (layer, room, e) => {
     room.geometryJson = JSON.stringify(newGeo);
     currentEditorState.isDirty = true;
 
-    const newLatLngs = newCoords.map((c) => [c[1], c[0]]);
+    let newLatLngs = newCoords.map((c) => [c[1], c[0]]);
+    const rotation = room.rotation || 0;
+    const scaleX = room.scaleX || 1;
+    const scaleY = room.scaleY || 1;
+    if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
+      newLatLngs = transformLatLngs(newLatLngs, rotation, scaleX, scaleY);
+    }
     layer.setLatLngs(newLatLngs);
   };
 
@@ -1166,7 +1194,7 @@ const createNewRoom = (geoJsonCoords) => {
   currentEditorState.mode = "select";
   renderRooms();
   updatePopupContent();
-  setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar.");
+  setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
 };
 
 const deleteSelectedRoom = () => {
