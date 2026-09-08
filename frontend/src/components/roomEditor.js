@@ -8,7 +8,7 @@ import {
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
-const TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 const addDrawVertexMarker = (latlng) => {
   if (!currentEditorState || !popupMap) return;
@@ -29,7 +29,6 @@ const ICONS = {
   square: "&#9633;",
   rect: "&#9645;",
   circle: "&#9675;",
-  polygon: "&#9651;",
   free: "&#10070;",
   delete: "&#10005;",
   undo: "&#8630;",
@@ -201,7 +200,7 @@ const installKeyboardShortcuts = () => {
     } else if (e.key === "Enter") {
       e.preventDefault();
       const mode = currentEditorState.mode;
-      if (mode === "draw-polygon" || mode === "draw-free") {
+      if (mode === "draw-free") {
         finishCurrentPolygonDraw();
       }
     } else if (e.key === "c" && (e.ctrlKey || e.metaKey)) {
@@ -328,11 +327,12 @@ const initPopupMap = (geometry) => {
   });
 
   L.tileLayer(TILE_URL, {
-    maxZoom: 19,
+    maxZoom: 23,
     minZoom: 12,
     keepBuffer: 8,
     updateWhenIdle: false,
     updateWhenZooming: true,
+    attribution: "Tiles &copy; Esri",
   }).addTo(popupMap);
 
   if (geometry && geometry.coordinates) {
@@ -442,7 +442,6 @@ const updateBottomBar = () => {
     { id: "draw-square", icon: ICONS.square, title: "Cuadrado" },
     { id: "draw-rect", icon: ICONS.rect, title: "Rectangulo" },
     { id: "draw-circle", icon: ICONS.circle, title: "Circulo" },
-    { id: "draw-polygon", icon: ICONS.polygon, title: "Poligono" },
     { id: "draw-free", icon: ICONS.free, title: "Libre (vertices)" },
   ];
 
@@ -926,10 +925,6 @@ const selectRoomMode = (mode) => {
       setAdminMapToolsStatus("Click para colocar el centro. Luego click para definir el radio.");
       startDrawCircle();
       break;
-    case "draw-polygon":
-      setAdminMapToolsStatus("Click para agregar puntos. Enter o doble clic para cerrar.");
-      startDrawPolygon();
-      break;
     case "draw-free":
       setAdminMapToolsStatus("Click para agregar vertices. Enter o doble clic para cerrar.");
       startDrawFree();
@@ -1082,36 +1077,6 @@ const startDrawCircle = () => {
   };
 
   popupMap.on("click", onClick);
-};
-
-const startDrawPolygon = () => {
-  if (!currentEditorState || !popupMap) return;
-  clearDrawState();
-  currentEditorState.mode = "draw-polygon";
-  currentEditorState.drawPoints = [];
-
-  const onClick = (e) => {
-    currentEditorState.drawPoints.push(e.latlng);
-    addDrawVertexMarker(e.latlng);
-    const pts = currentEditorState.drawPoints;
-
-    if (currentEditorState.previewLayer) {
-      const ring = pts.length >= 3 ? [...pts, pts[0]] : pts;
-      currentEditorState.previewLayer.setLatLngs(ring);
-    } else if (pts.length >= 3) {
-      currentEditorState.previewLayer = L.polygon([...pts, pts[0]], {
-        color: "#f59e0b", weight: 2, fillColor: "#f59e0b", fillOpacity: 0.25, dashArray: "6 6", interactive: false,
-      }).addTo(popupMap);
-    }
-  };
-
-  const onDblClick = (e) => {
-    L.DomEvent.stop(e);
-    finishCurrentPolygonDraw();
-  };
-
-  popupMap.on("click", onClick);
-  popupMap.on("dblclick", onDblClick);
 };
 
 const startDrawFree = () => {

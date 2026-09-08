@@ -4,6 +4,16 @@ namespace Syntro.API.Services;
 
 public class RoomSuggestionService
 {
+    private const double METERS_PER_DEG_LAT = 111320.0;
+
+    private static double MetersToDegLng(double meters, double centerLat)
+    {
+        var metersPerDegLng = METERS_PER_DEG_LAT * Math.Cos(centerLat * Math.PI / 180.0);
+        return metersPerDegLng > 0 ? meters / metersPerDegLng : meters / METERS_PER_DEG_LAT;
+    }
+
+    private static double MetersToDegLat(double meters) => meters / METERS_PER_DEG_LAT;
+
     public List<SuggestedRoom> GenerateLayout(SuggestionRequest request)
     {
         return request.Pattern switch
@@ -27,8 +37,12 @@ public class RoomSuggestionService
         var cols = request.Columns > 0 ? request.Columns : (int)Math.Ceiling((double)request.RoomCount / rows);
         var corridorWidth = request.CorridorWidth > 0 ? request.CorridorWidth : 1.5;
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorWidth * 2;
-        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorWidth * 2;
+        var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
+        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+
+        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
+        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorDegLat;
 
         if (usableWidth <= 0 || usableHeight <= 0)
             return result;
@@ -43,8 +57,8 @@ public class RoomSuggestionService
         {
             for (var col = 0; col < cols && counter < request.RoomCount; col++)
             {
-                var x1 = bounds.MinLng + corridorWidth + col * roomWidth;
-                var y1 = bounds.MinLat + corridorWidth + row * roomHeight;
+                var x1 = bounds.MinLng + corridorDegLng / 2 + col * roomWidth;
+                var y1 = bounds.MinLat + corridorDegLat / 2 + row * roomHeight;
                 var x2 = x1 + roomWidth;
                 var y2 = y1 + roomHeight;
 
@@ -83,7 +97,11 @@ public class RoomSuggestionService
         var roomsPerSide = Math.Max(1, request.RoomCount / 2);
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorWidth * 2;
+        var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
+        var corridorDegLngHalf = MetersToDegLng(corridorWidth, centerLat);
+
+        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
         var usableHeight = bounds.MaxLat - bounds.MinLat;
 
         var roomHeight = usableHeight / roomsPerSide;
@@ -96,8 +114,8 @@ public class RoomSuggestionService
             for (var i = 0; i < roomsPerSide && counter < request.RoomCount; i++)
             {
                 var x1 = side == 0
-                    ? bounds.MinLng + corridorWidth
-                    : bounds.MinLng + corridorWidth + roomWidth + corridorWidth;
+                    ? bounds.MinLng + corridorDegLngHalf
+                    : bounds.MinLng + corridorDegLngHalf + roomWidth + corridorDegLngHalf;
                 var y1 = bounds.MinLat + i * roomHeight;
                 var x2 = x1 + roomWidth;
                 var y2 = y1 + roomHeight;
@@ -137,16 +155,20 @@ public class RoomSuggestionService
         var roomCount = request.RoomCount;
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorWidth;
-        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorWidth * 2;
+        var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+        var corridorDegLng = MetersToDegLng(corridorWidth, centerLat);
+        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+
+        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
+        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorDegLat;
 
         var roomWidth = usableWidth;
         var roomHeight = usableHeight / roomCount;
 
         for (var i = 0; i < roomCount; i++)
         {
-            var x1 = bounds.MinLng + corridorWidth;
-            var y1 = bounds.MinLat + corridorWidth + i * roomHeight;
+            var x1 = bounds.MinLng + corridorDegLng;
+            var y1 = bounds.MinLat + corridorDegLat / 2 + i * roomHeight;
             var x2 = x1 + roomWidth;
             var y2 = y1 + roomHeight;
 
@@ -183,13 +205,18 @@ public class RoomSuggestionService
         var roomCount = request.RoomCount;
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
+        var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
+        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+
         var totalPerimeter = 2 * ((bounds.MaxLng - bounds.MinLng) + (bounds.MaxLat - bounds.MinLat));
         var roomSide = totalPerimeter / roomCount;
 
-        var roomWidth = (bounds.MaxLng - bounds.MinLng - corridorWidth * 2) / Math.Max(1, (int)((bounds.MaxLng - bounds.MinLng) / roomSide));
+        var roomWidth = (bounds.MaxLng - bounds.MinLng - corridorDegLng) / Math.Max(1, (int)((bounds.MaxLng - bounds.MinLng) / roomSide));
         var roomHeight = roomSide;
 
-        var positions = GetPerimeterPositions(bounds, corridorWidth, roomCount);
+        var corridorDegAvg = (corridorDegLng + corridorDegLat) / 2.0;
+        var positions = GetPerimeterPositions(bounds, corridorDegAvg, roomCount);
 
         for (var i = 0; i < positions.Count && i < roomCount; i++)
         {
