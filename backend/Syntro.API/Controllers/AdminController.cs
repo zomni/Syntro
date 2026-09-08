@@ -2609,7 +2609,19 @@ public class AdminController : Controller
 
             if (assignedRoom == null)
             {
-                ModelState.AddModelError("Form.AssignedRoomExternalId", "La sala seleccionada ya no existe en la sincronizacion actual.");
+                var manualRoom = await _context.ManualRooms
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ExternalId == assignedRoomExternalId && r.DeletedAtUtc == null, cancellationToken);
+
+                if (manualRoom != null)
+                {
+                    assignedBuildingExternalId = manualRoom.BuildingExternalId;
+                    assignedFloor = manualRoom.Floor;
+                }
+                else
+                {
+                    ModelState.AddModelError("Form.AssignedRoomExternalId", "La sala seleccionada ya no existe en la sincronizacion actual.");
+                }
             }
             else
             {
@@ -2803,7 +2815,19 @@ public class AdminController : Controller
             }
             else
             {
-                resolvedRoomExternalId = string.Empty;
+                var manualRoom = await _context.ManualRooms
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(r => r.ExternalId == resolvedRoomExternalId && r.DeletedAtUtc == null, cancellationToken);
+
+                if (manualRoom != null)
+                {
+                    resolvedBuildingExternalId = manualRoom.BuildingExternalId;
+                    resolvedFloor = manualRoom.Floor;
+                }
+                else
+                {
+                    resolvedRoomExternalId = string.Empty;
+                }
             }
         }
 
@@ -4194,6 +4218,37 @@ public class AdminController : Controller
 
     private async Task<CreateInventoryItemViewModel> BuildCreateInventoryItemViewModelAsync(InventoryItemFormModel form)
     {
+        var syncedRooms = await _context.SyncedRooms
+            .AsNoTracking()
+            .OrderBy(room => room.ManualFloor ?? room.Floor)
+            .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
+            .ToListAsync();
+
+        var manualRooms = await _context.ManualRooms
+            .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null)
+            .OrderBy(r => r.Floor)
+            .ThenBy(r => r.DisplayName)
+            .ToListAsync();
+
+        var allRooms = syncedRooms.Concat(manualRooms.Select(mr => new SyncedRoom
+        {
+            Id = mr.Id,
+            ExternalId = mr.ExternalId,
+            BuildingExternalId = mr.BuildingExternalId,
+            Floor = mr.Floor,
+            Name = mr.DisplayName,
+            ManualName = "",
+            ShortName = mr.ShortName,
+            Type = mr.Type,
+            Unit = mr.Unit,
+            Service = mr.Service,
+            Status = mr.Status,
+            Capacity = mr.Capacity,
+            GeometryJson = mr.GeometryJson,
+            IsMapped = !string.IsNullOrEmpty(mr.GeometryJson)
+        })).ToList();
+
         return new CreateInventoryItemViewModel
         {
             Form = form,
@@ -4202,11 +4257,7 @@ public class AdminController : Controller
                 .Where(building => building.IsActive)
                 .OrderBy(building => building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName)
                 .ToListAsync(),
-            Rooms = await _context.SyncedRooms
-                .AsNoTracking()
-                .OrderBy(room => room.ManualFloor ?? room.Floor)
-                .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
-                .ToListAsync(),
+            Rooms = allRooms,
             Categories = await GetInventoryCategoryOptionsAsync(),
             Statuses = await GetInventoryStatusOptionsAsync(),
             HasNoPackage = await HasNoPackageDataAsync()
@@ -4215,6 +4266,37 @@ public class AdminController : Controller
 
     private async Task<EditInventoryItemViewModel> BuildEditInventoryItemViewModelAsync(ImportedInventoryItem item)
     {
+        var syncedRooms = await _context.SyncedRooms
+            .AsNoTracking()
+            .OrderBy(room => room.ManualFloor ?? room.Floor)
+            .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
+            .ToListAsync();
+
+        var manualRooms = await _context.ManualRooms
+            .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null)
+            .OrderBy(r => r.Floor)
+            .ThenBy(r => r.DisplayName)
+            .ToListAsync();
+
+        var allRooms = syncedRooms.Concat(manualRooms.Select(mr => new SyncedRoom
+        {
+            Id = mr.Id,
+            ExternalId = mr.ExternalId,
+            BuildingExternalId = mr.BuildingExternalId,
+            Floor = mr.Floor,
+            Name = mr.DisplayName,
+            ManualName = "",
+            ShortName = mr.ShortName,
+            Type = mr.Type,
+            Unit = mr.Unit,
+            Service = mr.Service,
+            Status = mr.Status,
+            Capacity = mr.Capacity,
+            GeometryJson = mr.GeometryJson,
+            IsMapped = !string.IsNullOrEmpty(mr.GeometryJson)
+        })).ToList();
+
         return new EditInventoryItemViewModel
         {
             Item = item,
@@ -4223,11 +4305,7 @@ public class AdminController : Controller
                 .Where(building => building.IsActive || building.ExternalId == item.AssignedBuildingExternalId)
                 .OrderBy(building => building.ManualDisplayName != "" ? building.ManualDisplayName : building.DisplayName)
                 .ToListAsync(),
-            Rooms = await _context.SyncedRooms
-                .AsNoTracking()
-                .OrderBy(room => room.ManualFloor ?? room.Floor)
-                .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
-                .ToListAsync(),
+            Rooms = allRooms,
             Categories = await GetInventoryCategoryOptionsAsync(),
             Statuses = await GetInventoryStatusOptionsAsync(),
             Documents = await _context.InventoryDocuments

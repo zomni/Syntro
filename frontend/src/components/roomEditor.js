@@ -30,6 +30,12 @@ export const initRoomEditor = () => {
   window.undoRoomEditor = undoRoomEditor;
   window.redoRoomEditor = redoRoomEditor;
   window.updateRoomProperty = updateRoomProperty;
+  window.showSuggestionPanel = showSuggestionPanel;
+  window.runSuggestion = runSuggestion;
+  window.approveSuggestion = approveSuggestion;
+  window.rejectSuggestion = rejectSuggestion;
+  window.approveAllSuggestions = approveAllSuggestions;
+  window.saveSuggestions = saveSuggestions;
 };
 
 const openRoomEditor = async (buildingExternalId) => {
@@ -220,10 +226,17 @@ const renderEditorContent = () => {
           background: white; font-size: 12px; cursor: ${undoStack.length > 0 ? "pointer" : "not-allowed"}; opacity: ${undoStack.length > 0 ? 1 : 0.5};">
           &#8617; Deshacer
         </button>
+        <button onclick="showSuggestionPanel()" class="room-tool-btn ${mode === "suggest" ? "active" : ""}"
+          style="padding: 6px 10px; border-radius: 6px; border: 1px solid ${mode === "suggest" ? "#7c3aed" : "#d1d5db"};
+          background: ${mode === "suggest" ? "#f5f3ff" : "white"}; font-size: 12px; cursor: pointer;">
+          &#10024; Sugerir
+        </button>
       </div>
     </div>
 
-    ${selectedRoom ? renderPropertiesPanel(selectedRoom) : '<div style="padding: 16px; color: #9ca3af; font-size: 13px; text-align: center;">Selecciona una sala para ver sus propiedades</div>'}
+    ${mode === "suggest" ? renderSuggestionPanel() : ""}
+
+    ${mode !== "suggest" ? (selectedRoom ? renderPropertiesPanel(selectedRoom) : '<div style="padding: 16px; color: #9ca3af; font-size: 13px; text-align: center;">Selecciona una sala para ver sus propiedades</div>') : ""}
 
     <div style="padding: 12px 16px; border-top: 1px solid #e5e7eb; display: flex; gap: 8px; justify-content: flex-end;">
       <button onclick="cancelRoomEditor()"
@@ -298,6 +311,89 @@ const renderPropertiesPanel = (room) => {
       <div style="font-size: 11px; color: #9ca3af; margin-top: 6px;">
         Fuente: ${room.source || "synced"} | ID: ${room.externalId}
       </div>
+    </div>
+  `;
+};
+
+const renderSuggestionPanel = () => {
+  const suggestions = currentEditorState?.suggestions || [];
+  const approvedCount = suggestions.filter((s) => s.approved).length;
+
+  return `
+    <div style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; background: #f5f3ff;">
+      <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #7c3aed;">&#10024; Sugerencia de distribucion</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Patron</label>
+          <select id="suggest-pattern"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+            <option value="grid">Cuadricula</option>
+            <option value="corridor-central">Pasillo central</option>
+            <option value="corridor-lateral">Pasillo lateral</option>
+            <option value="perimeter">Perimetral</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Cantidad</label>
+          <input id="suggest-count" type="number" value="6" min="1" max="100"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Pasillo (m)</label>
+          <input id="suggest-corridor" type="number" value="1.5" min="0" step="0.5"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Prefijo</label>
+          <input id="suggest-prefix" value="Box"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Tipo</label>
+          <select id="suggest-type"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;">
+            <option value="box">Box</option>
+            <option value="sala">Sala</option>
+            <option value="oficina">Oficina</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size: 11px; color: #6b7280; display: block;">Filas (0=auto)</label>
+          <input id="suggest-rows" type="number" value="0" min="0"
+            style="width: 100%; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px;" />
+        </div>
+      </div>
+      <button onclick="runSuggestion()"
+        style="width: 100%; padding: 8px; border-radius: 6px; border: none; background: #7c3aed; color: white; font-size: 12px; cursor: pointer; margin-bottom: 8px;">
+        Generar sugerencia
+      </button>
+      ${suggestions.length > 0 ? `
+        <div style="font-size: 12px; color: #374151; margin-bottom: 6px;">
+          ${approvedCount} de ${suggestions.length} sala(s) aprobada(s)
+        </div>
+        <div style="display: flex; gap: 6px; margin-bottom: 8px;">
+          <button onclick="approveAllSuggestions()"
+            style="flex: 1; padding: 6px; border-radius: 4px; border: 1px solid #d1d5db; background: white; font-size: 11px; cursor: pointer;">
+            Aprobar todas
+          </button>
+          <button onclick="saveSuggestions()"
+            style="flex: 1; padding: 6px; border-radius: 4px; border: none; background: #15803d; color: white; font-size: 11px; cursor: pointer;">
+            Guardar aprobadas
+          </button>
+        </div>
+        <div style="max-height: 200px; overflow-y: auto;">
+          ${suggestions.map((s, i) => `
+            <div style="display: flex; align-items: center; gap: 6px; padding: 4px 0; border-bottom: 1px solid #e5e7eb; font-size: 12px;">
+              <input type="checkbox" ${s.approved ? "checked" : ""}
+                onchange="${s.approved ? `rejectSuggestion(${i})` : `approveSuggestion(${i})`}"
+                style="cursor: pointer;" />
+              <span style="flex: 1; ${s.approved ? "" : "text-decoration: line-through; color: #9ca3af;"}">
+                ${escapeHtml(s.displayName)} (${s.type})
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      ` : '<div style="font-size: 12px; color: #9ca3af; text-align: center;">Configura los parametros y haz clic en "Generar sugerencia"</div>'}
     </div>
   `;
 };
@@ -779,4 +875,185 @@ const parseGeometryToCoordinates = (geometryJson) => {
 const escapeHtml = (str) => {
   if (!str) return "";
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+};
+
+const showSuggestionPanel = () => {
+  if (!currentEditorState) return;
+  currentEditorState.mode = "suggest";
+  currentEditorState.suggestions = [];
+  currentEditorState.suggestionPreviewLayers = [];
+  renderEditorContent();
+};
+
+const runSuggestion = async () => {
+  if (!currentEditorState) return;
+
+  const pattern = document.getElementById("suggest-pattern")?.value || "grid";
+  const count = parseInt(document.getElementById("suggest-count")?.value) || 6;
+  const corridor = parseFloat(document.getElementById("suggest-corridor")?.value) || 1.5;
+  const prefix = document.getElementById("suggest-prefix")?.value || "Box";
+  const roomType = document.getElementById("suggest-type")?.value || "box";
+  const rows = parseInt(document.getElementById("suggest-rows")?.value) || 0;
+  const cols = parseInt(document.getElementById("suggest-cols")?.value) || 0;
+
+  setAdminMapToolsStatus("Generando sugerencias...");
+
+  try {
+    const buildingCoords = currentEditorState.buildingGeometry?.coordinates?.[0];
+    if (!buildingCoords) {
+      setAdminMapToolsStatus("No se encontro la geometria del edificio.");
+      return;
+    }
+
+    const response = await fetch(`${getApiUrl()}/api/room-layouts/suggest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        buildingExternalId: currentEditorState.buildingExternalId,
+        floor: currentEditorState.selectedFloor,
+        roomCount: count,
+        pattern,
+        rows,
+        columns: cols,
+        corridorWidth: corridor,
+        roomType,
+        namePrefix: prefix,
+        coordinates: buildingCoords,
+      }),
+    });
+
+    if (!response.ok) throw new Error("Error al generar sugerencias");
+
+    const suggestions = await response.json();
+    currentEditorState.suggestions = suggestions.map((s, i) => ({
+      ...s,
+      approved: true,
+      externalId: `SUG-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${i}`,
+    }));
+
+    clearSuggestionPreviewLayers();
+    renderSuggestionPreviewLayers();
+    renderEditorContent();
+    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Revisa y aprueba las que desees guardar.`);
+  } catch (error) {
+    console.error("Error running suggestion:", error);
+    setAdminMapToolsStatus("Error al generar sugerencias.");
+  }
+};
+
+const renderSuggestionPreviewLayers = () => {
+  if (!currentEditorState?.suggestions) return;
+
+  for (let i = 0; i < currentEditorState.suggestions.length; i++) {
+    const sug = currentEditorState.suggestions[i];
+    if (!sug.approved || !sug.coordinates || sug.coordinates.length < 3) continue;
+
+    const latLngs = sug.coordinates.map((c) => [c[1], c[0]]);
+    const layer = L.polygon(latLngs, {
+      color: "#7c3aed",
+      weight: 2,
+      fillColor: "#7c3aed",
+      fillOpacity: 0.2,
+      dashArray: "6 4",
+      className: "room-editor-suggestion-layer",
+    }).addTo(map);
+
+    layer.on("click", (e) => {
+      L.DomEvent.stop(e);
+      toggleSuggestionApproval(i);
+    });
+
+    currentEditorState.suggestionPreviewLayers.push(layer);
+  }
+};
+
+const clearSuggestionPreviewLayers = () => {
+  if (!currentEditorState) return;
+  for (const layer of currentEditorState.suggestionPreviewLayers || []) {
+    map.removeLayer(layer);
+  }
+  currentEditorState.suggestionPreviewLayers = [];
+};
+
+const approveSuggestion = (index) => {
+  if (!currentEditorState?.suggestions?.[index]) return;
+  currentEditorState.suggestions[index].approved = true;
+  clearSuggestionPreviewLayers();
+  renderSuggestionPreviewLayers();
+  renderEditorContent();
+};
+
+const rejectSuggestion = (index) => {
+  if (!currentEditorState?.suggestions?.[index]) return;
+  currentEditorState.suggestions[index].approved = false;
+  clearSuggestionPreviewLayers();
+  renderSuggestionPreviewLayers();
+  renderEditorContent();
+};
+
+const toggleSuggestionApproval = (index) => {
+  if (!currentEditorState?.suggestions?.[index]) return;
+  currentEditorState.suggestions[index].approved = !currentEditorState.suggestions[index].approved;
+  clearSuggestionPreviewLayers();
+  renderSuggestionPreviewLayers();
+  renderEditorContent();
+};
+
+const approveAllSuggestions = () => {
+  if (!currentEditorState?.suggestions) return;
+  for (const sug of currentEditorState.suggestions) {
+    sug.approved = true;
+  }
+  clearSuggestionPreviewLayers();
+  renderSuggestionPreviewLayers();
+  renderEditorContent();
+};
+
+const saveSuggestions = async () => {
+  if (!currentEditorState?.suggestions) return;
+
+  const approved = currentEditorState.suggestions.filter((s) => s.approved);
+  if (approved.length === 0) {
+    setAdminMapToolsStatus("No hay sugerencias aprobadas para guardar.");
+    return;
+  }
+
+  setAdminMapToolsStatus("Guardando sugerencias aprobadas...");
+
+  try {
+    const response = await fetch(`${getApiUrl()}/api/room-layouts/bulk-save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        buildingExternalId: currentEditorState.buildingExternalId,
+        floor: currentEditorState.selectedFloor,
+        rooms: approved.map((s) => ({
+          externalId: s.externalId,
+          displayName: s.displayName,
+          type: s.type,
+          coordinates: s.coordinates,
+        })),
+      }),
+    });
+
+    if (!response.ok) throw new Error("Error al guardar sugerencias");
+
+    const result = await response.json();
+    setAdminMapToolsStatus(`${result.savedCount} sala(s) sugerida(s) guardada(s).`);
+
+    clearSuggestionPreviewLayers();
+    currentEditorState.suggestions = [];
+    currentEditorState.mode = "select";
+
+    await loadRoomsForFloor(currentEditorState.buildingExternalId, currentEditorState.selectedFloor);
+    renderRooms();
+    renderEditorContent();
+
+    window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: currentEditorState.buildingExternalId } }));
+  } catch (error) {
+    console.error("Error saving suggestions:", error);
+    setAdminMapToolsStatus("Error al guardar sugerencias.");
+  }
 };

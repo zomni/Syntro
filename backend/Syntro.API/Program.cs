@@ -179,6 +179,7 @@ builder.Services.AddSingleton<ItemClassificationService>();
 builder.Services.AddSingleton<RiskPredictionService>();
 builder.Services.AddScoped<MlAutoTrainService>();
 builder.Services.AddScoped<RoomLayoutService>();
+builder.Services.AddScoped<RoomSuggestionService>();
 builder.Services.AddHostedService<NetworkTelemetryLiveScanHostedService>();
 
 // CORS para que el frontend (syntro) pueda consumir la API
