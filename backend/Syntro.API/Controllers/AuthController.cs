@@ -157,6 +157,65 @@ public class AuthController : Controller
         return Ok(new { signedOut = true });
     }
 
+    [HttpPost("/api/auth/login")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ApiLogin([FromBody] ApiLoginRequest model, CancellationToken cancellationToken)
+    {
+        if (model is null || string.IsNullOrWhiteSpace(model.Username) || string.IsNullOrWhiteSpace(model.Password))
+        {
+            return BadRequest(new { ok = false, message = "Usuario y contrasena son requeridos." });
+        }
+
+        var username = model.Username.Trim();
+        var result = await _authService.AuthenticateAsync(username, model.Password, cancellationToken);
+
+        if (!result.Succeeded || result.User is null)
+        {
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "login-failed",
+                resource: "auth/login",
+                summary: $"Intento de login API fallido para {username}",
+                details: result.ErrorMessage ?? "Credenciales invalidas",
+                result: "failure",
+                severity: "warning",
+                changedByUsername: username,
+                cancellationToken: cancellationToken);
+
+            return Unauthorized(new { ok = false, message = result.ErrorMessage ?? "Credenciales invalidas." });
+        }
+
+        if (result.User.MfaEnabled && _mfaService.IsRequiredForRole(result.User.Role))
+        {
+            return Unauthorized(new
+            {
+                ok = false,
+                requiresMfa = true,
+                message = "Este usuario tiene MFA habilitado. Completa el inicio de sesion desde el dashboard."
+            });
+        }
+
+        await SignInFinalUserAsync(result.User, model.RememberMe, cancellationToken);
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "login-success",
+            resource: "auth/login",
+            summary: $"Login API exitoso de {username}",
+            details: $"Rol {BackendAuthService.NormalizeRole(result.User.Role)}",
+            result: "success",
+            severity: "info",
+            changedByUsername: username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new
+        {
+            ok = true,
+            username = result.User.Username,
+            role = BackendAuthService.NormalizeRole(result.User.Role),
+            isAdmin = string.Equals(result.User.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+        });
+    }
+
+    public sealed record ApiLoginRequest(string? Username, string? Password, bool RememberMe = false);
+
     [HttpGet]
     public async Task<IActionResult> MfaSetup(string? returnUrl = null, bool reset = false, CancellationToken cancellationToken = default)
     {

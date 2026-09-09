@@ -302,7 +302,8 @@
     white-space: nowrap;
 }
 
-.session-mode-logout {
+.session-mode-logout,
+.session-mode-login {
     flex: 0 0 auto;
     max-width: 100%;
     min-height: 28px;
@@ -318,7 +319,8 @@
     white-space: nowrap;
 }
 
-.session-mode-logout:hover {
+.session-mode-logout:hover,
+.session-mode-login:hover {
     background: rgba(var(--pi-surface-rgb), 0.26);
 }
 
@@ -329,6 +331,15 @@
 
 .session-mode-badge[data-authenticated="true"] .session-mode-logout {
     width: 100%;
+}
+
+.session-login-error {
+    margin-top: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(192, 57, 43, 0.12);
+    color: #c0392b;
+    font: 600 12px/1.35 sans-serif;
 }
 
 .session-inventory-link {
@@ -851,6 +862,32 @@
 .dashboard-link.is-icon-only .map-tool-button-icon {
     margin-right: 0;
     font-size: 22px;
+}
+
+.popup-dashboard-edit-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0;
+    border-radius: 50%;
+    border: 1px solid #d8dee6;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.16);
+    color: #334155;
+    cursor: pointer;
+}
+
+.popup-dashboard-edit-link:hover {
+    background: #f1f5f9;
+}
+
+.popup-dashboard-edit-link .map-tool-button-icon {
+    margin-right: 0;
+    font-size: 20px;
+    line-height: 1;
 }
 
 .admin-map-tools-status {

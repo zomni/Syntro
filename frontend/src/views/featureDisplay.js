@@ -9,6 +9,7 @@ import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
+import { identifiers } from "../utils/identifiers.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -574,6 +575,12 @@ const refreshBackendSessionForExport = async () => {
   backendSessionIsAdmin = !!session?.isAdmin;
   updateExportBackupButtonVisibility();
 };
+
+window.addEventListener(identifiers.events.sessionChanged, () => {
+  resetBuildingEquipmentSummaryCache();
+  refreshCurrentMapData();
+  refreshBackendSessionForExport();
+});
 
 const updateBackendStatusPanel = (syncState) => {
   const panel = ensureBackendStatusPanel();
@@ -1458,13 +1465,12 @@ const buildDashboardBuildingEditLink = (buildingId) => {
       href="${url}"
       target="syntro-dashboard"
       rel="noreferrer"
-      class="floorButton"
-      style="${getActionButtonStyle()}"
+      class="floorButton dashboard-link building-tool-button is-icon-only popup-dashboard-edit-link"
       title="Editar edificio en dashboard"
       aria-label="Editar edificio en dashboard"
       onclick="return window.openSyntroDashboard(event, this.href)"
     >
-      Editar edificio
+      <span class="map-tool-button-icon" aria-hidden="true">&#9881;</span>
     </a>
   `;
 };

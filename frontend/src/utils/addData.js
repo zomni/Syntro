@@ -31,6 +31,13 @@ import {
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
 var roomLayerGroup = L.layerGroup().addTo(map);
+var roomsPane =
+  typeof map.createPane === "function" && !map.getPane("roomsPane")
+    ? map.createPane("roomsPane")
+    : map.getPane("roomsPane");
+if (roomsPane) {
+  roomsPane.style.zIndex = 450;
+}
 
 let buildingsCatalogCache = new Map();
 let renderSequence = 0;
@@ -306,18 +313,8 @@ const hideMapLoading = () => {
   }
 };
 
-const addManualRoomPolygonsForFloor = async (floorNumber, featuresToRender, expectedRenderSequence) => {
+const addManualRoomPolygonsForFloor = async (floorNumber, expectedRenderSequence) => {
   if (!BACKEND_API_URL || expectedRenderSequence !== renderSequence) {
-    return;
-  }
-
-  const buildingIds = new Set(
-    (Array.isArray(featuresToRender) ? featuresToRender : [])
-      .map((feature) => feature?.properties?.id)
-      .filter(Boolean)
-  );
-
-  if (buildingIds.size === 0) {
     return;
   }
 
@@ -339,13 +336,21 @@ const addManualRoomPolygonsForFloor = async (floorNumber, featuresToRender, expe
 
   roomLayerGroup.clearLayers();
 
+  let paintedCount = 0;
+
   for (const room of rooms) {
-    if (!buildingIds.has(room.buildingExternalId)) continue;
     if (Number(room.floor) !== Number(floorNumber)) continue;
 
-    const geometry = typeof room.geometryJson === "string"
-      ? JSON.parse(room.geometryJson)
-      : room.geometryJson;
+    let geometry;
+    try {
+      geometry =
+        typeof room.geometryJson === "string"
+          ? JSON.parse(room.geometryJson)
+          : room.geometryJson;
+    } catch (error) {
+      console.warn("Sala manual sin geometría válida:", room.externalId);
+      continue;
+    }
 
     const ring = geometry?.coordinates?.[0];
     if (!Array.isArray(ring) || ring.length < 3) continue;
@@ -357,6 +362,7 @@ const addManualRoomPolygonsForFloor = async (floorNumber, featuresToRender, expe
     if (latLngs.length < 3) continue;
 
     L.polygon(latLngs, {
+      pane: "roomsPane",
       color: "#0d9488",
       weight: 1.5,
       fillColor: "#0d9488",
@@ -364,7 +370,11 @@ const addManualRoomPolygonsForFloor = async (floorNumber, featuresToRender, expe
       interactive: false,
       className: "manual-room-polygon",
     }).addTo(roomLayerGroup);
+
+    paintedCount += 1;
   }
+
+  console.info(`[rooms] ${paintedCount} sala(s) en piso ${floorNumber}`);
 };
 
 const addFeatures = async (school, floorNumber, location, expectedRenderSequence) => {
@@ -428,7 +438,7 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       expectedRenderSequence
     );
 
-    await addManualRoomPolygonsForFloor(floorNumber, featuresToRender, expectedRenderSequence);
+    await addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence);
 
     updateEmptyCampusNotice(!hasSvgForFloor(location, floorNumber) && featuresToRender.length === 0);
   } finally {

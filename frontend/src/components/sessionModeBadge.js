@@ -48,6 +48,109 @@ const logout = async () => {
   }
 };
 
+const loginModalId = "session-login-modal";
+
+const openLoginModal = () => {
+  if (document.getElementById(loginModalId)) return;
+
+  const backdrop = document.createElement("div");
+  backdrop.id = loginModalId;
+  backdrop.className = "manual-building-modal-backdrop";
+
+  backdrop.innerHTML = `
+    <div class="manual-building-modal" role="dialog" aria-modal="true" aria-label="Iniciar sesion">
+      <div class="manual-building-modal-header">
+        <div>
+          <div class="manual-building-modal-title">Iniciar sesion</div>
+          <div class="manual-building-modal-subtitle">Accede al modo administrador desde el mapa.</div>
+        </div>
+        <button type="button" class="manual-building-icon-button" data-login-modal-close aria-label="Cerrar">&times;</button>
+      </div>
+      <form class="manual-building-form" data-login-modal-form>
+        <label>
+          <span>Usuario</span>
+          <input name="username" type="text" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Contrasena</span>
+          <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <div class="session-login-error" data-login-error hidden></div>
+        <div class="manual-building-modal-actions">
+          <button type="submit" class="dashboard-link manual-building-editor-button building-tool-button">Iniciar sesion</button>
+          <button type="button" class="dashboard-link action-cancel-button" data-login-modal-close>Cancelar</button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+
+  const close = () => backdrop.remove();
+
+  backdrop.querySelectorAll("[data-login-modal-close]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    });
+  });
+
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) {
+      close();
+    }
+  });
+
+  const errorEl = backdrop.querySelector("[data-login-error]");
+  const form = backdrop.querySelector("[data-login-modal-form]");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    const formData = new FormData(form);
+    const username = String(formData.get("username") || "").trim();
+    const password = String(formData.get("password") || "");
+
+    if (!username || !password) return;
+
+    errorEl.hidden = true;
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) submitButton.disabled = true;
+
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        errorEl.textContent = data?.message || "No se pudo iniciar sesion.";
+        errorEl.hidden = false;
+        return;
+      }
+
+      close();
+      await refreshSessionBadge();
+      window.dispatchEvent(
+        new CustomEvent(identifiers.events.sessionChanged, { detail: data || {} })
+      );
+    } catch {
+      errorEl.textContent = "No se pudo contactar el backend.";
+      errorEl.hidden = false;
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+
+  const usernameInput = form.querySelector('input[name="username"]');
+  usernameInput?.focus();
+};
+
 const buildLabel = (session) => {
   if (!session?.isAuthenticated) {
     return "Modo vista";
@@ -107,7 +210,7 @@ const renderBadge = (badge, session) => {
     ${
       session?.isAuthenticated
         ? `<button type="button" class="session-mode-logout" title="Cerrar sesion">Cerrar sesion</button>`
-        : ""
+        : `<button type="button" class="session-mode-login" title="Iniciar sesion">Iniciar sesion</button>`
     }
   `;
 
@@ -120,6 +223,12 @@ const renderBadge = (badge, session) => {
     event.preventDefault();
     event.stopPropagation();
     logout();
+  });
+
+  badge.querySelector(".session-mode-login")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    openLoginModal();
   });
 
   badge.querySelector(".session-mode-visibility")?.addEventListener("click", (event) => {
