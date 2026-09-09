@@ -1216,6 +1216,20 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     margin: 0 4px;
 }
 
+.room-editor-delete-room-btn {
+    margin-top: 12px;
+    width: 100%;
+    justify-content: center;
+    font-weight: 600;
+    border-color: #ef4444;
+    color: #b91c1c;
+    background: #fef2f2;
+}
+
+.room-editor-delete-room-btn:hover {
+    background: #fee2e2;
+}
+
 .room-editor-save-btn {
     padding: 6px 14px;
     border-radius: 6px;

@@ -4,7 +4,7 @@
 
 import "../views/draw.js";
 
-import { map } from "../views/map.js";
+import { map, BACKEND_API_URL } from "../views/map.js";
 
 import {
   filter,
@@ -30,6 +30,7 @@ import {
 
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
+var roomLayerGroup = L.layerGroup().addTo(map);
 
 let buildingsCatalogCache = new Map();
 let renderSequence = 0;
@@ -305,6 +306,67 @@ const hideMapLoading = () => {
   }
 };
 
+const addManualRoomPolygonsForFloor = async (floorNumber, featuresToRender, expectedRenderSequence) => {
+  if (!BACKEND_API_URL || expectedRenderSequence !== renderSequence) {
+    return;
+  }
+
+  const buildingIds = new Set(
+    (Array.isArray(featuresToRender) ? featuresToRender : [])
+      .map((feature) => feature?.properties?.id)
+      .filter(Boolean)
+  );
+
+  if (buildingIds.size === 0) {
+    return;
+  }
+
+  let rooms = [];
+  try {
+    const response = await fetch(
+      `${BACKEND_API_URL}/api/manual-rooms?floor=${encodeURIComponent(floorNumber)}`,
+      { cache: "no-store" }
+    );
+    rooms = response.ok ? await response.json() : [];
+  } catch (error) {
+    console.error("Error cargando salas manuales para el mapa:", error);
+    return;
+  }
+
+  if (expectedRenderSequence !== renderSequence || !Array.isArray(rooms)) {
+    return;
+  }
+
+  roomLayerGroup.clearLayers();
+
+  for (const room of rooms) {
+    if (!buildingIds.has(room.buildingExternalId)) continue;
+    if (Number(room.floor) !== Number(floorNumber)) continue;
+
+    const geometry = typeof room.geometryJson === "string"
+      ? JSON.parse(room.geometryJson)
+      : room.geometryJson;
+
+    const ring = geometry?.coordinates?.[0];
+    if (!Array.isArray(ring) || ring.length < 3) continue;
+
+    const latLngs = ring
+      .filter((point) => Array.isArray(point) && point.length >= 2)
+      .map((point) => [point[1], point[0]]);
+
+    if (latLngs.length < 3) continue;
+
+    L.polygon(latLngs, {
+      color: "#0d9488",
+      weight: 1.5,
+      fillColor: "#0d9488",
+      fillOpacity: 0.18,
+      interactive: false,
+      className: "manual-room-polygon",
+    }).addTo(roomLayerGroup);
+  }
+};
+
 const addFeatures = async (school, floorNumber, location, expectedRenderSequence) => {
   try {
     if (expectedRenderSequence !== renderSequence) {
@@ -366,6 +428,8 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       expectedRenderSequence
     );
 
+    await addManualRoomPolygonsForFloor(floorNumber, featuresToRender, expectedRenderSequence);
+
     updateEmptyCampusNotice(!hasSvgForFloor(location, floorNumber) && featuresToRender.length === 0);
   } finally {
     if (expectedRenderSequence === renderSequence) {
@@ -378,6 +442,7 @@ export const addDataToMap = (school, floorNumber, location) => {
   renderSequence += 1;
   const expectedRenderSequence = renderSequence;
   layerGroup.clearLayers();
+  roomLayerGroup.clearLayers();
   updateEmptyCampusNotice(false);
   showMapLoading();
   addFeatures(school, floorNumber, location, expectedRenderSequence);
@@ -391,6 +456,7 @@ export const addDataToMap = (school, floorNumber, location) => {
 
 export const clearAllMapData = () => {
   layerGroup.clearLayers();
+  roomLayerGroup.clearLayers();
   clearMapEquipmentState();
   updateEmptyCampusNotice(false);
   hideMapLoading();

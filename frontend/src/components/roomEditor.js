@@ -160,6 +160,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       drawVertexMarkers: [],
       suggestions: [],
       suggestionPreviewLayers: [],
+      removedExternalIds: [],
       dragging: null,
       rotating: null,
     };
@@ -328,10 +329,16 @@ const initPopupMap = (geometry) => {
     attributionControl: false,
     boxZoom: false,
     keyboard: false,
+    scrollWheelZoom: false,
+    doubleClickZoom: false,
+    touchZoom: false,
+    minZoom: 12,
+    maxZoom: 22,
   });
 
   L.tileLayer(TILE_URL, {
-    maxZoom: 19,
+    maxNativeZoom: 19,
+    maxZoom: 22,
     minZoom: 12,
     keepBuffer: 8,
     updateWhenIdle: false,
@@ -343,12 +350,13 @@ const initPopupMap = (geometry) => {
     if (coords && coords.length > 0) {
       const latLngs = coords.map((c) => [c[1], c[0]]);
       const bounds = L.latLngBounds(latLngs);
-      popupMap.fitBounds(bounds, { padding: [40, 40] });
+      popupMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 22 });
     }
   }
 
   popupMap.whenReady(() => {
     popupMap.invalidateSize();
+    popupMap.setMinZoom(Math.min(popupMap.getZoom(), 22));
   });
 
   popupMap.on("click", (e) => {
@@ -636,6 +644,14 @@ const buildPropertiesPanel = (room) => {
       <textarea data-prop="notes">${escapeHtml(room.notes || "")}</textarea>
     </label>
     <div class="room-editor-meta">Fuente: ${room.source || "synced"} | ID: ${room.externalId}</div>
+    <button
+      type="button"
+      class="room-editor-tool-btn room-editor-delete-room-btn"
+      data-action="delete-room"
+      title="Eliminar esta sala"
+    >
+      <span>${ICONS.delete}</span> Eliminar sala
+    </button>
   `;
 
   body.querySelectorAll("[data-prop]").forEach((el) => {
@@ -659,6 +675,16 @@ const buildPropertiesPanel = (room) => {
       updateRoomTransform(prop, val);
     });
   });
+
+  const deleteRoomBtn = body.querySelector("[data-action='delete-room']");
+  if (deleteRoomBtn) {
+    deleteRoomBtn.addEventListener("click", () => {
+      if (!currentEditorState?.selectedRoom) return;
+      if (!window.confirm("¿Eliminar esta sala?")) return;
+      deleteSelectedRoom();
+      updateSidePanel();
+    });
+  }
 
   container.appendChild(body);
   return container;
@@ -1172,6 +1198,9 @@ const deleteSelectedRoom = () => {
   pushUndo({ type: "delete-room", room });
 
   currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== room.externalId);
+  if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
+    currentEditorState.removedExternalIds.push(room.externalId);
+  }
   currentEditorState.selectedRoom = null;
   currentEditorState.isDirty = true;
   if (popupMap) {
@@ -1251,6 +1280,10 @@ const undoRoomEditor = () => {
       break;
     case "delete-room":
       currentEditorState.rooms.push(action.room);
+      if (!action.room.isNew && currentEditorState.removedExternalIds) {
+        const idx = currentEditorState.removedExternalIds.indexOf(action.room.externalId);
+        if (idx !== -1) currentEditorState.removedExternalIds.splice(idx, 1);
+      }
       break;
     case "update-property": {
       const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
@@ -1274,6 +1307,9 @@ const redoRoomEditor = () => {
       break;
     case "delete-room":
       currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== action.room.externalId);
+      if (!action.room.isNew && currentEditorState.removedExternalIds) {
+        currentEditorState.removedExternalIds.push(action.room.externalId);
+      }
       break;
     case "update-property": {
       const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
@@ -1339,13 +1375,26 @@ const saveRoomEditor = async () => {
             notes: room.notes,
           }),
         });
-        if (!res.ok) {
-          let msg = `Error al actualizar sala '${room.displayName}'.`;
-          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          throw new Error(msg);
-        }
+if (!res.ok) {
+        let msg = `Error al actualizar sala '${room.displayName}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        throw new Error(msg);
+      }
       }
     }
+
+    for (const externalId of currentEditorState.removedExternalIds || []) {
+      const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(externalId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = `Error al eliminar la sala '${externalId}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        throw new Error(msg);
+      }
+    }
+    currentEditorState.removedExternalIds = [];
 
     setAdminMapToolsStatus("Salas guardadas correctamente.");
 
