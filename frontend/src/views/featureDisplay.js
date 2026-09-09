@@ -246,6 +246,7 @@ const restoreMapBoundsAfterPopup = () => {
 };
 
 const popupViewState = {};
+const popupFloorState = {};
 const popupRoomState = {};
 const popupDeviceState = {};
 const popupDeviceQueryState = {};
@@ -1714,20 +1715,14 @@ window.setDeviceTypeFilter = (featureId, type) => {
 };
 
 window.selectBuildingFloor = (targetFloor) => {
-  const floorText = String(targetFloor).trim();
+  const featureId = currentOpenFeatureId;
+  if (!featureId) return;
 
-  const candidates = Array.from(document.querySelectorAll("button, a")).filter((el) => {
-    const text = (el.textContent || "").trim();
-    const insidePopup = !!el.closest(".leaflet-popup-content");
-    return text === floorText && !insidePopup;
-  });
-
-  if (candidates.length > 0) {
-    candidates[0].click();
-    return;
-  }
-
-  console.warn(`No se encontró botón global para el piso ${floorText}`);
+  popupFloorState[featureId] = Number(targetFloor);
+  popupRoomState[featureId] = null;
+  popupDeviceState[featureId] = null;
+  popupDeviceScopeState[featureId] = "";
+  refreshCurrentPopup();
 };
 
 window.selectRoomDetail = (featureId, roomId) => {
@@ -1842,7 +1837,7 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
 const getFeaturePopupHtml = async (feature) => {
   const building = await findBuildingInCatalog(feature);
   const featureId = feature?.properties?.id || "Sin ID";
-  const currentFloor = feature?.properties?.floor ?? 0;
+  const currentFloor = popupFloorState[featureId] ?? (feature?.properties?.floor ?? 0);
   const floorLabel = currentFloor;
   let currentView = popupViewState[featureId] || null;
   const deviceQuery = popupDeviceQueryState[featureId] || "";
