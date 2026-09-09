@@ -804,12 +804,48 @@ const loadRoomsForBuilding = async (building) => {
     }
   });
 
-  const [roomsByFloor, backendRooms] = await Promise.all([
+  const [roomsByFloor, backendRooms, manualRooms] = await Promise.all([
     Promise.all(roomFilePromises),
     loadBackendRoomsForBuilding(building),
+    loadManualRoomsForBuilding(building),
   ]);
 
-  return mergeRoomsWithBackendOverrides(roomsByFloor.flat(), backendRooms);
+  const mergedRooms = mergeRoomsWithBackendOverrides(roomsByFloor.flat(), backendRooms);
+  const knownRoomIds = new Set(mergedRooms.map((room) => room.roomId));
+
+  return [...mergedRooms, ...manualRooms.filter((room) => !knownRoomIds.has(room.roomId))];
+};
+
+const loadManualRoomsForBuilding = async (building) => {
+  if (!building?.id) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${BACKEND_API_URL}/api/manual-rooms?buildingExternalId=${encodeURIComponent(building.id)}`,
+      { cache: "no-store" }
+    );
+
+    const rooms = response.ok ? await response.json() : [];
+    return (Array.isArray(rooms) ? rooms : []).map((room) => ({
+      roomId: room.externalId,
+      name: room.displayName || room.shortName || room.externalId,
+      shortName: room.shortName || "",
+      floor: room.floor ?? 0,
+      type: room.type || "",
+      unit: room.unit || "",
+      service: room.service || "",
+      status: room.status || "",
+      responsibleArea: "",
+      responsiblePerson: "",
+      notes: room.notes || "",
+      source: "manual",
+    }));
+  } catch (error) {
+    console.error(`Error cargando salas manuales del backend de ${building.id}:`, error);
+    return [];
+  }
 };
 
 const loadBackendInventoryForBuilding = async (building) => {
