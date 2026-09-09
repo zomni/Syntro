@@ -1622,16 +1622,35 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   return html;
 };
 
-const buildViewHeaderButtonHtml = (featureId, label, viewKey, isOpen) => `
-  <button
-    class="floorButton"
-    type="button"
-    style="${getChipButtonStyle(isOpen, true)}"
-    onclick="window.setPopupView && window.setPopupView('${escapeHtml(featureId)}','${escapeHtml(viewKey)}')"
-  >
-    ${escapeHtml(label)} ${isOpen ? "▾" : "▸"}
-  </button>
-`;
+const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) => {
+  const views = [
+    { key: "summary", label: "Resumen" },
+    { key: "rooms", label: "Salas" },
+    { key: "history", label: "Historial" },
+  ];
+
+  if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
+
+  return `
+    <div style="margin-top:10px;">
+      <div style="${chipRowStyle}">
+        ${views
+          .map(
+            (view) => `
+          <button
+            class="floorButton"
+            style="${getChipButtonStyle(currentView === view.key, true)}"
+            onclick="window.setPopupView && window.setPopupView('${escapeHtml(featureId)}','${escapeHtml(view.key)}')"
+          >
+            ${escapeHtml(view.label)}
+          </button>
+        `,
+          )
+          .join("")}
+      </div>
+    </div>
+  `;
+};
 
 const refreshCurrentPopup = async () => {
   if (!currentOpenLayer || !currentOpenLayer.feature) return;
@@ -1884,78 +1903,67 @@ const getFeaturePopupHtml = async (feature) => {
   `;
 
 detailsHtml += buildFloorSelectorHtml(building, currentFloor);
+  detailsHtml += buildViewSelectorHtml(featureId, currentView, canViewEquipment);
 
-  const viewDefs = [
-    { key: "summary", label: "Resumen" },
-    { key: "rooms", label: "Salas" },
-    { key: "history", label: "Historial" },
-  ];
-  if (canViewEquipment) viewDefs.splice(2, 0, { key: "devices", label: "Equipos" });
+  let contentHtml = "";
+  if (currentView === "summary") {
+    contentHtml = `
+      <div style="${sectionBoxStyle}">
+        <div style="font-weight:600; margin-bottom:6px;">Resumen</div>
+        ${searchPopupContent ? `<div>${searchPopupContent}</div>` : ""}
+        ${buildBuildingDetailHtml(buildingDetail)}
+      </div>
+    `;
+  } else if (currentView === "rooms") {
+    contentHtml = `<div style="${sectionBoxStyle}">`;
 
-  for (const view of viewDefs) {
-    const isOpen = currentView === view.key;
+    if (selectedRoomId) {
+      const selectedRoom = roomsInFloor.find((room) => room.roomId === selectedRoomId);
+      const roomDevices = devicesInFloor.filter((device) => device.roomId === selectedRoomId);
 
-    let contentHtml = "";
-    if (view.key === "summary") {
-      contentHtml = `
-        <div style="${sectionBoxStyle}">
-          <div style="font-weight:600; margin-bottom:6px;">Resumen</div>
-          ${searchPopupContent ? `<div>${searchPopupContent}</div>` : ""}
-          ${buildBuildingDetailHtml(buildingDetail)}
-        </div>
-      `;
-    } else if (view.key === "rooms") {
-      contentHtml = `<div style="${sectionBoxStyle}">`;
-
-      if (selectedRoomId) {
-        const selectedRoom = roomsInFloor.find((room) => room.roomId === selectedRoomId);
-        const roomDevices = devicesInFloor.filter((device) => device.roomId === selectedRoomId);
-
-        if (selectedRoom) {
-          contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Detalle de sala</div>`;
-          contentHtml += buildRoomDetailHtml(featureId, selectedRoom, roomDevices);
-        } else {
-          contentHtml += `Sala no encontrada en este piso.`;
-        }
+      if (selectedRoom) {
+        contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Detalle de sala</div>`;
+        contentHtml += buildRoomDetailHtml(featureId, selectedRoom, roomDevices);
       } else {
-        contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Salas del piso ${escapeHtml(floorLabel)}</div>`;
-        contentHtml += buildRoomsListWithButtonsHtml(featureId, roomsInFloor, devicesInFloor, floorLabel);
+        contentHtml += `Sala no encontrada en este piso.`;
       }
-
-      contentHtml += `</div>`;
-    } else if (view.key === "devices") {
-      const devicesForView = deviceScope === "building" ? allDevices : devicesInFloor;
-      const devicesScopeLabel = deviceScope === "building" ? "edificio completo" : `piso ${floorLabel}`;
-
-      contentHtml = `
-        <div style="${sectionBoxStyle}">
-          <div style="font-weight:600; margin-bottom:6px;">Equipos por tipo (${escapeHtml(devicesScopeLabel)})</div>
-          ${buildDevicesSummaryHtml(devicesForView, devicesScopeLabel)}
-          <div style="margin-top:10px; font-weight:600;">Equipos destacados</div>
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize)}
-          <div style="margin-top:4px;">
-            ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter)}
-          </div>
-        </div>
-      `;
-    } else if (view.key === "history") {
-      contentHtml = `
-        <div style="${sectionBoxStyle}">
-          <div style="font-weight:600; margin-bottom:6px;">Historial del edificio</div>
-          ${buildHistorySummaryHtml(buildingActivityItems)}
-        </div>
-      `;
+    } else {
+      contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Salas del piso ${escapeHtml(floorLabel)}</div>`;
+      contentHtml += buildRoomsListWithButtonsHtml(featureId, roomsInFloor, devicesInFloor, floorLabel);
     }
 
-    detailsHtml += `
-      <div style="margin-top:8px;">
-        ${buildViewHeaderButtonHtml(featureId, view.label, view.key, isOpen)}
-        <div style="${isOpen ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
-          ${contentHtml}
+    contentHtml += `</div>`;
+  } else if (currentView === "devices") {
+    const devicesForView = deviceScope === "building" ? allDevices : devicesInFloor;
+    const devicesScopeLabel = deviceScope === "building" ? "edificio completo" : `piso ${floorLabel}`;
+
+    contentHtml = `
+      <div style="${sectionBoxStyle}">
+        <div style="font-weight:600; margin-bottom:6px;">Equipos por tipo (${escapeHtml(devicesScopeLabel)})</div>
+        ${buildDevicesSummaryHtml(devicesForView, devicesScopeLabel)}
+        <div style="margin-top:10px; font-weight:600;">Equipos destacados</div>
+        ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize)}
+        <div style="margin-top:4px;">
+          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter)}
         </div>
       </div>
     `;
+  } else if (currentView === "history") {
+    contentHtml = `
+      <div style="${sectionBoxStyle}">
+        <div style="font-weight:600; margin-bottom:6px;">Historial del edificio</div>
+        ${buildHistorySummaryHtml(buildingActivityItems)}
+      </div>
+    `;
   }
+
+  detailsHtml += `
+    <div style="margin-top:8px;">
+      <div style="${currentView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
+        ${contentHtml}
+      </div>
+    </div>
+  `;
 
   detailsHtml += `
     <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
