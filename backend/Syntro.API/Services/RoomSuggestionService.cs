@@ -36,13 +36,18 @@ public class RoomSuggestionService
         var rows = request.Rows > 0 ? request.Rows : (int)Math.Sqrt(request.RoomCount);
         var cols = request.Columns > 0 ? request.Columns : (int)Math.Ceiling((double)request.RoomCount / rows);
         var corridorWidth = request.CorridorWidth > 0 ? request.CorridorWidth : 1.5;
+        var internalCorridor = request.InternalCorridor > 0 ? request.InternalCorridor : 1.2;
+        var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
         var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
-        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
-        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+        var padding = 1.0;
+        var padLng = MetersToDegLng(padding, centerLat);
+        var padLat = MetersToDegLat(padding);
+        var gapLng = MetersToDegLng(internalCorridor, centerLat);
+        var gapLat = MetersToDegLat(internalCorridor);
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
-        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorDegLat;
+        var usableWidth = bounds.MaxLng - bounds.MinLng - padLng * 2 - gapLng * (cols - 1);
+        var usableHeight = bounds.MaxLat - bounds.MinLat - padLat * 2 - gapLat * (rows - 1);
 
         if (usableWidth <= 0 || usableHeight <= 0)
             return result;
@@ -51,16 +56,21 @@ public class RoomSuggestionService
         var roomHeight = usableHeight / rows;
 
         var counter = 0;
-        var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
         for (var row = 0; row < rows && counter < request.RoomCount; row++)
         {
             for (var col = 0; col < cols && counter < request.RoomCount; col++)
             {
-                var x1 = bounds.MinLng + corridorDegLng / 2 + col * roomWidth;
-                var y1 = bounds.MinLat + corridorDegLat / 2 + row * roomHeight;
+                var x1 = bounds.MinLng + padLng + col * (roomWidth + gapLng);
+                var y1 = bounds.MinLat + padLat + row * (roomHeight + gapLat);
                 var x2 = x1 + roomWidth;
                 var y2 = y1 + roomHeight;
+
+                var centerLngRoom = (x1 + x2) / 2.0;
+                var centerLatRoom = (y1 + y2) / 2.0;
+
+                if (!IsPointInPolygon(centerLngRoom, centerLatRoom, request.Coordinates))
+                    continue;
 
                 var coords = new List<List<double>>
                 {
@@ -73,7 +83,7 @@ public class RoomSuggestionService
 
                 result.Add(new SuggestedRoom
                 {
-                    DisplayName = $"{prefix} {counter + 1}",
+                    DisplayName = $"{prefix} {result.Count + 1}",
                     Type = request.RoomType ?? "box",
                     Coordinates = coords,
                     Row = row,
@@ -94,15 +104,18 @@ public class RoomSuggestionService
 
         var bounds = GetBounds(request.Coordinates);
         var corridorWidth = request.CorridorWidth > 0 ? request.CorridorWidth : 1.5;
+        var internalCorridor = request.InternalCorridor > 0 ? request.InternalCorridor : 1.2;
         var roomsPerSide = Math.Max(1, request.RoomCount / 2);
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
         var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
-        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
+        var padLng = MetersToDegLng(1.0, centerLat);
+        var padLat = MetersToDegLat(1.0);
         var corridorDegLngHalf = MetersToDegLng(corridorWidth, centerLat);
+        var gapLat = MetersToDegLat(internalCorridor);
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
-        var usableHeight = bounds.MaxLat - bounds.MinLat;
+        var usableWidth = bounds.MaxLng - bounds.MinLng - padLng * 2;
+        var usableHeight = bounds.MaxLat - bounds.MinLat - padLat * 2 - gapLat * (roomsPerSide - 1);
 
         var roomHeight = usableHeight / roomsPerSide;
         var roomWidth = usableWidth / 2;
@@ -114,11 +127,17 @@ public class RoomSuggestionService
             for (var i = 0; i < roomsPerSide && counter < request.RoomCount; i++)
             {
                 var x1 = side == 0
-                    ? bounds.MinLng + corridorDegLngHalf
-                    : bounds.MinLng + corridorDegLngHalf + roomWidth + corridorDegLngHalf;
-                var y1 = bounds.MinLat + i * roomHeight;
+                    ? bounds.MinLng + padLng
+                    : bounds.MinLng + padLng + roomWidth + corridorDegLngHalf;
+                var y1 = bounds.MinLat + padLat + i * (roomHeight + gapLat);
                 var x2 = x1 + roomWidth;
                 var y2 = y1 + roomHeight;
+
+                var centerLngRoom = (x1 + x2) / 2.0;
+                var centerLatRoom = (y1 + y2) / 2.0;
+
+                if (!IsPointInPolygon(centerLngRoom, centerLatRoom, request.Coordinates))
+                    continue;
 
                 var coords = new List<List<double>>
                 {
@@ -131,7 +150,7 @@ public class RoomSuggestionService
 
                 result.Add(new SuggestedRoom
                 {
-                    DisplayName = $"{prefix} {counter + 1}",
+                    DisplayName = $"{prefix} {result.Count + 1}",
                     Type = request.RoomType ?? "box",
                     Coordinates = coords,
                     Row = i,
@@ -152,25 +171,34 @@ public class RoomSuggestionService
 
         var bounds = GetBounds(request.Coordinates);
         var corridorWidth = request.CorridorWidth > 0 ? request.CorridorWidth : 1.5;
+        var internalCorridor = request.InternalCorridor > 0 ? request.InternalCorridor : 1.2;
         var roomCount = request.RoomCount;
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
         var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+        var padLng = MetersToDegLng(1.0, centerLat);
+        var padLat = MetersToDegLat(1.0);
         var corridorDegLng = MetersToDegLng(corridorWidth, centerLat);
-        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+        var gapLat = MetersToDegLat(internalCorridor);
 
-        var usableWidth = bounds.MaxLng - bounds.MinLng - corridorDegLng;
-        var usableHeight = bounds.MaxLat - bounds.MinLat - corridorDegLat;
+        var usableWidth = bounds.MaxLng - bounds.MinLng - padLng - corridorDegLng;
+        var usableHeight = bounds.MaxLat - bounds.MinLat - padLat * 2 - gapLat * (roomCount - 1);
 
         var roomWidth = usableWidth;
         var roomHeight = usableHeight / roomCount;
 
         for (var i = 0; i < roomCount; i++)
         {
-            var x1 = bounds.MinLng + corridorDegLng;
-            var y1 = bounds.MinLat + corridorDegLat / 2 + i * roomHeight;
+            var x1 = bounds.MinLng + padLng + corridorDegLng;
+            var y1 = bounds.MinLat + padLat + i * (roomHeight + gapLat);
             var x2 = x1 + roomWidth;
             var y2 = y1 + roomHeight;
+
+            var centerLngRoom = (x1 + x2) / 2.0;
+            var centerLatRoom = (y1 + y2) / 2.0;
+
+            if (!IsPointInPolygon(centerLngRoom, centerLatRoom, request.Coordinates))
+                continue;
 
             var coords = new List<List<double>>
             {
@@ -183,7 +211,7 @@ public class RoomSuggestionService
 
             result.Add(new SuggestedRoom
             {
-                DisplayName = $"{prefix} {i + 1}",
+                DisplayName = $"{prefix} {result.Count + 1}",
                 Type = request.RoomType ?? "box",
                 Coordinates = coords,
                 Row = i,
@@ -202,25 +230,41 @@ public class RoomSuggestionService
 
         var bounds = GetBounds(request.Coordinates);
         var corridorWidth = request.CorridorWidth > 0 ? request.CorridorWidth : 1.5;
+        var internalCorridor = request.InternalCorridor > 0 ? request.InternalCorridor : 1.2;
         var roomCount = request.RoomCount;
         var prefix = string.IsNullOrWhiteSpace(request.NamePrefix) ? "Box" : request.NamePrefix;
 
         var centerLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
-        var corridorDegLng = MetersToDegLng(corridorWidth * 2, centerLat);
-        var corridorDegLat = MetersToDegLat(corridorWidth * 2);
+        var padLng = MetersToDegLng(1.0, centerLat);
+        var padLat = MetersToDegLat(1.0);
+        var gap = MetersToDegLng(internalCorridor, centerLat);
 
-        var totalPerimeter = 2 * ((bounds.MaxLng - bounds.MinLng) + (bounds.MaxLat - bounds.MinLat));
+        var totalPerimeter = 2 * (((bounds.MaxLng - bounds.MinLng) - padLng * 2) + ((bounds.MaxLat - bounds.MinLat) - padLat * 2));
         var roomSide = totalPerimeter / roomCount;
 
-        var roomWidth = (bounds.MaxLng - bounds.MinLng - corridorDegLng) / Math.Max(1, (int)((bounds.MaxLng - bounds.MinLng) / roomSide));
+        var innerWidth = (bounds.MaxLng - bounds.MinLng) - padLng * 2;
+        var innerHeight = (bounds.MaxLat - bounds.MinLat) - padLat * 2;
+        var roomWidth = innerWidth / Math.Max(1, (int)(innerWidth / roomSide));
         var roomHeight = roomSide;
 
-        var corridorDegAvg = (corridorDegLng + corridorDegLat) / 2.0;
-        var positions = GetPerimeterPositions(bounds, corridorDegAvg, roomCount);
+        var innerBounds = new Bounds
+        {
+            MinLng = bounds.MinLng + padLng,
+            MaxLng = bounds.MaxLng - padLng,
+            MinLat = bounds.MinLat + padLat,
+            MaxLat = bounds.MaxLat - padLat
+        };
+        var positions = GetPerimeterPositions(innerBounds, 0, roomCount);
 
         for (var i = 0; i < positions.Count && i < roomCount; i++)
         {
             var pos = positions[i];
+            var centerLngRoom = pos.X + roomWidth / 2.0;
+            var centerLatRoom = pos.Y + roomHeight / 2.0;
+
+            if (!IsPointInPolygon(centerLngRoom, centerLatRoom, request.Coordinates))
+                continue;
+
             var coords = new List<List<double>>
             {
                 new() { pos.X, pos.Y },
@@ -232,7 +276,7 @@ public class RoomSuggestionService
 
             result.Add(new SuggestedRoom
             {
-                DisplayName = $"{prefix} {i + 1}",
+                DisplayName = $"{prefix} {result.Count + 1}",
                 Type = request.RoomType ?? "box",
                 Coordinates = coords,
                 Row = i / 4,
@@ -295,6 +339,44 @@ public class RoomSuggestionService
             MaxLat = lats.Max()
         };
     }
+
+    private static bool IsPointInPolygon(double lng, double lat, List<List<double>> polygon)
+    {
+        var n = polygon.Count;
+        if (n < 3) return false;
+        var inside = false;
+        for (int i = 0, j = n - 1; i < n; j = i++)
+        {
+            double xi = polygon[i][0];
+            double yi = polygon[i][1];
+            double xj = polygon[j][0];
+            double yj = polygon[j][1];
+            if (((yi > lat) != (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi))
+                inside = !inside;
+        }
+        return inside;
+    }
+
+    public static double CalculateAreaSquareMeters(List<List<double>> coordinates)
+    {
+        if (coordinates == null || coordinates.Count < 3) return 0;
+        var centerLat = coordinates.Average(c => c[1]);
+        var degToM_lat = METERS_PER_DEG_LAT;
+        var degToM_lng = METERS_PER_DEG_LAT * Math.Cos(centerLat * Math.PI / 180.0);
+
+        double area = 0;
+        var n = coordinates.Count;
+        for (int i = 0; i < n; i++)
+        {
+            int j = (i + 1) % n;
+            var xi = coordinates[i][0] * degToM_lng;
+            var yi = coordinates[i][1] * degToM_lat;
+            var xj = coordinates[j][0] * degToM_lng;
+            var yj = coordinates[j][1] * degToM_lat;
+            area += xi * yj - xj * yi;
+        }
+        return Math.Abs(area) / 2.0;
+    }
 }
 
 public class SuggestionRequest
@@ -306,6 +388,7 @@ public class SuggestionRequest
     public int Rows { get; set; }
     public int Columns { get; set; }
     public double CorridorWidth { get; set; } = 1.5;
+    public double InternalCorridor { get; set; } = 1.2;
     public string? RoomType { get; set; }
     public string? NamePrefix { get; set; }
     public List<List<double>>? Coordinates { get; set; }

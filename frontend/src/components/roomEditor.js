@@ -377,14 +377,6 @@ const updateTopBar = () => {
 
   topBarEl.innerHTML = "";
 
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "room-editor-close-btn";
-  closeBtn.innerHTML = "&times;";
-  closeBtn.title = "Cerrar editor";
-  closeBtn.addEventListener("click", () => cancelRoomEditor());
-  topBarEl.appendChild(closeBtn);
-
   const nameContainer = document.createElement("div");
   nameContainer.className = "room-editor-building-name-wrap";
 
@@ -423,6 +415,14 @@ const updateTopBar = () => {
   hint.className = "room-editor-shortcut-hint";
   hint.textContent = "Ctrl+mover | Shift+rotar";
   topBarEl.appendChild(hint);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "room-editor-close-btn";
+  closeBtn.innerHTML = "&times;";
+  closeBtn.title = "Cerrar editor";
+  closeBtn.addEventListener("click", () => cancelRoomEditor());
+  topBarEl.appendChild(closeBtn);
 };
 
 const updateBottomBar = () => {
@@ -1388,6 +1388,25 @@ const parseGeometryToCoordinates = (geometryJson) => {
   }
 };
 
+const METERS_PER_DEG_LAT = 111_320;
+
+const calculateAreaMeters = (coords) => {
+  if (!coords || coords.length < 3) return 0;
+  const centerLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
+  const degToM_lng = METERS_PER_DEG_LAT * Math.cos((centerLat * Math.PI) / 180);
+  let area = 0;
+  const n = coords.length;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const xi = coords[i][0] * degToM_lng;
+    const yi = coords[i][1] * METERS_PER_DEG_LAT;
+    const xj = coords[j][0] * degToM_lng;
+    const yj = coords[j][1] * METERS_PER_DEG_LAT;
+    area += xi * yj - xj * yi;
+  }
+  return Math.abs(area) / 2;
+};
+
 const escapeHtml = (str) => {
   if (!str) return "";
   return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -1405,6 +1424,11 @@ const runQuickSuggestion = async () => {
       return;
     }
 
+    const buildingAreaM2 = calculateAreaMeters(buildingCoords);
+    const roomAreaM2 = 20;
+    const corridorFactor = 0.3;
+    const roomCount = Math.max(1, Math.floor((buildingAreaM2 * (1 - corridorFactor)) / roomAreaM2));
+
     const response = await fetch(`${getApiUrl()}/api/room-layouts/suggest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1412,11 +1436,12 @@ const runQuickSuggestion = async () => {
       body: JSON.stringify({
         buildingExternalId: currentEditorState.buildingExternalId,
         floor: currentEditorState.selectedFloor,
-        roomCount: 6,
+        roomCount: roomCount,
         pattern: "grid",
         rows: 0,
         columns: 0,
         corridorWidth: 1.5,
+        internalCorridor: 1.2,
         roomType: "sala",
         namePrefix: "Sala",
         coordinates: buildingCoords,
