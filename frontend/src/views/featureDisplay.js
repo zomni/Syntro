@@ -246,6 +246,7 @@ const restoreMapBoundsAfterPopup = () => {
 };
 
 const popupViewState = {};
+const popupViewSelectorOpenState = {};
 const popupRoomState = {};
 const popupDeviceState = {};
 const popupDeviceQueryState = {};
@@ -1593,7 +1594,9 @@ const buildHistorySummaryHtml = (activityItems) => {
 };
 
 const buildFloorSelectorHtml = (building, currentFloor) => {
-  const floors = Array.isArray(building?.floors) ? building.floors : [];
+  const floors = Array.isArray(building?.floors)
+    ? building.floors.filter((floor) => Number(floor) !== 0)
+    : [];
   if (!floors.length) return "";
 
   let html = `
@@ -1629,10 +1632,19 @@ const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) 
 
   if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
 
+  const isOpen = Boolean(popupViewSelectorOpenState[featureId]);
+
   let html = `
     <div style="margin-top:10px;">
-      <div style="font-weight:600; margin-bottom:4px;">Vista</div>
-      <div style="${chipRowStyle}">
+      <button
+        class="floorButton"
+        type="button"
+        style="${getChipButtonStyle(false, true)}"
+        onclick="window.togglePopupViewSelector && window.togglePopupViewSelector('${escapeHtml(featureId)}')"
+      >
+        Vista ${isOpen ? "▾" : "▸"}
+      </button>
+      <div style="${chipRowStyle}${isOpen ? "" : " display:none;"}">
   `;
 
   for (const view of views) {
@@ -1682,6 +1694,12 @@ window.setPopupView = (featureId, viewKey) => {
   if (viewKey === "devices" && popupDeviceScopeState[featureId] !== "building") {
     popupDeviceScopeState[featureId] = "";
   }
+  refreshCurrentPopup();
+};
+
+window.togglePopupViewSelector = (featureId) => {
+  if (!featureId) return;
+  popupViewSelectorOpenState[featureId] = !popupViewSelectorOpenState[featureId];
   refreshCurrentPopup();
 };
 
@@ -1892,10 +1910,6 @@ const getFeaturePopupHtml = async (feature) => {
   const roomsInFloor = filterRoomsByFloor(allRooms, currentFloor);
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
 
-  const type = building?.type || "unknown";
-  const shortName = building?.shortName || "";
-  const responsibleArea = building?.responsibleArea || "";
-  const floors = Array.isArray(building?.floors) ? building.floors.join(", ") : "";
   const searchPopupContent = building?.searchPopupContent || "";
   const isBackendAdmin = Boolean(backendSession?.isAdmin);
   const adminActionsHtml = isBackendAdmin
@@ -1904,22 +1918,8 @@ const getFeaturePopupHtml = async (feature) => {
 
   let detailsHtml = `
     <div style="${popupShellStyle}">
-      <b style="font-size:16px;">${escapeHtml(featureName)}</b><br/>
-      ID: ${escapeHtml(featureId)}<br/>
-      Piso actual: ${escapeHtml(floorLabel)}<br/>
-      Tipo: ${escapeHtml(type)}
+      <b style="font-size:16px;">${escapeHtml(featureName)}</b>
   `;
-
-  if (shortName) detailsHtml += `<br/>Código: ${escapeHtml(shortName)}`;
-  if (responsibleArea) detailsHtml += `<br/>Área: ${escapeHtml(responsibleArea)}`;
-  if (floors) detailsHtml += `<br/>Pisos: ${escapeHtml(floors)}`;
-
-  detailsHtml += `<br/>Salas edificio: ${escapeHtml(allRooms.length)}`;
-  detailsHtml += `<br/>Salas piso ${escapeHtml(floorLabel)}: ${escapeHtml(roomsInFloor.length)}`;
-  if (canViewEquipment) {
-    detailsHtml += `<br/>Equipos edificio: ${escapeHtml(allDevices.length)}`;
-    detailsHtml += `<br/>Equipos piso ${escapeHtml(floorLabel)}: ${escapeHtml(devicesInFloor.length)}`;
-  }
 
   detailsHtml += buildFloorSelectorHtml(building, currentFloor);
   detailsHtml += buildViewSelectorHtml(featureId, currentView, canViewEquipment);

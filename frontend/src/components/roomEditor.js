@@ -128,7 +128,9 @@ const openRoomEditor = async (buildingExternalId, feature) => {
     const buildingData = await fetchBuildingGeometry(buildingExternalId);
     const floorsData = await fetchBuildingFloors(buildingExternalId);
 
-    const floors = floorsData.length > 0 ? floorsData : [{ floor: 0, totalCount: 0 }];
+    const rawFloors = floorsData.length > 0 ? floorsData : [{ floor: 0, totalCount: 0 }];
+    const visibleFloors = rawFloors.filter((f) => Number(f.floor) !== 0);
+    const floors = visibleFloors.length > 0 ? visibleFloors : rawFloors;
     const selectedFloor = floors[0].floor;
 
     const buildingName =

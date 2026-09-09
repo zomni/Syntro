@@ -141,7 +141,59 @@ public class RoomLayoutService
             }
         }
 
+        var declaredFloors = await LoadDeclaredFloorsAsync(buildingExternalId, ct);
+
+        foreach (var floor in declaredFloors)
+        {
+            if (allFloors.Any(f => f.Floor == floor)) continue;
+
+            allFloors.Add(new FloorSummaryDto
+            {
+                Floor = floor,
+                SyncedCount = 0,
+                ManualCount = 0
+            });
+        }
+
         return allFloors.OrderBy(f => f.Floor).ToList();
+    }
+
+    private async Task<List<int>> LoadDeclaredFloorsAsync(
+        string buildingExternalId, CancellationToken ct = default)
+    {
+        var syncedFloorsJson = await _context.SyncedBuildings
+            .AsNoTracking()
+            .Where(b => b.ExternalId == buildingExternalId)
+            .Select(b => b.ManualFloorsJson != "" ? b.ManualFloorsJson : b.FloorsJson)
+            .FirstOrDefaultAsync(ct);
+
+        if (!string.IsNullOrWhiteSpace(syncedFloorsJson))
+        {
+            return ParseFloorList(syncedFloorsJson);
+        }
+
+        var manualFloorsJson = await _context.ManualBuildings
+            .AsNoTracking()
+            .Where(b => b.ExternalId == buildingExternalId)
+            .Select(b => b.FloorsJson)
+            .FirstOrDefaultAsync(ct);
+
+        return string.IsNullOrWhiteSpace(manualFloorsJson)
+            ? new List<int>()
+            : ParseFloorList(manualFloorsJson);
+    }
+
+    private static List<int> ParseFloorList(string floorsJson)
+    {
+        try
+        {
+            var floors = System.Text.Json.JsonSerializer.Deserialize<List<int>>(floorsJson);
+            return floors ?? new List<int>();
+        }
+        catch
+        {
+            return new List<int>();
+        }
     }
 }
 
