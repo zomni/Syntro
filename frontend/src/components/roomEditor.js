@@ -82,8 +82,10 @@ const createToggleButton = () => {
   const button = document.createElement("button");
   button.type = "button";
   button.id = "room-editor-toggle";
-  button.className = "dashboard-link manual-building-editor-button building-tool-button";
-  button.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#9635;</span><span>Editar forma</span>';
+  button.className = "dashboard-link manual-building-editor-button building-tool-button is-icon-only";
+  button.title = "Editar forma";
+  button.setAttribute("aria-label", "Editar forma");
+  button.innerHTML = '<span class="map-tool-button-icon" aria-hidden="true">&#9635;</span>';
   button.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();

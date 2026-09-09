@@ -414,8 +414,6 @@ const removeGeometryControls = () => {
 export const syncBuildingGeometryEditorForSession = (session) => {
   if (session?.isAdmin) {
     createGeometryControls();
-  } else {
-    removeGeometryControls();
   }
 };
 

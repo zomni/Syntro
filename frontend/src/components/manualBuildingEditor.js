@@ -344,8 +344,6 @@ export const initManualBuildingEditor = async () => {
 export const syncManualBuildingEditorForSession = (session) => {
   if (session?.isAdmin) {
     createEditorControls();
-  } else {
-    removeEditorControls();
   }
 };
 

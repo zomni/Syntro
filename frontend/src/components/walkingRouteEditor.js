@@ -1284,8 +1284,6 @@ const loadSession = async () => {
 export const syncWalkingRouteEditorForSession = (session) => {
   if (session?.isAdmin) {
     createEditorControls();
-  } else {
-    removeEditorControls();
   }
 };
 

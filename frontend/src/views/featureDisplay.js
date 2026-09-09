@@ -246,7 +246,7 @@ const restoreMapBoundsAfterPopup = () => {
 };
 
 const popupViewState = {};
-const popupViewSelectorOpenState = {};
+const popupViewContentOpenState = {};
 const popupRoomState = {};
 const popupDeviceState = {};
 const popupDeviceQueryState = {};
@@ -1632,19 +1632,9 @@ const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) 
 
   if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
 
-  const isOpen = Boolean(popupViewSelectorOpenState[featureId]);
-
   let html = `
     <div style="margin-top:10px;">
-      <button
-        class="floorButton"
-        type="button"
-        style="${getChipButtonStyle(false, true)}"
-        onclick="window.togglePopupViewSelector && window.togglePopupViewSelector('${escapeHtml(featureId)}')"
-      >
-        Vista ${isOpen ? "▾" : "▸"}
-      </button>
-      <div style="${chipRowStyle}${isOpen ? "" : " display:none;"}">
+      <div style="${chipRowStyle}">
   `;
 
   for (const view of views) {
@@ -1663,6 +1653,18 @@ const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) 
 
   html += `</div></div>`;
   return html;
+};
+
+const getViewLabel = (viewKey, canViewEquipment = true) => {
+  const views = [
+    { key: "summary", label: "Resumen" },
+    { key: "rooms", label: "Salas" },
+    { key: "history", label: "Historial" },
+  ];
+
+  if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
+
+  return views.find((view) => view.key === viewKey)?.label || "Vista";
 };
 
 const refreshCurrentPopup = async () => {
@@ -1697,9 +1699,9 @@ window.setPopupView = (featureId, viewKey) => {
   refreshCurrentPopup();
 };
 
-window.togglePopupViewSelector = (featureId) => {
+window.togglePopupViewContent = (featureId) => {
   if (!featureId) return;
-  popupViewSelectorOpenState[featureId] = !popupViewSelectorOpenState[featureId];
+  popupViewContentOpenState[featureId] = !popupViewContentOpenState[featureId];
   refreshCurrentPopup();
 };
 
@@ -1921,8 +1923,23 @@ const getFeaturePopupHtml = async (feature) => {
       <b style="font-size:16px;">${escapeHtml(featureName)}</b>
   `;
 
-  detailsHtml += buildFloorSelectorHtml(building, currentFloor);
+detailsHtml += buildFloorSelectorHtml(building, currentFloor);
   detailsHtml += buildViewSelectorHtml(featureId, currentView, canViewEquipment);
+
+  const viewContentOpen = Boolean(popupViewContentOpenState[featureId]);
+  const viewContentStyle = viewContentOpen ? "margin-top:8px;" : "display:none; margin-top:8px;";
+  detailsHtml += `
+    <div style="margin-top:6px;">
+      <button
+        class="floorButton"
+        type="button"
+        style="${getChipButtonStyle(false, true)}"
+        onclick="window.togglePopupViewContent && window.togglePopupViewContent('${escapeHtml(featureId)}')"
+      >
+        ${escapeHtml(getViewLabel(currentView, canViewEquipment))} ${viewContentOpen ? "▾" : "▸"}
+      </button>
+      <div style="${viewContentStyle}">
+  `;
 
   if (currentView === "summary") {
     detailsHtml += `
@@ -1973,7 +1990,7 @@ const getFeaturePopupHtml = async (feature) => {
     `;
   }
 
-  if (currentView === "history") {
+if (currentView === "history") {
     detailsHtml += `
       <div style="${sectionBoxStyle}">
         <div style="font-weight:600; margin-bottom:6px;">Historial del edificio</div>
@@ -1981,6 +1998,8 @@ const getFeaturePopupHtml = async (feature) => {
       </div>
     `;
   }
+
+  detailsHtml += `</div></div>`;
 
   detailsHtml += `
     <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">

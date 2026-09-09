@@ -406,8 +406,6 @@ const removeSiteViewportControls = () => {
 export const syncSiteViewportPanelForSession = (session) => {
   if (session?.isAdmin) {
     createSiteViewportControls();
-  } else {
-    removeSiteViewportControls();
   }
 };
 
