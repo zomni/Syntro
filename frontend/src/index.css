@@ -324,12 +324,14 @@
     background: rgba(var(--pi-surface-rgb), 0.26);
 }
 
-.session-mode-badge[data-authenticated="true"] {
+.session-mode-badge[data-authenticated="true"],
+.session-mode-badge[data-authenticated="false"] {
     align-items: stretch;
     flex-direction: column;
 }
 
-.session-mode-badge[data-authenticated="true"] .session-mode-logout {
+.session-mode-badge[data-authenticated="true"] .session-mode-logout,
+.session-mode-badge[data-authenticated="false"] .session-mode-login {
     width: 100%;
 }
 

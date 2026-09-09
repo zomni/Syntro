@@ -9,7 +9,6 @@ import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
-import { identifiers } from "../utils/identifiers.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -575,12 +574,6 @@ const refreshBackendSessionForExport = async () => {
   backendSessionIsAdmin = !!session?.isAdmin;
   updateExportBackupButtonVisibility();
 };
-
-window.addEventListener(identifiers.events.sessionChanged, () => {
-  resetBuildingEquipmentSummaryCache();
-  refreshCurrentMapData();
-  refreshBackendSessionForExport();
-});
 
 const updateBackendStatusPanel = (syncState) => {
   const panel = ensureBackendStatusPanel();
