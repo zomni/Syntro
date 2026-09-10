@@ -183,7 +183,7 @@ export const goTo = (campus, options = {}) => {
     if (button.id == "bLoc") return;
     
     button.onclick = function () {
-      const defaultFloorId = resolveFloorButtonId(0, campus_info["floors"]);
+      const defaultFloorId = resolveFloorButtonId(campus_info["defaultFloor"], campus_info["floors"]);
       if (button.id !== defaultFloorId && button.classList.contains("selectedFloorButton")) {
         const defaultButton = document.getElementById(defaultFloorId);
         if (defaultButton) forceChange(campus_info["school"], defaultButton.id, location);
@@ -204,7 +204,7 @@ export const setDefaultFloor = (campus) => {
   }
 
   const campusInfo = getSite(campus);
-  const buttonId = resolveFloorButtonId(0, campusInfo["floors"]);
+  const buttonId = resolveFloorButtonId(campusInfo["defaultFloor"], campusInfo["floors"]);
 
   if (document.getElementById(buttonId)) {
     forceChange(campusInfo["school"], buttonId, campus);

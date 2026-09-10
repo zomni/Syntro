@@ -4,6 +4,7 @@ import {
   requestAdminMapToolMode,
   setAdminMapToolsStatus,
   getAdminMapToolSection,
+  removeAdminMapToolSection,
 } from "./adminMapToolsPanel.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
@@ -54,7 +55,28 @@ const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
 };
 
-export const initRoomEditor = () => {
+const loadSession = async () => {
+  try {
+    const response = await fetch(`${getApiUrl()}/api/auth/session`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+};
+
+const readSelectedMapFloor = () => {
+  const button = document.querySelector(
+    "#floorButtons-container .selectedFloorButton, #map-floor-filter-buttons .selectedFloorButton"
+  );
+  if (!button) return null;
+  const parsed = parseInt(button.textContent.trim(), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+export const initRoomEditor = async () => {
   window.selectRoomEditorFloor = selectRoomEditorFloor;
   window.selectRoomMode = selectRoomMode;
   window.deleteSelectedRoom = deleteSelectedRoom;
@@ -68,13 +90,29 @@ export const initRoomEditor = () => {
   window.copySelectedRoom = copySelectedRoom;
   window.pasteRoom = pasteRoom;
 
-  createToggleButton();
   listenForBuildingClick();
+  syncRoomEditorForSession(await loadSession());
 };
+
+export const syncRoomEditorForSession = (session) => {
+  if (session?.isAdmin) {
+    createToggleButton();
+  }
+};
+
+window.addEventListener("syntro-session-changed", (event) => {
+  const session = event.detail || {};
+  if (session?.isAdmin) {
+    createToggleButton();
+    return;
+  }
+  cancelRoomEditor();
+  removeAdminMapToolSection("rooms");
+});
 
 const createToggleButton = () => {
   const sectionBody = getAdminMapToolSection("rooms");
-  if (!sectionBody) return;
+  if (!sectionBody || document.getElementById("room-editor-toggle")) return;
 
   const wrapper = document.createElement("div");
   wrapper.className = "admin-map-tools-group";
@@ -130,10 +168,9 @@ const openRoomEditor = async (buildingExternalId, feature) => {
     const buildingData = await fetchBuildingGeometry(buildingExternalId);
     const floorsData = await fetchBuildingFloors(buildingExternalId);
 
-    const rawFloors = floorsData.length > 0 ? floorsData : [{ floor: 0, totalCount: 0 }];
-    const visibleFloors = rawFloors.filter((f) => Number(f.floor) !== 0);
-    const floors = visibleFloors.length > 0 ? visibleFloors : rawFloors;
-    const selectedFloor = floors[0].floor;
+    const floors = floorsData.length > 0 ? floorsData : [{ floor: 1, totalCount: 0 }];
+    const mapFloor = readSelectedMapFloor();
+    const selectedFloor = floors.find((f) => Number(f.floor) === mapFloor)?.floor ?? floors[0].floor;
 
     const buildingName =
       feature?.properties?.mapLabel ||

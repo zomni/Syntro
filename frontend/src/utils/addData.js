@@ -320,10 +320,9 @@ const addManualRoomPolygonsForFloor = async (floorNumber, expectedRenderSequence
 
   let rooms = [];
   try {
-    const response = await fetch(
-      `${BACKEND_API_URL}/api/manual-rooms?floor=${encodeURIComponent(floorNumber)}`,
-      { cache: "no-store" }
-    );
+    const response = await fetch(`${BACKEND_API_URL}/api/manual-rooms`, {
+      cache: "no-store",
+    });
     rooms = response.ok ? await response.json() : [];
   } catch (error) {
     console.error("Error cargando salas manuales para el mapa:", error);
@@ -334,12 +333,17 @@ const addManualRoomPolygonsForFloor = async (floorNumber, expectedRenderSequence
     return;
   }
 
+  const allowedBuildingIds = await getAllowedBuildingIdsForFloor(floorNumber);
+  if (!allowedBuildingIds || expectedRenderSequence !== renderSequence) {
+    return;
+  }
+
   roomLayerGroup.clearLayers();
 
   let paintedCount = 0;
 
   for (const room of rooms) {
-    if (Number(room.floor) !== Number(floorNumber)) continue;
+    if (!allowedBuildingIds.has(room.buildingExternalId)) continue;
 
     let geometry;
     try {
