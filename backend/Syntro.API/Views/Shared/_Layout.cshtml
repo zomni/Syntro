@@ -55,12 +55,15 @@
         .sidebar .nav-link:hover, .sidebar .nav-link.active { color: #fff; background: #1e293b; }
         .sidebar .nav-link.active { box-shadow: inset 3px 0 0 var(--pi-primary); background: #1e293b; }
         .sidebar-brand { color: #2dd4bf !important; font-weight: 700; }
-        .session-card { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
+        .session-card { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .session-card:hover { background: rgba(45, 212, 191, 0.14); border-color: rgba(45, 212, 191, 0.4); }
         .session-card .text-info { color: #2dd4bf !important; }
         .session-dropdown-toggle { border: 0; background: transparent; padding: 0.25rem 0 0.25rem 0.25rem; box-shadow: none; transition: transform 0.18s ease; }
         .session-dropdown-toggle:focus, .session-dropdown-toggle:active, .session-dropdown-toggle:focus-visible { box-shadow: none; outline: none; }
         .session-dropdown-toggle:hover { transform: translateX(6px); }
-        .session-dropdown-menu { background: #ffffff; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 10px; padding: 0.4rem; min-width: 210px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22); }
+        .session-dropdown-menu { position: fixed; right: auto; background: #ffffff; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 10px; padding: 0.4rem; min-width: 210px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22); z-index: 1060; }
+        @@keyframes session-menu-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+        .session-dropdown-menu.show { animation: session-menu-in 0.18s ease; }
         .session-dropdown-menu .dropdown-item { color: #0f172a; padding: 0.45rem 0.75rem; font-size: 0.9rem; border-radius: 6px; }
         .session-dropdown-menu .dropdown-item:hover, .session-dropdown-menu .dropdown-item:focus, .session-dropdown-menu .dropdown-item.active { color: #0f172a; background: #f1f5f9; }
         .session-dropdown-menu .dropdown-divider { border-color: #e2e8f0; margin: 0.4rem 0; }
@@ -129,7 +132,7 @@
                                     : "viewer";
                     }
                     <div class="dropdown session-dropdown">
-                        <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center" type="button" aria-expanded="false">
                             <span class="d-flex flex-column gap-1">
                                 <span class="fw-semibold text-truncate">@(User.Identity?.Name ?? "Sin sesion")</span>
                                 <span class="small text-info">Rol: @roleLabel</span>
@@ -582,6 +585,67 @@
     window.addEventListener("DOMContentLoaded", () => {
         if (window.location.pathname.startsWith("/Auth")) {
             return;
+        }
+
+        const sessionToggle = document.querySelector(".session-dropdown-toggle");
+        const sessionMenu = document.querySelector(".session-dropdown-menu");
+        const sessionDropdown = sessionToggle?.closest(".session-dropdown");
+
+        if (sessionToggle && sessionMenu && sessionDropdown) {
+            const openSessionMenu = () => {
+                const rect = sessionToggle.getBoundingClientRect();
+                const gap = 8;
+                const menuWidth = sessionMenu.offsetWidth || 220;
+                const left = Math.max(gap, Math.min(rect.right + gap, window.innerWidth - menuWidth - gap));
+                const top = Math.max(gap, rect.top);
+                sessionMenu.style.left = `${left}px`;
+                sessionMenu.style.top = `${top}px`;
+                sessionDropdown.classList.add("show");
+                sessionMenu.classList.add("show");
+                sessionToggle.setAttribute("aria-expanded", "true");
+
+                const submenu = sessionDropdown.querySelector(".dropdown-submenu");
+                if (submenu) {
+                    submenu.classList.add("open");
+                    const submenuToggle = submenu.querySelector("[data-submenu-toggle]");
+                    if (submenuToggle) {
+                        submenuToggle.setAttribute("aria-expanded", "true");
+                    }
+                }
+            };
+
+            const closeSessionMenu = () => {
+                sessionDropdown.classList.remove("show");
+                sessionMenu.classList.remove("show");
+                sessionToggle.setAttribute("aria-expanded", "false");
+            };
+
+            sessionToggle.addEventListener("click", () => {
+                if (sessionMenu.classList.contains("show")) {
+                    closeSessionMenu();
+                } else {
+                    openSessionMenu();
+                }
+            });
+
+            document.addEventListener("click", (ev) => {
+                if (!sessionMenu.classList.contains("show")) {
+                    return;
+                }
+                if (sessionToggle.contains(ev.target)) {
+                    return;
+                }
+                closeSessionMenu();
+            });
+
+            document.addEventListener("keydown", (ev) => {
+                if (ev.key === "Escape") {
+                    closeSessionMenu();
+                }
+            });
+
+            window.addEventListener("scroll", closeSessionMenu, true);
+            window.addEventListener("resize", closeSessionMenu);
         }
 
         document.querySelectorAll("[data-submenu-toggle]").forEach((toggle) => {
