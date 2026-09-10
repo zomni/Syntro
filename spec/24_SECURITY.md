@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Defaults for a blank, secure white-label instance.
+Defaults for a blank, secure instance.
 
 ## Passwords
 

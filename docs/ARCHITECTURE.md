@@ -1,6 +1,6 @@
 # Arquitectura de Syntro
 
-Syntro es una plantilla white-label de dos aplicaciones que se ejecutan como un solo stack:
+Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
 
 - **Frontend** (`frontend/`): aplicación de mapa de una página (vanilla JavaScript + Leaflet),
   empaquetada con Webpack y servida como bundle estático (Nginx).
@@ -64,17 +64,18 @@ Syntro es una plantilla white-label de dos aplicaciones que se ejecutan como un 
 - **Panel admin**: vistas Razor bajo `/dashboard` y `/admin/*` (inventario, equipos,
   cumplimiento, telemetría, usuarios).
 
-## Campus (white-label)
+## Campus (cliente único)
 
 El campus es **configuración, no código**:
 
-- `frontend/src/data/campuses.js` define el campus canónico (school, pisos, centro, bounds).
+- `frontend/src/data/campuses.js` define el campus único `sotero` (school `cs`,
+  pisos, centro, bounds).
 - Los nombres de datos derivan de `school` + key del campus.
-- En backend, el campus por defecto es `CampusSettings:DefaultCampus` (vacío). Las
+- En backend, el campus por defecto es `CampusSettings:DefaultCampus`. Las
   operaciones de escritura (edificios manuales, rutas, respaldo estático) rechazan peticiones
   sin campus con `400`.
 
-## Identificadores (white-label)
+## Identificadores
 
 Prefijos de artefactos en `frontend/src/utils/identifiers.js`:
 

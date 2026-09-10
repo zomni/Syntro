@@ -1,8 +1,8 @@
 # Roadmap
 
-## Phase 1 — White-Label Foundation
+## Phase 1 — Foundation
 
-- Template repository and documentation (SPEC 11).
+- Repository and documentation (SPEC 11).
 - Configuration, branding and campus model (SPECs 01–03).
 - Internal identifiers (SPEC 10).
 

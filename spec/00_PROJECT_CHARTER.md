@@ -2,17 +2,30 @@
 
 ## Project Name
 
-Syntro (working codename). The final product name is defined by the licensee.
+Syntro — aplicación de mapeo indoor, inventario de activos y telemetría de red
+para el **Complejo Hospitalario Sotero del Río** (campus único `sotero`).
 
 ## Purpose
 
-Build a white-label, reusable starter kit for indoor mapping, asset inventory and network telemetry.
+Build and operate the indoor mapping, asset inventory and network telemetry
+application for the hospital, as a single-client deployment on a single campus.
 
-The kit is a generic template derived from an existing client-specific implementation. It must not assume any specific business domain and should be adaptable to hospitals, offices, universities, malls, warehouses, factories, airports or any indoor environment.
+## Evolution
+
+Syntro comenzó como un extracto neutral reutilizable ("white-label") derivado de
+los repositorios cliente y se consolidó como producto de **cliente único**:
+
+- La fase de extracción (Fases 0–6, SPECs 01–27) eliminó tokens del cliente,
+  neutralizó branding, prefijos y configuraciones, y generalizó la base.
+- Decisión posterior: desplegar como aplicación de cliente único sobre el campus
+  `sotero`, sin modelos multi-cliente ni white-labeling.
+- Se mantiene la neutralidad técnica de la base (ningún dato sensible del cliente
+  está hardcodeado en el código), pero la operación y configuración apuntan a un
+  solo hospital.
 
 ## Origin
 
-The template is extracted from two existing repositories:
+The application is derived from two existing repositories:
 
 - Frontend: Leaflet-based map application (formerly `sotero_map`).
 - Backend: ASP.NET Core 8 + EF Core SQLite API and admin dashboard (formerly `sotero_map_api`).
@@ -21,34 +34,17 @@ Existing functionality is preserved and reused, not rebuilt.
 
 ## Core Objectives
 
-- Reusable white-label map application
-- Campus / Site configuration from template configuration
-- Building, floor and room management
+- Indoor map application for campus `sotero`
+- Building, floor and room management (incl. sugerencia de salas)
 - Inventory management with configurable categories
-- Admin map editing tools
+- Admin map editing tools (buildings, geometry, walking routes, POIs)
 - Walking routes and route planning
 - Points of interest management
-- Network telemetry
+- Network telemetry and scheduled captures
 - Equipment delivery forms with PDF generation
-- Authentication, roles, MFA, audit and backups
+- Authentication, roles, MFA, audit, backups and scoping por organización/campus
 
-## What Must Disappear
-
-- All hospital-specific branding and names
-- Hardcoded campus and building identifiers
-- Seed data and demo content
-- Client configuration defaults (LDAP, CORS, telemetry, timezone)
-- Client-specific documents and templates
-- Any reference to the original client, its buildings, or its domains
-
-## MVP Constraints
-
-- ASP.NET Core 8
-- EF Core + SQLite
-- Vanilla JavaScript + Leaflet + Webpack
-- Docker
-
-## Principles
+## Tenets
 
 - Reuse before replace
 - Generalize before rewrite
@@ -56,3 +52,11 @@ Existing functionality is preserved and reused, not rebuilt.
 - Extend before modify
 - Keep backward compatibility
 - Minimize breaking changes
+- No data sensible del cliente hardcodeado en el código
+
+## MVP Constraints
+
+- ASP.NET Core 8
+- EF Core + SQLite
+- Vanilla JavaScript + Leaflet + Webpack
+- Docker

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Centralize internal application prefixes (storage, events, window names) so a white-label instance can rename them without touching every file.
+Centralize internal application prefixes (storage, events, window names) so the application can rename them without touching every file.
 
 ## Current State
 

@@ -1,7 +1,7 @@
 {
   "name": "syntro",
   "version": "1.0.0",
-  "description": "White-label template for indoor mapping, asset inventory and network telemetry",
+  "description": "Indoor mapping, asset inventory and network telemetry map for Complejo Hospitalario Sotero del Rio",
   "private": true,
   "scripts": {
     "test": "jest",

@@ -2,9 +2,11 @@
 
 ## Estado actual
 
-Syntro es un SaaS white-label starter kit derivado de los proyectos cliente
-`sotero_map` (frontend vanilla JS + Leaflet + Webpack) y `sotero_map_api`
-(backend ASP.NET Core 8 + EF Core + SQLite + Razor admin).
+Syntro es la aplicación de mapeo indoor, inventario de activos y telemetría de red del
+Complejo Hospitalario Sotero del Río (campus único `sotero`), derivada de los proyectos
+cliente `sotero_map` (frontend vanilla JS + Leaflet + Webpack) y `sotero_map_api`
+(backend ASP.NET Core 8 + EF Core + SQLite + Razor admin). Comenzó como un extracto
+neutral reutilizable y se consolidó en un despliegue de cliente único.
 
 ## Lo completado
 
@@ -17,11 +19,11 @@ Syntro es un SaaS white-label starter kit derivado de los proyectos cliente
   - categorías + POIs = incluir
   - proyecto standalone nuevo en carpeta nueva (nada llamado "sotero")
   - nombre de trabajo "Syntro" reemplazable cuando se nombre el producto final
-  - fase de implementación = Fase 0+1 (fundación white-label), sin contenido de cliente, con Docker
+  - fase de implementación = Fase 0+1 (fundación neutra), sin contenido de cliente, con Docker
 - **28 SPECs escritas** en `C:\Users\paolo.vilches\Documents\repos\Syntro\spec\`:
   - 00–11: SPECs delta (transformación brownfield del sistema cliente)
   - 12–27: SPECs producto (arquitectura backend/frontend, entidades, API, seguridad, deployment, testing, roadmap)
-- **Fase 0+1 implementada** (fundación white-label):
+- **Fase 0+1 implementada** (fundación neutra):
   - Repo `Syntro` inicializado con `.gitignore` y estructura `backend/`, `frontend/`, `tools/`, `docs/`, `spec/`.
   - Extracción brownfield: backend (`Syntro.API`), tools (`Syntro.NetworkCollector`) y frontend renombrados y neutralizados (0 tokens de cliente en código enviado).
   - SPEC 01: `appsettings.json` y `.env.example` genéricos.
