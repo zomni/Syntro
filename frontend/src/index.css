@@ -2118,11 +2118,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     box-sizing: border-box;
 }
 
-.backend-export-backup-button {
-    border-color: rgba(var(--pi-primary-rgb), 0.55);
-    background: var(--pi-surface-soft);
-}
-
 .route-planner-search::placeholder {
     color: var(--pi-gray-400);
 }

@@ -23,6 +23,16 @@ const deriveCenterFromGeometry = (feature) => {
 };
 
 const createMarker = (element) => {
+  // Building polygons must not receive an icon marker. Keep only real POIs.
+  if (element?.geometry?.type !== "Point") {
+    return null;
+  }
+
+  const markerUrl = element?.properties?.style?.icon;
+  if (!markerUrl) {
+    return null;
+  }
+
   const rawCenter =
     Array.isArray(element.properties.center) && element.properties.center.length === 2
       ? element.properties.center
@@ -32,11 +42,10 @@ const createMarker = (element) => {
     return null;
   }
 
-  var markerUrle = element.properties.style.icon;
   var markerName = element.properties.name;
   // Customize the marker icon
   var mapIcon = L.icon({
-    iconUrl: "assets/icons_os/" + markerUrle,
+    iconUrl: "assets/icons_os/" + markerUrl,
     iconSize: [11, 11],
     iconAnchor: [5, 3],
     popupAnchor: [0, 0],

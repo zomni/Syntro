@@ -21,7 +21,6 @@ let popupReturnView = null;
 let popupBoundsState = null;
 let routeOriginFeatureId = null;
 let routeDestinationFeatureId = null;
-let backendSessionIsAdmin = false;
 
 window.openSyntroDashboard = (event, url) => {
   event?.preventDefault?.();
@@ -309,9 +308,7 @@ const initBuildingLabelToggle = () => {
 const updateBackendSessionCache = (session) => {
   backendSessionCache = session || { isAuthenticated: false, isAdmin: false };
   backendSessionCacheAt = Date.now();
-  backendSessionIsAdmin = !!backendSessionCache.isAdmin;
   window.syntroBackendSession = backendSessionCache;
-  updateExportBackupButtonVisibility();
 };
 
 const loadBackendSession = async () => {
@@ -452,9 +449,8 @@ const getBackendStatusPanelMarkup = () => `
   <span id="backend-status-text" hidden></span>
   <span id="backend-version" hidden></span>
   <span id="backend-last-change" hidden></span>
-  <span id="backend-sync-message" hidden></span>
+<span id="backend-sync-message" hidden></span>
   <button id="backend-refresh-button" type="button" hidden></button>
-  <button id="backend-export-backup-button" type="button" hidden></button>
 `;
 
 const ensureBackendStatusPanel = () => {
@@ -491,7 +487,6 @@ const ensureBackendStatusPanel = () => {
     lastChange: root.querySelector("#backend-last-change"),
     message: root.querySelector("#backend-sync-message"),
     refreshButton: root.querySelector("#backend-refresh-button"),
-    exportBackupButton: root.querySelector("#backend-export-backup-button"),
     dashboardLink: document.getElementById("dashboard-link"),
   };
 
@@ -499,7 +494,7 @@ const ensureBackendStatusPanel = () => {
     panel.dashboardLink.href = `${BACKEND_API_URL}/dashboard`;
   }
 
-  panel.refreshButton?.addEventListener("click", async () => {
+panel.refreshButton?.addEventListener("click", async () => {
     loadedEquipmentRevision = pendingEquipmentRevision || loadedEquipmentRevision;
     pendingEquipmentRevision = null;
     resetBuildingEquipmentSummaryCache();
@@ -516,63 +511,8 @@ const ensureBackendStatusPanel = () => {
     await refreshCurrentPopup();
   });
 
-  panel.exportBackupButton?.addEventListener("click", () => {
-    void handleExportStaticBackup();
-  });
-
   backendStatusPanel = panel;
   return panel;
-};
-
-const handleExportStaticBackup = async () => {
-  const panel = ensureBackendStatusPanel();
-  if (!panel?.exportBackupButton) return;
-
-  const originalText = panel.exportBackupButton.textContent;
-  panel.exportBackupButton.disabled = true;
-  panel.exportBackupButton.textContent = "Guardando...";
-  panel.message.textContent = "Guardando respaldo estatico en src/data...";
-
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/frontend-static-backup/save?campus=${getCurrentCampusKey()}`, {
-      method: "POST",
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    const result = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(result?.message || `API respondio ${response.status}`);
-    }
-
-    resetSearchMetadataCaches();
-    resetBuildingsCatalogCache();
-    if (typeof window.refreshVisibleWalkingRoutes === "function") {
-      await window.refreshVisibleWalkingRoutes();
-    }
-
-    panel.message.textContent =
-      `Respaldo guardado: ${result?.routes?.nodes ?? 0} nodos, ${result?.routes?.edges ?? 0} tramos, ${result?.buildings?.synced ?? 0} edificios.`;
-  } catch (error) {
-    console.error("Error guardando respaldo estatico del mapa:", error);
-    panel.message.textContent = error?.message || "No se pudo guardar el respaldo. Revisa la consola.";
-  } finally {
-    panel.exportBackupButton.disabled = false;
-    panel.exportBackupButton.textContent = originalText || "Guardar respaldo";
-  }
-};
-
-const updateExportBackupButtonVisibility = () => {
-  const panel = ensureBackendStatusPanel();
-  if (!panel?.exportBackupButton) return;
-
-  panel.exportBackupButton.hidden = !(backendSessionIsAdmin && panel.root.dataset.backendState === "online");
-};
-
-const refreshBackendSessionForExport = async () => {
-  const session = await loadBackendSession();
-  backendSessionIsAdmin = !!session?.isAdmin;
-  updateExportBackupButtonVisibility();
 };
 
 const updateBackendStatusPanel = (syncState) => {
@@ -585,13 +525,12 @@ const updateBackendStatusPanel = (syncState) => {
   panel.root.dataset.backendState = isOnline ? "online" : "offline";
   panel.root.dataset.pendingChanges = hasPendingChanges ? "true" : "false";
 
-  if (!isOnline) {
+if (!isOnline) {
     panel.statusText.textContent = "Sin conexion con la API";
     panel.version.textContent = "Mapa actual";
     panel.lastChange.textContent = "Sin registros";
     panel.message.textContent = "No hay actualizaciones pendientes.";
     panel.refreshButton.hidden = true;
-    updateExportBackupButtonVisibility();
     return;
   }
 
@@ -601,8 +540,7 @@ const updateBackendStatusPanel = (syncState) => {
   panel.message.textContent = hasPendingChanges
     ? "Hay cambios pendientes en el mapa o inventario. Usa Actualizar mapa."
     : "No hay actualizaciones pendientes.";
-  panel.refreshButton.hidden = !hasPendingChanges;
-  updateExportBackupButtonVisibility();
+panel.refreshButton.hidden = !hasPendingChanges;
 };
 
 const loadEquipmentSyncState = async () => {
@@ -673,7 +611,6 @@ window.acknowledgeCurrentMapSyncState = acknowledgeCurrentMapSyncState;
 
 const startEquipmentSyncMonitor = () => {
   ensureBackendStatusPanel();
-  void refreshBackendSessionForExport();
   void checkEquipmentSyncState();
 
   window.addEventListener("focus", checkEquipmentSyncState);
@@ -2278,9 +2215,17 @@ if (document.readyState === "loading") {
 }
 
 window.addEventListener("syntro-session-changed", (event) => {
-  updateBackendSessionCache(event.detail || {});
+  const detail = event.detail || {};
+  const hasAuthFlag = typeof detail.isAuthenticated === "boolean";
 
-  if (!event?.detail?.isAuthenticated) {
+  if (hasAuthFlag) {
+    updateBackendSessionCache(detail);
+  } else {
+    backendSessionCache = null;
+    backendSessionCacheAt = 0;
+  }
+
+  if (hasAuthFlag && !detail.isAuthenticated) {
     clearMapEquipmentState();
     goTo(getPrimaryCampusKey());
   } else {

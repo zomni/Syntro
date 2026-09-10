@@ -136,9 +136,6 @@ const openLoginModal = () => {
 
       close();
       await refreshSessionBadge();
-      window.dispatchEvent(
-        new CustomEvent(identifiers.events.sessionChanged, { detail: data || {} })
-      );
     } catch {
       errorEl.textContent = "No se pudo contactar el backend.";
       errorEl.hidden = false;
