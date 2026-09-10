@@ -1,5 +1,13 @@
 # Instrucciones para el agente (AGENTS.md)
 
+## Repositorio
+
+- Único repo de trabajo: `C:\Users\paolo.vilches\Documents\repos\Syntro`
+  (remoto `https://github.com/zomni/Syntro.git`). Ignorar y NO usar
+  `repos\Pireon` (copia obsoleta pendiente de eliminar).
+- Stack único de desarrollo: API en `http://localhost:5001` y frontend en
+  `http://localhost:8081` (definido en `docker-compose.yml` y `.env`).
+
 ## Restart y rebuild
 
 - Siempre que se hagan cambios en el backend (`backend/Syntro.API`), el frontend
