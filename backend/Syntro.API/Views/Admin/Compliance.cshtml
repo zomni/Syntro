@@ -327,6 +327,46 @@
                     <div class="text-muted mt-2">Cargando usuarios...</div>
                 </div>
                 <div id="adminUsersContent" style="display:none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#createUserPanel" aria-expanded="false" aria-controls="createUserPanel">
+                            <i class="bi bi-person-plus me-1"></i>Nuevo usuario
+                        </button>
+                        <span id="adminUsersCount" class="text-muted small"></span>
+                    </div>
+                    <div id="createUserPanel" class="collapse mb-3 p-3 border rounded-3 bg-light">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted" for="createUserUsername">Usuario</label>
+                                <input id="createUserUsername" type="text" class="form-control" autocomplete="off">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted" for="createUserPassword">Contrasena (min 10)</label>
+                                <input id="createUserPassword" type="password" class="form-control" autocomplete="new-password">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted" for="createUserRole">Rol</label>
+                                <select id="createUserRole" class="form-select">
+                                    <option value="viewer">viewer</option>
+                                    <option value="editor">editor</option>
+                                    <option value="auditor">auditor</option>
+                                    <option value="admin">admin</option>
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <div class="form-check form-switch mt-4">
+                                    <input id="createUserCanManage" class="form-check-input" type="checkbox" role="switch" disabled>
+                                    <label class="form-check-label text-muted" for="createUserCanManage">Puede gestionar usuarios</label>
+                                </div>
+                            </div>
+                            <div class="col-md-7 d-flex align-items-center justify-content-end gap-2 flex-wrap">
+                                <div id="createUserError" class="alert alert-danger py-2 px-3 mb-0" style="display:none"></div>
+                                <button id="createUserCancel" type="button" class="btn btn-outline-secondary btn-sm">Cancelar</button>
+                                <button id="createUserSubmit" type="button" class="btn btn-success btn-sm">
+                                    <i class="bi bi-person-plus me-1"></i>Crear usuario
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="table-responsive">
                         <table class="table align-middle">
                             <thead>
@@ -427,7 +467,100 @@ if (adminModal) {
             });
     };
 
-    adminModal.addEventListener("show.bs.modal", () => {
+    const createPanel = document.getElementById("createUserPanel");
+    const createUsername = document.getElementById("createUserUsername");
+    const createPassword = document.getElementById("createUserPassword");
+    const createRole = document.getElementById("createUserRole");
+    const createCanManage = document.getElementById("createUserCanManage");
+    const createError = document.getElementById("createUserError");
+    const createSubmit = document.getElementById("createUserSubmit");
+    const createCancel = document.getElementById("createUserCancel");
+    const adminUsersCount = document.getElementById("adminUsersCount");
+
+    const setCreateError = (msg) => {
+        if (!createError) return;
+        createError.textContent = msg || "";
+        createError.style.display = msg ? "" : "none";
+    };
+
+    const updateCreateCanManage = () => {
+        if (!createCanManage) return;
+        const isAdmin = createRole?.value === "admin";
+        createCanManage.disabled = !isAdmin;
+        createCanManage.closest(".form-check")?.classList.toggle("text-muted", !isAdmin);
+        createCanManage.closest(".form-check")?.classList.toggle("opacity-50", !isAdmin);
+        if (!isAdmin) createCanManage.checked = false;
+    };
+
+    if (createRole) {
+        createRole.addEventListener("change", updateCreateCanManage);
+    }
+
+    const resetCreateForm = (collapse) => {
+        if (createUsername) createUsername.value = "";
+        if (createPassword) createPassword.value = "";
+        if (createRole) createRole.value = "viewer";
+        if (createCanManage) createCanManage.checked = false;
+        setCreateError("");
+        updateCreateCanManage();
+        if (collapse && createPanel) {
+            const bsCollapse = bootstrap.Collapse.getOrCreateInstance(createPanel);
+            if (bsCollapse._isShown()) bsCollapse.hide();
+        }
+    };
+
+    if (createCancel) {
+        createCancel.addEventListener("click", () => resetCreateForm(true));
+    }
+
+    if (createSubmit) {
+        createSubmit.addEventListener("click", () => {
+            const username = createUsername?.value?.trim() || "";
+            const password = createPassword?.value || "";
+            const role = createRole?.value || "viewer";
+            const canManage = (createCanManage?.checked || false) && role === "admin";
+            setCreateError("");
+
+            if (!username) {
+                setCreateError("El nombre de usuario es obligatorio.");
+                createUsername?.focus();
+                return;
+            }
+            if (password.length < 10) {
+                setCreateError("La contrasena debe tener al menos 10 caracteres.");
+                createPassword?.focus();
+                return;
+            }
+
+            createSubmit.disabled = true;
+            createSubmit.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Creando...';
+
+            fetch("/api/admin/users", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password, role, canManageUsers: canManage })
+            })
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                    return data;
+                })
+                .then(() => {
+                    resetCreateForm(true);
+                    loadUsers();
+                })
+                .catch((err) => {
+                    setCreateError(err.message);
+                })
+                .finally(() => {
+                    createSubmit.disabled = false;
+                    createSubmit.innerHTML = '<i class="bi bi-person-plus me-1"></i>Crear usuario';
+                });
+        });
+    }
+
+    const loadUsers = () => {
         loading.style.display = "";
         content.style.display = "none";
         errorDiv.style.display = "none";
@@ -440,6 +573,7 @@ if (adminModal) {
             .then((users) => {
                 loading.style.display = "none";
                 content.style.display = "";
+                if (adminUsersCount) adminUsersCount.textContent = users.length + " usuario(s)";
                     tbody.innerHTML = users.map((user) => {
                     const roleOptions = ["viewer", "editor", "auditor", "admin"].map((r) =>
                         `<option value="${r}"${user.role === r ? " selected" : ""}>${r}</option>`
@@ -453,7 +587,7 @@ if (adminModal) {
                         ? '<span class="badge bg-success">Activo</span>'
                         : '<span class="badge bg-danger">Inactivo</span>';
 
-                    return `<tr>
+                    return `<tr class="${user.isActive ? "" : "opacity-50"}">
                         <td><span class="fw-semibold">${user.username}</span></td>
                         <td>
                             <select class="form-select form-select-sm role-select" data-user-id="${user.id}" data-original-role="${user.role}">
@@ -468,9 +602,14 @@ if (adminModal) {
                         <td class="mfa-td">${mfaHtml}</td>
                         <td>${statusBadge}</td>
                         <td>
-                            <button class="btn btn-sm btn-outline-primary save-user-btn" data-user-id="${user.id}" data-username="${user.username}" disabled>
-                                <i class="bi bi-floppy"></i> Guardar
-                            </button>
+                            <div class="d-flex flex-column gap-1 align-items-start">
+                                <button class="btn btn-sm btn-outline-primary save-user-btn" data-user-id="${user.id}" data-username="${user.username}" disabled>
+                                    <i class="bi bi-floppy"></i> Guardar
+                                </button>
+                                <button class="btn btn-sm ${user.isActive ? "btn-outline-danger" : "btn-outline-success"} toggle-active-btn" data-user-id="${user.id}" data-username="${user.username}" data-active="${user.isActive}">
+                                    <i class="bi ${user.isActive ? "bi-person-x" : "bi-person-check"}"></i> ${user.isActive ? "Dar de baja" : "Dar de alta"}
+                                </button>
+                            </div>
                         </td>
                     </tr>`;
                 }).join("");
@@ -494,6 +633,34 @@ if (adminModal) {
                         const userId = el.getAttribute("data-user-id");
                         const btn = tbody.querySelector(`.save-user-btn[data-user-id="${userId}"]`);
                         if (btn) btn.disabled = false;
+                    });
+                });
+
+                tbody.querySelectorAll(".toggle-active-btn").forEach((btn) => {
+                    btn.addEventListener("click", () => {
+                        const userId = btn.getAttribute("data-user-id");
+                        const username = btn.getAttribute("data-username");
+                        const active = btn.getAttribute("data-active") === "true";
+                        if (!confirm(`¿${active ? "Dar de baja" : "Dar de alta"} al usuario ${username}?`)) return;
+                        btn.disabled = true;
+                        fetch(`/api/admin/users/${userId}/set-active`, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ active: !active })
+                        })
+                            .then(async (res) => {
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                                return data;
+                            })
+                            .then(() => {
+                                loadUsers();
+                            })
+                            .catch((err) => {
+                                alert("Error: " + err.message);
+                                btn.disabled = false;
+                            });
                     });
                 });
 
@@ -612,7 +779,9 @@ if (adminModal) {
                 errorDiv.style.display = "";
                 errorDiv.textContent = "Error al cargar usuarios: " + err.message;
             });
-    });
+    };
+
+    adminModal.addEventListener("show.bs.modal", loadUsers);
 }
 </script>
 }

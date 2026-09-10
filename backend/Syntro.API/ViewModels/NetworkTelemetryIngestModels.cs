@@ -147,6 +147,7 @@ public class NetworkTelemetryObservationQueryRequest
     public string BuildingExternalId { get; set; } = string.Empty;
     public string SubnetCidr { get; set; } = string.Empty;
     public string OnlineState { get; set; } = string.Empty;
+    public string DeviceCategory { get; set; } = string.Empty;
     public string ObservationType { get; set; } = "device";
     public string SortBy { get; set; } = "risk";
     public string SortDirection { get; set; } = "desc";
@@ -162,6 +163,7 @@ public class NetworkTelemetryObservationPageViewModel
     public string BuildingExternalId { get; set; } = string.Empty;
     public string SubnetCidr { get; set; } = string.Empty;
     public string OnlineState { get; set; } = string.Empty;
+    public string DeviceCategory { get; set; } = string.Empty;
     public string ObservationType { get; set; } = "device";
     public string SortBy { get; set; } = "risk";
     public string SortDirection { get; set; } = "desc";

@@ -57,6 +57,18 @@
         .sidebar-brand { color: #2dd4bf !important; font-weight: 700; }
         .session-card { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
         .session-card .text-info { color: #2dd4bf !important; }
+        .session-dropdown-toggle { border: 0; background: transparent; padding: 0.25rem 0 0.25rem 0.25rem; box-shadow: none; }
+        .session-dropdown-toggle:focus, .session-dropdown-toggle:active, .session-dropdown-toggle:focus-visible { box-shadow: none; outline: none; }
+        .session-dropdown-toggle .bi-chevron-down { transition: transform 0.15s ease; }
+        .session-dropdown.show .session-dropdown-toggle .bi-chevron-down { transform: rotate(180deg); }
+        .session-dropdown-menu { background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 0.4rem; min-width: 210px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4); }
+        .session-dropdown-menu .dropdown-item { color: #cbd5e1; padding: 0.45rem 0.75rem; font-size: 0.9rem; border-radius: 6px; }
+        .session-dropdown-menu .dropdown-item:hover, .session-dropdown-menu .dropdown-item:focus, .session-dropdown-menu .dropdown-item.active { color: #fff; background: #1e293b; }
+        .session-dropdown-menu .dropdown-divider { border-color: rgba(255, 255, 255, 0.08); margin: 0.4rem 0; }
+        .session-dropdown-menu .dropdown-submenu { position: relative; }
+        .session-dropdown-menu .dropdown-submenu .dropdown-submenu-menu { display: none; position: absolute; left: 100%; top: -8px; min-width: 190px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 0.4rem; z-index: 1060; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4); }
+        .session-dropdown-menu .dropdown-submenu.open .dropdown-submenu-menu { display: block; }
+        .session-dropdown-menu .dropdown-submenu.open > .dropdown-toggle { color: #fff; background: #1e293b; }
         .badge-active { background: #16a34a; }
         .badge-maintenance { background: #f59e0b; }
         .badge-inactive { background: #ef4444; }
@@ -107,19 +119,57 @@
                     </span>
                 </a>
                 <div class="session-card rounded-3 p-3 mb-4 text-white">
-                    <div class="small text-uppercase text-secondary mb-1">Sesion</div>
-                    <div class="fw-semibold">@(User.Identity?.Name ?? "Sin sesion")</div>
-                    <div class="small text-info">
-                        @{
-                            var roleLabel = User.IsInRole(Syntro.API.Models.AppRoles.Admin)
-                                ? "admin"
-                                : User.IsInRole("editor")
-                                    ? "editor"
-                                    : User.IsInRole("auditor")
-                                        ? "auditor"
-                                        : "viewer";
-                        }
-                        Rol: @roleLabel
+                    <div class="small text-uppercase text-secondary mb-1 pb-1">Sesion</div>
+                    @{
+                        var roleLabel = User.IsInRole(Syntro.API.Models.AppRoles.Admin)
+                            ? "admin"
+                            : User.IsInRole("editor")
+                                ? "editor"
+                                : User.IsInRole("auditor")
+                                    ? "auditor"
+                                    : "viewer";
+                    }
+                    <div class="dropdown session-dropdown">
+                        <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <span class="d-flex flex-column gap-1">
+                                <span class="fw-semibold text-truncate">@(User.Identity?.Name ?? "Sin sesion")</span>
+                                <span class="small text-info">Rol: @roleLabel</span>
+                            </span>
+                            <span class="ms-2 text-secondary"><i class="bi bi-chevron-down"></i></span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end session-dropdown-menu">
+                            <li>
+                                <a class="dropdown-item" href="#" id="myDataLink">
+                                    <i class="bi bi-person-vcard me-2"></i>Mis datos
+                                </a>
+                            </li>
+                            <li class="dropdown-submenu">
+                                <a class="dropdown-item dropdown-toggle" href="#" role="button" aria-haspopup="true" aria-expanded="false" data-submenu-toggle>
+                                    <i class="bi bi-tools me-2"></i>Herramientas
+                                </a>
+                                <ul class="dropdown-menu dropdown-submenu-menu">
+                                    <li>
+                                        <a class="dropdown-item" href="/dashboard/delivery-form">
+                                            <i class="bi bi-file-earmark-text me-2"></i>Formulario
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+                            @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin) || User.IsInRole(Syntro.API.Models.AppRoles.Auditor))
+                            {
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item" href="/dashboard/compliance">
+                                        <i class="bi bi-shield-check me-2"></i>Gestion
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="/dashboard/activity">
+                                        <i class="bi bi-clock-history me-2"></i>Actividad
+                                    </a>
+                                </li>
+                            }
+                        </ul>
                     </div>
                 </div>
                 <ul class="nav flex-column gap-1">
@@ -139,19 +189,6 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Activity" ? "active" : "")" href="/dashboard/activity">
-                            <i class="bi bi-clock-history me-2"></i>Actividad
-                        </a>
-                    </li>
-                    @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin) || User.IsInRole(Syntro.API.Models.AppRoles.Auditor))
-                    {
-                        <li class="nav-item">
-                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Compliance" ? "active" : "")" href="/admin/compliance">
-                                <i class="bi bi-shield-check me-2"></i>Gestión
-                            </a>
-                        </li>
-                    }
-                    <li class="nav-item">
                         <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "NetworkTelemetry" ? "active" : "")" href="/dashboard/network-telemetry">
                             <i class="bi bi-diagram-3 me-2"></i>Red y riesgo
                         </a>
@@ -159,11 +196,6 @@
                     <li class="nav-item">
                         <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "InventoryMatching" ? "active" : "")" href="/dashboard/network-telemetry/matching">
                             <i class="bi bi-crosshair me-2"></i>Coincidencias inventario
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString()?.Contains("DeliveryForm") == true ? "active" : "")" href="/dashboard/delivery-form">
-                            <i class="bi bi-file-earmark-text me-2"></i>Formulario
                         </a>
                     </li>
                     <li class="nav-item">
@@ -200,6 +232,44 @@
             <h5 class="fw-bold mb-2">Sesion caducada</h5>
             <p class="text-muted mb-3">Tu sesion expiro por inactividad.</p>
             <button type="button" id="session-reconnect" class="btn btn-primary">Volver a conectarse</button>
+        </div>
+    </div>
+
+    <div class="modal fade" id="myDataModal" tabindex="-1" aria-labelledby="myDataModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="myDataModalLabel"><i class="bi bi-person-vcard me-2"></i>Mis datos</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="myDataLoading" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status"></div>
+                    </div>
+                    <div id="myDataContent" style="display:none">
+                        <dl class="row mb-0">
+                            <dt class="col-5 text-muted">Usuario</dt>
+                            <dd class="col-7" id="myDataUsername"></dd>
+                            <dt class="col-5 text-muted">Rol</dt>
+                            <dd class="col-7" id="myDataRole"></dd>
+                            <dt class="col-5 text-muted">Gestion de usuarios</dt>
+                            <dd class="col-7" id="myDataCanManage"></dd>
+                            <dt class="col-5 text-muted">MFA</dt>
+                            <dd class="col-7" id="myDataMfa"></dd>
+                            <dt class="col-5 text-muted">Estado</dt>
+                            <dd class="col-7" id="myDataStatus"></dd>
+                            <dt class="col-5 text-muted">Ultimo login</dt>
+                            <dd class="col-7" id="myDataLastLogin"></dd>
+                            <dt class="col-5 text-muted">Creado</dt>
+                            <dd class="col-7" id="myDataCreated"></dd>
+                        </dl>
+                    </div>
+                    <div id="myDataError" class="alert alert-danger" style="display:none"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -507,6 +577,75 @@
         }
         tick();
         window.setInterval(tick, 1000);
+    });
+    </script>
+
+    <script>
+    window.addEventListener("DOMContentLoaded", () => {
+        if (window.location.pathname.startsWith("/Auth")) {
+            return;
+        }
+
+        document.querySelectorAll("[data-submenu-toggle]").forEach((toggle) => {
+            toggle.addEventListener("click", (ev) => {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const sub = toggle.closest(".dropdown-submenu");
+                if (!sub) return;
+                const open = sub.classList.contains("open");
+                sub.classList.toggle("open", !open);
+                toggle.setAttribute("aria-expanded", String(!open));
+            });
+        });
+
+        const myDataLink = document.getElementById("myDataLink");
+        if (!myDataLink) {
+            return;
+        }
+
+        myDataLink.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            const modalEl = document.getElementById("myDataModal");
+            const loading = document.getElementById("myDataLoading");
+            const content = document.getElementById("myDataContent");
+            const errorDiv = document.getElementById("myDataError");
+            if (!modalEl || !loading || !content) return;
+
+            loading.style.display = "";
+            content.style.display = "none";
+            errorDiv.style.display = "none";
+
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+
+            fetch("/api/admin/users/me", { credentials: "same-origin", cache: "no-store" })
+                .then(async (res) => {
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                    return data;
+                })
+                .then((d) => {
+                    const yesNo = (v) => (v ? "Si" : "No");
+                    const fmtDate = (s) => (s ? new Date(s).toLocaleString("es-CL") : "-");
+                    const mfaMap = { enabled: "Activo con clave", pending: "Pendiente de enrolar", disabled: "Desactivado" };
+
+                    document.getElementById("myDataUsername").textContent = d.username || "-";
+                    document.getElementById("myDataRole").textContent = d.role || "-";
+                    document.getElementById("myDataCanManage").textContent = yesNo(d.canManageUsers);
+                    document.getElementById("myDataMfa").textContent = mfaMap[d.mfaState] || "Desactivado";
+                    document.getElementById("myDataStatus").textContent = d.isActive ? "Activo" : "Inactivo";
+                    document.getElementById("myDataLastLogin").textContent = fmtDate(d.lastLoginAtUtc);
+                    document.getElementById("myDataCreated").textContent = fmtDate(d.createdAtUtc);
+
+                    loading.style.display = "none";
+                    content.style.display = "";
+                })
+                .catch((err) => {
+                    loading.style.display = "none";
+                    errorDiv.style.display = "";
+                    errorDiv.textContent = "Error al cargar tus datos: " + err.message;
+                });
+        });
     });
     </script>
     @RenderSection("Scripts", required: false)

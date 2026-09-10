@@ -22,6 +22,7 @@ public class AdminController : Controller
     public record ResetPasswordRequest(string NewPassword);
     public record ToggleMfaRequest(string Action);
     public record CreateUserRequest(string Username, string Password, string? Role, bool CanManageUsers);
+    public record SetActiveUserRequest(bool Active);
     private readonly AppDbContext _context;
     private readonly AuditLogService _auditLogService;
     private readonly DatabaseBackupService _databaseBackupService;
@@ -394,6 +395,31 @@ public class AdminController : Controller
         return Ok(users);
     }
 
+    [Authorize]
+    [HttpGet("/api/admin/users/me")]
+    public async Task<IActionResult> GetMyAccount(CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null)
+        {
+            return Unauthorized(new { message = "Sesion no valida." });
+        }
+
+        return Ok(new
+        {
+            currentUser.Id,
+            currentUser.Username,
+            currentUser.Role,
+            currentUser.CanManageUsers,
+            MfaState = currentUser.MfaEnabled && !string.IsNullOrEmpty(currentUser.MfaSecretProtected) ? "enabled" : currentUser.MfaEnabled ? "pending" : "disabled",
+            currentUser.IsActive,
+            currentUser.LastLoginAtUtc,
+            currentUser.CreatedAtUtc
+        });
+    }
+
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
     [HttpPost("/api/admin/users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
@@ -424,10 +450,6 @@ public class AdminController : Controller
         }
 
         var role = BackendAuthService.NormalizeRole(request.Role);
-        if (role is AppRoles.Admin or AppRoles.Admin)
-        {
-            role = AppRoles.Editor;
-        }
 
         var now = DateTime.UtcNow;
         var user = new AuthUser
@@ -435,7 +457,7 @@ public class AdminController : Controller
             Username = username,
             NormalizedUsername = normalizedUsername,
             Role = role,
-            CanManageUsers = request.CanManageUsers,
+            CanManageUsers = request.CanManageUsers && role == AppRoles.Admin,
             IsActive = true,
             CreatedBy = currentUser.Username,
             UpdatedBy = currentUser.Username,
@@ -493,11 +515,6 @@ public class AdminController : Controller
         if (!string.IsNullOrWhiteSpace(request.Role))
         {
             var newRole = BackendAuthService.NormalizeRole(request.Role);
-            if (newRole == AppRoles.Admin)
-            {
-                return BadRequest(new { message = "No puedes asignar el rol superadmin." });
-            }
-
             targetUser.Role = newRole;
         }
 
@@ -622,6 +639,44 @@ public class AdminController : Controller
             cancellationToken: cancellationToken);
 
         return Ok(new { message = $"MFA {(action == "disable" ? "desactivado" : action == "reenroll" ? "re-enrolado" : "activado")} para {targetUser.Username}.", mfaState = newState });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [HttpPost("/api/admin/users/{id:guid}/set-active")]
+    public async Task<IActionResult> SetActive(Guid id, [FromBody] SetActiveUserRequest request, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.NormalizedUsername == User.Identity!.Name!.ToUpper(), cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var targetUser = await _context.AuthUsers.FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+        if (targetUser is null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        if (string.Equals(targetUser.Username, currentUser.Username, StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { message = "No puedes desactivar tu propia cuenta." });
+        }
+
+        targetUser.IsActive = request.Active;
+        targetUser.UpdatedAtUtc = DateTime.UtcNow;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-active-toggle",
+            resource: "auth",
+            summary: $"Se {(request.Active ? "activo" : "desactivo")} el usuario {targetUser.Username}",
+            details: $"Estado: {(request.Active ? "activo" : "inactivo")}",
+            result: "success",
+            severity: "warning",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new { message = $"Usuario {targetUser.Username} {(request.Active ? "activado" : "desactivado")}.", isActive = targetUser.IsActive });
     }
 
     [Authorize]

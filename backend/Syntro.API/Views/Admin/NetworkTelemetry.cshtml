@@ -730,6 +730,16 @@
                     </select>
                 </div>
                 <div class="col-sm-6 col-xl-2">
+                    <label class="form-label small text-muted">Categoria</label>
+                    <select id="telemetry-device-category" class="form-select">
+                        <option value="">Todas</option>
+                        <option value="impresora">Impresora</option>
+                        <option value="pc">PC</option>
+                        <option value="servidor">Servidor</option>
+                        <option value="other">Otro</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-xl-2">
                     <label class="form-label small text-muted">Subred</label>
                     <input id="telemetry-device-subnet" list="telemetry-subnet-options" type="text" class="form-control" placeholder="10.0.0.0/8" />
                     <datalist id="telemetry-subnet-options">
@@ -1296,6 +1306,7 @@
         const riskSelect = document.getElementById("telemetry-device-risk");
         const subnetInput = document.getElementById("telemetry-device-subnet");
         const onlineSelect = document.getElementById("telemetry-device-online");
+        const categorySelect = document.getElementById("telemetry-device-category");
         const sortBySelect = document.getElementById("telemetry-device-sort-by");
         const sortDirectionSelect = document.getElementById("telemetry-device-sort-direction");
         const pageSizeSelect = document.getElementById("telemetry-device-page-size");
@@ -1389,6 +1400,7 @@
             if (riskSelect) riskSelect.value = "";
             if (subnetInput) subnetInput.value = "";
             if (onlineSelect) onlineSelect.value = "";
+            if (categorySelect) categorySelect.value = "";
             if (sortBySelect) sortBySelect.value = "risk";
             if (sortDirectionSelect) sortDirectionSelect.value = "desc";
             if (pageSizeSelect) pageSizeSelect.value = "10";
@@ -1525,6 +1537,7 @@
         sortDirectionSelect?.addEventListener("change", () => loadDevices(1));
         riskSelect?.addEventListener("change", () => loadDevices(1));
         onlineSelect?.addEventListener("change", () => loadDevices(1));
+        categorySelect?.addEventListener("change", () => loadDevices(1));
 
         const renderFilterChips = () => {
             if (!activeFiltersContainer) {
@@ -1540,6 +1553,9 @@
             }
             if (onlineSelect?.value) {
                 chips.push(`Red: ${onlineSelect.value}`);
+            }
+            if (categorySelect?.value) {
+                chips.push(`Categoria: ${categorySelect.value}`);
             }
             if (subnetInput?.value?.trim()) {
                 chips.push(`Subred: ${subnetInput.value.trim()}`);
@@ -1732,6 +1748,7 @@
                             <div class="fw-semibold">${item.deviceName || item.hostName || "Sin nombre"}</div>
                             <div class="small text-muted">${item.hostName || ""}${item.processor ? ` | ${item.processor}` : ""}</div>
                         </td>
+                        <td>${item.deviceCategory ? `<span class="badge ${item.deviceCategory === "impresora" ? "bg-danger-subtle text-danger-emphasis" : "bg-secondary-subtle text-secondary-emphasis"}">${item.deviceCategory}</span>` : ""}</td>
                         <td>${item.username || ""}</td>
                         <td>${item.subnetCidr || ""}</td>
                         <td>${item.networkProfile || ""}</td>
@@ -1757,6 +1774,7 @@
                                 <tr>
                                     <th>${buildSortableHeader("S/N", "serial", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Equipo", "device", currentSortBy, currentDirection, "device")}</th>
+                                    <th>Cat.</th>
                                     <th>${buildSortableHeader("Usuario", "user", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Subred", "subnet", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Perfil", "profile", currentSortBy, currentDirection, "device")}</th>
@@ -1845,6 +1863,9 @@
             }
             if (onlineSelect?.value) {
                 params.set("onlineState", onlineSelect.value);
+            }
+            if (categorySelect?.value) {
+                params.set("deviceCategory", categorySelect.value);
             }
 
             fetch(`/api/network-telemetry/snapshots/${activeSnapshotId}/devices?${params.toString()}`, {

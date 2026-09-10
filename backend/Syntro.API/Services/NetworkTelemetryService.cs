@@ -1042,6 +1042,12 @@ public class NetworkTelemetryService
             };
         }
 
+        if (!string.IsNullOrWhiteSpace(request.DeviceCategory))
+        {
+            var normalizedCategory = request.DeviceCategory.Trim().ToLowerInvariant();
+            query = query.Where(observation => (observation.DeviceCategory ?? string.Empty).ToLower() == normalizedCategory);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim();
@@ -1080,6 +1086,7 @@ public class NetworkTelemetryService
             BuildingExternalId = request.BuildingExternalId ?? string.Empty,
             SubnetCidr = request.SubnetCidr ?? string.Empty,
             OnlineState = request.OnlineState ?? string.Empty,
+            DeviceCategory = request.DeviceCategory ?? string.Empty,
             ObservationType = observationType,
             SortBy = request.SortBy ?? "risk",
             SortDirection = request.SortDirection ?? "desc",
