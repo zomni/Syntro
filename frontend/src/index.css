@@ -1396,14 +1396,78 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .room-editor-hint {
-    font-size: 12px;
-    color: #9ca3af;
-    text-align: center;
-    padding: 16px 0;
+    font-size: 11px;
+    color: #6b7280;
+    flex: 1 1 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 0 8px;
+    line-height: 32px;
 }
 
 .room-editor-suggestion-layer {
     cursor: pointer;
+}
+
+.room-editor-snap-indicator {
+    pointer-events: none;
+}
+
+.room-editor-tool-btn.is-snap-on {
+    background: #ecfdf5;
+    border-color: #059669;
+    color: #065f46;
+}
+
+.room-editor-suggest-wrapper {
+    position: relative;
+    display: inline-flex;
+}
+
+.room-editor-dropdown {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 0;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    z-index: 520;
+    min-width: 240px;
+    padding: 4px 0;
+    display: none;
+}
+
+.room-editor-dropdown.is-open {
+    display: block;
+}
+
+.room-editor-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    white-space: nowrap;
+    color: #374151;
+}
+
+.room-editor-dropdown-item:hover {
+    background: #f3f4f6;
+}
+
+.room-editor-dropdown-divider {
+    height: 1px;
+    background: #e5e7eb;
+    margin: 4px 0;
+}
+
+.room-editor-layout-actions {
+    display: flex;
+    gap: 2px;
+    margin-left: 8px;
 }
 
 .room-editor-vertex-marker {

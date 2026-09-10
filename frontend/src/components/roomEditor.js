@@ -6,6 +6,14 @@ import {
   getAdminMapToolSection,
   removeAdminMapToolSection,
 } from "./adminMapToolsPanel.js";
+import {
+  pointInRing,
+  snapToReferences,
+  buildSnapRefs,
+  simplifyRing,
+  distanceMeters,
+  generateContourRooms,
+} from "../utils/roomEditorGeometry.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -31,12 +39,16 @@ const ICONS = {
   rect: "&#9645;",
   circle: "&#9675;",
   free: "&#10070;",
+  hand: "&#9998;",
   delete: "&#10005;",
   undo: "&#8630;",
   suggest: "&#10024;",
   save: "&#10003;",
   copy: "&#10697;",
   paste: "&#9654;",
+  snap: "&#128278;",
+  copyLayout: "&#128203;",
+  pasteLayout: "&#128205;",
 };
 
 let currentEditorState = null;
@@ -50,6 +62,9 @@ let sidePanelEl = null;
 let mapContainerEl = null;
 let keydownHandler = null;
 let copiedRoomData = null;
+let copiedFloorLayout = null;
+let copiedFloorNumber = null;
+let dropdownClickOutsideHandler = null;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5002";
@@ -89,6 +104,8 @@ export const initRoomEditor = async () => {
   window.updateRoomTransform = updateRoomTransform;
   window.copySelectedRoom = copySelectedRoom;
   window.pasteRoom = pasteRoom;
+  window.copyFloorLayout = copyFloorLayout;
+  window.pasteFloorLayout = pasteFloorLayout;
 
   listenForBuildingClick();
   syncRoomEditorForSession(await loadSession());
@@ -200,6 +217,10 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       removedExternalIds: [],
       dragging: null,
       rotating: null,
+      snapEnabled: true,
+      snapPreviewMarker: null,
+      snapRefs: null,
+      dropdownOpen: false,
     };
 
     undoStack = [];
@@ -257,6 +278,38 @@ const installKeyboardShortcuts = () => {
     } else if ((e.key === "z" && (e.ctrlKey || e.metaKey) && e.shiftKey) || (e.key === "y" && (e.ctrlKey || e.metaKey))) {
       e.preventDefault();
       redoRoomEditor();
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      deleteSelectedRoom();
+    } else if (e.key === "g" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      saveRoomEditor();
+    } else if (e.key === "h" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-hand");
+    } else if (e.key === "b" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-square");
+    } else if (e.key === "r" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-rect");
+    } else if (e.key === "c" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-circle");
+    } else if (e.key === "l" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-free");
+    } else if (e.key === "s" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      toggleSnap();
     }
   };
   document.addEventListener("keydown", keydownHandler);
@@ -340,10 +393,23 @@ const createPopup = () => {
   popupContainer.appendChild(bottomBarEl);
 
   document.body.appendChild(popupContainer);
+
+  dropdownClickOutsideHandler = (e) => {
+    if (!currentEditorState?.dropdownOpen) return;
+    if (!e.target.closest(".room-editor-suggest-wrapper")) {
+      closeDropdown();
+      updateBottomBar();
+    }
+  };
+  document.addEventListener("click", dropdownClickOutsideHandler);
 };
 
 const destroyPopup = () => {
   removeKeyboardShortcuts();
+  if (dropdownClickOutsideHandler) {
+    document.removeEventListener("click", dropdownClickOutsideHandler);
+    dropdownClickOutsideHandler = null;
+  }
   if (popupMap) {
     popupMap.remove();
     popupMap = null;
@@ -465,6 +531,30 @@ const updateTopBar = () => {
   hint.textContent = "Ctrl+mover | Shift+rotar";
   topBarEl.appendChild(hint);
 
+  const layoutActions = document.createElement("div");
+  layoutActions.className = "room-editor-layout-actions";
+
+  const copyLayoutBtn = document.createElement("button");
+  copyLayoutBtn.type = "button";
+  copyLayoutBtn.className = "room-editor-tool-btn is-icon-only";
+  copyLayoutBtn.innerHTML = `<span>${ICONS.copyLayout}</span>`;
+  copyLayoutBtn.title = `Copiar layout de piso ${selectedFloor}`;
+  copyLayoutBtn.disabled = rooms.length === 0;
+  copyLayoutBtn.addEventListener("click", () => copyFloorLayout());
+  layoutActions.appendChild(copyLayoutBtn);
+
+  const canPaste = copiedFloorLayout && copiedFloorLayout.length > 0 && copiedFloorNumber !== selectedFloor;
+  const pasteLayoutBtn = document.createElement("button");
+  pasteLayoutBtn.type = "button";
+  pasteLayoutBtn.className = "room-editor-tool-btn is-icon-only";
+  pasteLayoutBtn.innerHTML = `<span>${ICONS.pasteLayout}</span>`;
+  pasteLayoutBtn.title = canPaste ? `Pegar layout de piso ${copiedFloorNumber}` : "Primero copia un layout de otro piso";
+  pasteLayoutBtn.disabled = !canPaste;
+  pasteLayoutBtn.addEventListener("click", () => pasteFloorLayout());
+  layoutActions.appendChild(pasteLayoutBtn);
+
+  topBarEl.appendChild(layoutActions);
+
   const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "room-editor-close-btn";
@@ -477,7 +567,7 @@ const updateTopBar = () => {
 const updateBottomBar = () => {
   if (!bottomBarEl || !currentEditorState) return;
 
-  const { mode, selectedRoom, suggestions } = currentEditorState;
+  const { mode, selectedRoom, suggestions, snapEnabled } = currentEditorState;
   const hasSuggestions = suggestions && suggestions.length > 0;
 
   bottomBarEl.innerHTML = "";
@@ -486,11 +576,12 @@ const updateBottomBar = () => {
   tools.className = "room-editor-tools";
 
   const toolDefs = [
-    { id: "select", icon: ICONS.select, title: "Seleccionar" },
-    { id: "draw-square", icon: ICONS.square, title: "Cuadrado" },
-    { id: "draw-rect", icon: ICONS.rect, title: "Rectangulo" },
-    { id: "draw-circle", icon: ICONS.circle, title: "Circulo" },
-    { id: "draw-free", icon: ICONS.free, title: "Libre (vertices)" },
+    { id: "select", icon: ICONS.select, title: "Seleccionar (V)" },
+    { id: "draw-square", icon: ICONS.square, title: "Cuadrado (B)" },
+    { id: "draw-rect", icon: ICONS.rect, title: "Rectangulo (R)" },
+    { id: "draw-circle", icon: ICONS.circle, title: "Circulo (C)" },
+    { id: "draw-free", icon: ICONS.free, title: "Libre - vertices (L)" },
+    { id: "draw-hand", icon: ICONS.hand, title: "Mano alzada (H)" },
   ];
 
   for (const t of toolDefs) {
@@ -503,6 +594,14 @@ const updateBottomBar = () => {
     tools.appendChild(btn);
   }
 
+  const snapBtn = document.createElement("button");
+  snapBtn.type = "button";
+  snapBtn.className = `room-editor-tool-btn is-icon-only${snapEnabled ? " is-snap-on" : ""}`;
+  snapBtn.innerHTML = `<span>${ICONS.snap}</span>`;
+  snapBtn.title = `Snap a contorno y muros (S) - ${snapEnabled ? "ON" : "OFF"}`;
+  snapBtn.addEventListener("click", () => toggleSnap());
+  tools.appendChild(snapBtn);
+
   const divider1 = document.createElement("div");
   divider1.className = "room-editor-divider";
   tools.appendChild(divider1);
@@ -511,7 +610,7 @@ const updateBottomBar = () => {
   deleteBtn.type = "button";
   deleteBtn.className = "room-editor-tool-btn is-icon-only";
   deleteBtn.innerHTML = `<span>${ICONS.delete}</span>`;
-  deleteBtn.title = "Eliminar sala seleccionada";
+  deleteBtn.title = "Eliminar sala seleccionada (Supr)";
   deleteBtn.disabled = !selectedRoom;
   deleteBtn.addEventListener("click", () => deleteSelectedRoom());
   tools.appendChild(deleteBtn);
@@ -538,7 +637,7 @@ const updateBottomBar = () => {
   undoBtn.type = "button";
   undoBtn.className = "room-editor-tool-btn is-icon-only";
   undoBtn.innerHTML = `<span>${ICONS.undo}</span>`;
-  undoBtn.title = "Deshacer";
+  undoBtn.title = "Deshacer (Ctrl+Z)";
   undoBtn.disabled = undoStack.length === 0;
   undoBtn.addEventListener("click", () => undoRoomEditor());
   tools.appendChild(undoBtn);
@@ -547,46 +646,82 @@ const updateBottomBar = () => {
   divider2.className = "room-editor-divider";
   tools.appendChild(divider2);
 
+  const suggestWrapper = document.createElement("div");
+  suggestWrapper.className = "room-editor-suggest-wrapper";
   const suggestBtn = document.createElement("button");
   suggestBtn.type = "button";
   suggestBtn.className = `room-editor-tool-btn is-icon-only is-suggest${hasSuggestions ? " is-active" : ""}`;
   suggestBtn.innerHTML = `<span>${ICONS.suggest}</span>`;
-  suggestBtn.title = "Sugerir salas automaticamente";
-  suggestBtn.addEventListener("click", () => runQuickSuggestion());
-  tools.appendChild(suggestBtn);
+  suggestBtn.title = "Sugerencias";
+  suggestBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleDropdown();
+  });
+  suggestWrapper.appendChild(suggestBtn);
+
+  const dropdown = document.createElement("div");
+  dropdown.className = `room-editor-dropdown${currentEditorState.dropdownOpen ? " is-open" : ""}`;
+
+  const sugItem = document.createElement("div");
+  sugItem.className = "room-editor-dropdown-item";
+  sugItem.innerHTML = `${ICONS.suggest} Sugerir salas automaticamente`;
+  sugItem.addEventListener("click", () => { closeDropdown(); runQuickSuggestion(); });
+  dropdown.appendChild(sugItem);
 
   if (hasSuggestions) {
-    const approveBtn = document.createElement("button");
-    approveBtn.type = "button";
-    approveBtn.className = "room-editor-tool-btn is-icon-only is-suggest";
-    approveBtn.innerHTML = `<span>${ICONS.save}</span>`;
-    approveBtn.title = "Guardar salas sugeridas";
-    approveBtn.addEventListener("click", () => saveQuickSuggestions());
-    tools.appendChild(approveBtn);
+    const divider = document.createElement("div");
+    divider.className = "room-editor-dropdown-divider";
+    dropdown.appendChild(divider);
 
-    const cancelSugBtn = document.createElement("button");
-    cancelSugBtn.type = "button";
-    cancelSugBtn.className = "room-editor-tool-btn is-icon-only";
-    cancelSugBtn.innerHTML = `<span>${ICONS.delete}</span>`;
-    cancelSugBtn.title = "Descartar sugerencias";
-    cancelSugBtn.addEventListener("click", () => {
+    const saveItem = document.createElement("div");
+    saveItem.className = "room-editor-dropdown-item";
+    saveItem.innerHTML = `${ICONS.save} Guardar sugerencias (${suggestions.filter((s) => s.approved).length})`;
+    saveItem.addEventListener("click", () => { closeDropdown(); saveQuickSuggestions(); });
+    dropdown.appendChild(saveItem);
+
+    const cancelItem = document.createElement("div");
+    cancelItem.className = "room-editor-dropdown-item";
+    cancelItem.innerHTML = `${ICONS.delete} Descartar sugerencias`;
+    cancelItem.addEventListener("click", () => {
+      closeDropdown();
       clearSuggestionPreviewLayers();
       currentEditorState.suggestions = [];
       updateBottomBar();
       setAdminMapToolsStatus("Sugerencias descartadas.");
     });
-    tools.appendChild(cancelSugBtn);
+    dropdown.appendChild(cancelItem);
   }
 
+  suggestWrapper.appendChild(dropdown);
+  tools.appendChild(suggestWrapper);
+
   bottomBarEl.appendChild(tools);
+
+  const hint = document.createElement("span");
+  hint.className = "room-editor-hint";
+  hint.textContent = getHintForMode(mode, snapEnabled);
+  bottomBarEl.appendChild(hint);
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
   saveBtn.className = "room-editor-save-btn";
-  saveBtn.innerHTML = `<span>${ICONS.save}</span><span> Guardar</span>`;
+  saveBtn.innerHTML = `<span>${ICONS.save}</span><span> Guardar (G)</span>`;
   saveBtn.title = "Guardar cambios";
   saveBtn.addEventListener("click", () => saveRoomEditor());
   bottomBarEl.appendChild(saveBtn);
+};
+
+const getHintForMode = (mode, snapEnabled) => {
+  const snapText = snapEnabled ? "S=snap OFF" : "S=snap ON";
+  switch (mode) {
+    case "select": return `Modo seleccion. Ctrl+mover | Shift=rotar | ${snapText}`;
+    case "draw-square": return "Cuadrado: click 1ra esquina, click 2da esquina. Esc cancelar.";
+    case "draw-rect": return "Rectangulo: click 1ra esquina, click 2da esquina. Esc cancelar.";
+    case "draw-circle": return "Circulo: click centro, click radio. Esc cancelar.";
+    case "draw-free": return "Libre: click para vertices, Enter/dblclick cerrar. Shift=ortogonal. Esc cancelar.";
+    case "draw-hand": return "Mano alzada: click+arrastra para dibujar. Shift=rectos. Esc cancelar.";
+    default: return "";
+  }
 };
 
 const updateSidePanel = () => {
@@ -762,6 +897,7 @@ const clearBuildingBoundary = () => {
 
 const renderRooms = () => {
   clearRoomLayers();
+  if (currentEditorState) currentEditorState.snapRefs = null;
 
   if (!currentEditorState || !popupMap) return;
 
@@ -847,8 +983,21 @@ const enableDragLayer = (layer, room, e) => {
 
   const onMove = (ev) => {
     if (!dragging) return;
-    const dLat = ev.latlng.lat - startLatLng.lat;
-    const dLng = ev.latlng.lng - startLatLng.lng;
+    let newLat = ev.latlng.lat;
+    let newLng = ev.latlng.lng;
+    if (currentEditorState?.snapEnabled) {
+      const snapResult = applySnap(ev.latlng);
+      if (snapResult && snapResult !== ev.latlng) {
+        const origCenterLat = origCoords.reduce((s, c) => s + c[1], 0) / origCoords.length;
+        const origCenterLng = origCoords.reduce((s, c) => s + c[0], 0) / origCoords.length;
+        const dLatNew = snapResult.lat - origCenterLat;
+        const dLngNew = snapResult.lng - origCenterLng;
+        newLat = startLatLng.lat + dLatNew;
+        newLng = startLatLng.lng + dLngNew;
+      }
+    }
+    const dLat = newLat - startLatLng.lat;
+    const dLng = newLng - startLatLng.lng;
     const newCoords = origCoords.map((c) => [c[0] + dLng, c[1] + dLat]);
     const newGeo = { type: "Polygon", coordinates: [newCoords] };
     room.geometryJson = JSON.stringify(newGeo);
@@ -992,8 +1141,12 @@ const selectRoomMode = (mode) => {
       startDrawCircle();
       break;
     case "draw-free":
-      setAdminMapToolsStatus("Click para agregar vertices. Enter o doble clic para cerrar.");
+      setAdminMapToolsStatus("Click para agregar vertices. Enter o doble clic para cerrar. Shift = ortogonal.");
       startDrawFree();
+      break;
+    case "draw-hand":
+      setAdminMapToolsStatus("Click y arrastra para dibujar. Shift = lineas rectas.");
+      startDrawHand();
       break;
     default:
       setAdminMapToolsStatus("Modo seleccion. Ctrl+click para mover, Shift+click para rotar.");
@@ -1009,8 +1162,9 @@ const startDrawSquare = () => {
 
   const onClick = (e) => {
     L.DomEvent.stop(e);
+    const snapped = applySnap(e.latlng);
     if (!p1) {
-      p1 = e.latlng;
+      p1 = snapped;
       setAdminMapToolsStatus("Click para colocar la esquina opuesta del cuadrado.");
       currentEditorState.previewLayer = L.polygon(
         [[p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng]],
@@ -1035,11 +1189,12 @@ const startDrawSquare = () => {
 
   const onMove = (e) => {
     if (!p1 || !currentEditorState.previewLayer) return;
-    const dLat = Math.abs(e.latlng.lat - p1.lat);
-    const dLng = Math.abs(e.latlng.lng - p1.lng);
+    const snapped = applySnap(e.latlng);
+    const dLat = Math.abs(snapped.lat - p1.lat);
+    const dLng = Math.abs(snapped.lng - p1.lng);
     const d = Math.max(dLat, dLng);
-    const sLat = e.latlng.lat >= p1.lat ? 1 : -1;
-    const sLng = e.latlng.lng >= p1.lng ? 1 : -1;
+    const sLat = snapped.lat >= p1.lat ? 1 : -1;
+    const sLng = snapped.lng >= p1.lng ? 1 : -1;
     currentEditorState.previewLayer.setLatLngs([
       [p1.lat + d * sLat, p1.lng - d * sLng],
       [p1.lat + d * sLat, p1.lng + d * sLng],
@@ -1060,8 +1215,9 @@ const startDrawRect = () => {
 
   const onClick = (e) => {
     L.DomEvent.stop(e);
+    const snapped = applySnap(e.latlng);
     if (!p1) {
-      p1 = e.latlng;
+      p1 = snapped;
       setAdminMapToolsStatus("Click para colocar la esquina opuesta del rectangulo.");
       currentEditorState.previewLayer = L.polygon(
         [[p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng], [p1.lat, p1.lng]],
@@ -1086,11 +1242,12 @@ const startDrawRect = () => {
 
   const onMove = (e) => {
     if (!p1 || !currentEditorState.previewLayer) return;
+    const snapped = applySnap(e.latlng);
     currentEditorState.previewLayer.setLatLngs([
       [p1.lat, p1.lng],
-      [p1.lat, e.latlng.lng],
-      [e.latlng.lat, e.latlng.lng],
-      [e.latlng.lat, p1.lng],
+      [p1.lat, snapped.lng],
+      [snapped.lat, snapped.lng],
+      [snapped.lat, p1.lng],
     ]);
   };
 
@@ -1106,8 +1263,9 @@ const startDrawCircle = () => {
 
   const onClick = (e) => {
     L.DomEvent.stop(e);
+    const snapped = applySnap(e.latlng);
     if (!center) {
-      center = e.latlng;
+      center = snapped;
       setAdminMapToolsStatus("Click para definir el radio del circulo.");
       currentEditorState.previewLayer = L.circle(center, {
         radius: 1, color: "#f59e0b", weight: 2, fillColor: "#f59e0b",
@@ -1150,10 +1308,25 @@ const startDrawFree = () => {
   clearDrawState();
   currentEditorState.mode = "draw-free";
   currentEditorState.drawPoints = [];
+  let shiftHeld = false;
 
   const onClick = (e) => {
-    currentEditorState.drawPoints.push(e.latlng);
-    addDrawVertexMarker(e.latlng);
+    const snapped = applySnap(e.latlng);
+    let point = snapped;
+
+    if (shiftHeld && currentEditorState.drawPoints.length >= 1) {
+      const base = currentEditorState.drawPoints[currentEditorState.drawPoints.length - 1];
+      const dx = snapped.lng - base.lng;
+      const dy = snapped.lat - base.lat;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        point = L.latLng(base.lat, snapped.lng);
+      } else {
+        point = L.latLng(snapped.lat, base.lng);
+      }
+    }
+
+    currentEditorState.drawPoints.push(point);
+    addDrawVertexMarker(point);
     const pts = currentEditorState.drawPoints;
 
     if (currentEditorState.previewLayer) {
@@ -1171,12 +1344,151 @@ const startDrawFree = () => {
     finishCurrentPolygonDraw();
   };
 
+  const onKey = (e) => {
+    shiftHeld = e.shiftKey;
+  };
+
+  document.addEventListener("keyup", onKey);
+  document.addEventListener("keydown", onKey);
+
+  const origCleanup = currentEditorState._handCleanup;
+  currentEditorState._handCleanup = () => {
+    document.removeEventListener("keyup", onKey);
+    document.removeEventListener("keydown", onKey);
+    if (origCleanup) origCleanup();
+  };
+
   popupMap.on("click", onClick);
   popupMap.on("dblclick", onDblClick);
 };
 
+const startDrawHand = () => {
+  if (!currentEditorState || !popupMap) return;
+  clearDrawState();
+  currentEditorState.mode = "draw-hand";
+  currentEditorState.drawPoints = [];
+  let drawing = false;
+  let lastPoint = null;
+  let previewLine = null;
+  let shiftHeld = false;
+
+  const THRESHOLD_M = 1.5;
+
+  const onDown = (e) => {
+    L.DomEvent.stop(e);
+    drawing = true;
+    lastPoint = e.latlng;
+    currentEditorState.drawPoints.push(e.latlng);
+    if (popupMap.dragging) popupMap.dragging.disable();
+    popupMap.getContainer().style.cursor = "crosshair";
+    previewLine = L.polyline([e.latlng], {
+      color: "#f59e0b",
+      weight: 2,
+      dashArray: "4 4",
+      interactive: false,
+    }).addTo(popupMap);
+  };
+
+  const onMove = (e) => {
+    if (!drawing || !previewLine) return;
+    const pts = currentEditorState.drawPoints;
+    const prev = pts[pts.length - 1];
+    const dist = distanceMeters([prev.lat, prev.lng], [e.latlng.lat, e.latlng.lng]);
+    if (dist < THRESHOLD_M) return;
+
+    let newPoint = e.latlng;
+    if (shiftHeld && pts.length >= 1) {
+      const base = pts[pts.length - 1];
+      const dx = e.latlng.lng - base.lng;
+      const dy = e.latlng.lat - base.lat;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        newPoint = L.latLng(base.lat, e.latlng.lng);
+      } else {
+        newPoint = L.latLng(e.latlng.lat, base.lng);
+      }
+    }
+
+    pts.push(newPoint);
+    lastPoint = newPoint;
+    previewLine.addLatLng(newPoint);
+  };
+
+  const onUp = () => {
+    if (!drawing) return;
+    drawing = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    if (previewLine && popupMap.hasLayer(previewLine)) popupMap.removeLayer(previewLine);
+    if (popupMap.dragging) popupMap.dragging.enable();
+    popupMap.getContainer().style.cursor = "";
+
+    const pts = currentEditorState.drawPoints;
+    if (pts.length < 3) {
+      clearDrawState();
+      setAdminMapToolsStatus("Trazo muy corto. Intenta de nuevo.");
+      return;
+    }
+
+    const simplified = simplifyRing(
+      pts.map((p) => [p.lat, p.lng]),
+      2
+    );
+    if (simplified.length < 4) {
+      clearDrawState();
+      setAdminMapToolsStatus("Trazo demasiado simple. Intenta de nuevo.");
+      return;
+    }
+
+    const closedRing = [...simplified, simplified[0]];
+    const geoJsonCoords = closedRing.map((c) => [c[1], c[0]]);
+
+    const buildingRing = currentEditorState.buildingGeometry?.coordinates?.[0];
+    if (buildingRing) {
+      const insideCount = closedRing.filter((p) => pointInRing(p, buildingRing)).length;
+      const ratio = insideCount / closedRing.length;
+      if (ratio < 0.5) {
+        clearDrawState();
+        setAdminMapToolsStatus("Sala fuera del contorno del edificio. Ctrl+Z para deshacer.");
+        createNewRoom(geoJsonCoords);
+        return;
+      }
+      if (ratio < 1) {
+        setAdminMapToolsStatus("Parte de la sala fuera del contorno. Se guardara igual.");
+      }
+    }
+
+    clearDrawState();
+    createNewRoom(geoJsonCoords);
+  };
+
+  const onKey = (e) => {
+    shiftHeld = e.shiftKey;
+  };
+
+  popupMap.on("mousedown", onDown);
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
+  document.addEventListener("keyup", onKey);
+  document.addEventListener("keydown", onKey);
+
+  const origClear = clearDrawState;
+  const wrappedClear = () => {
+    document.removeEventListener("keyup", onKey);
+    document.removeEventListener("keydown", onKey);
+    popupMap.off("mousedown", onDown);
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    if (previewLine && popupMap?.hasLayer(previewLine)) popupMap.removeLayer(previewLine);
+  };
+  currentEditorState._handCleanup = wrappedClear;
+};
+
 const clearDrawState = () => {
   if (!currentEditorState || !popupMap) return;
+  if (currentEditorState._handCleanup) {
+    currentEditorState._handCleanup();
+    currentEditorState._handCleanup = null;
+  }
   if (currentEditorState.previewLayer) {
     popupMap.removeLayer(currentEditorState.previewLayer);
     currentEditorState.previewLayer = null;
@@ -1191,6 +1503,37 @@ const clearDrawState = () => {
   popupMap.off("mousemove");
   popupMap.off("mousedown");
   popupMap.off("mouseup");
+};
+
+const ensureSnapMarker = () => {
+  if (!currentEditorState || !popupMap) return;
+  if (!currentEditorState.snapPreviewMarker) {
+    currentEditorState.snapPreviewMarker = L.circleMarker([0, 0], {
+      radius: 6,
+      color: "#059669",
+      fillColor: "#059669",
+      fillOpacity: 0.6,
+      weight: 2,
+      interactive: false,
+      className: "room-editor-snap-indicator",
+    });
+  }
+  return currentEditorState.snapPreviewMarker;
+};
+
+const applySnap = (latlng) => {
+  if (!currentEditorState?.snapEnabled || !popupMap) return latlng;
+  if (!currentEditorState.snapRefs) {
+    const buildingCoords = currentEditorState.buildingGeometry?.coordinates?.[0];
+    const roomCoords = currentEditorState.rooms.map((r) => {
+      const geom = typeof r.geometryJson === "string" ? JSON.parse(r.geometryJson) : r.geometryJson;
+      return geom?.coordinates?.[0] || [];
+    });
+    currentEditorState.snapRefs = buildSnapRefs(buildingCoords, roomCoords);
+  }
+  const marker = ensureSnapMarker();
+  const result = snapToReferences(popupMap, latlng, currentEditorState.snapRefs, 12, marker);
+  return result.latlng;
 };
 
 const createNewRoom = (geoJsonCoords) => {
@@ -1315,6 +1658,14 @@ const undoRoomEditor = () => {
         currentEditorState.selectedRoom = null;
       }
       break;
+    case "create-rooms":
+      for (const room of action.rooms) {
+        currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== room.externalId);
+      }
+      if (action.rooms.some((r) => currentEditorState.selectedRoom?.externalId === r.externalId)) {
+        currentEditorState.selectedRoom = null;
+      }
+      break;
     case "delete-room":
       currentEditorState.rooms.push(action.room);
       if (!action.room.isNew && currentEditorState.removedExternalIds) {
@@ -1341,6 +1692,9 @@ const redoRoomEditor = () => {
   switch (action.type) {
     case "create-room":
       currentEditorState.rooms.push(action.room);
+      break;
+    case "create-rooms":
+      currentEditorState.rooms.push(...action.rooms);
       break;
     case "delete-room":
       currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== action.room.externalId);
@@ -1467,6 +1821,81 @@ const clearRoomEditorState = () => {
   redoStack = [];
 };
 
+const toggleSnap = () => {
+  if (!currentEditorState) return;
+  currentEditorState.snapEnabled = !currentEditorState.snapEnabled;
+  if (!currentEditorState.snapEnabled && currentEditorState.snapPreviewMarker && popupMap) {
+    popupMap.removeLayer(currentEditorState.snapPreviewMarker);
+    currentEditorState.snapPreviewMarker = null;
+  }
+  updateBottomBar();
+  setAdminMapToolsStatus(`Snap ${currentEditorState.snapEnabled ? "activado" : "desactivado"}.`);
+};
+
+const toggleDropdown = () => {
+  if (!currentEditorState) return;
+  currentEditorState.dropdownOpen = !currentEditorState.dropdownOpen;
+  updateBottomBar();
+};
+
+const closeDropdown = () => {
+  if (!currentEditorState) return;
+  currentEditorState.dropdownOpen = false;
+};
+
+const copyFloorLayout = () => {
+  if (!currentEditorState || currentEditorState.rooms.length === 0) return;
+  copiedFloorLayout = currentEditorState.rooms.map((r) => ({
+    geometryJson: r.geometryJson,
+  }));
+  copiedFloorNumber = currentEditorState.selectedFloor;
+  updateTopBar();
+  setAdminMapToolsStatus(`Layout copiado del piso ${copiedFloorNumber}. Ve a otro piso y pega.`);
+};
+
+const pasteFloorLayout = () => {
+  if (!currentEditorState || !copiedFloorLayout || copiedFloorLayout.length === 0) return;
+  if (copiedFloorNumber === currentEditorState.selectedFloor) {
+    setAdminMapToolsStatus("No se puede pegar en el mismo piso de origen.");
+    return;
+  }
+
+  const created = [];
+  for (const copied of copiedFloorLayout) {
+    const geom = typeof copied.geometryJson === "string" ? JSON.parse(copied.geometryJson) : copied.geometryJson;
+    if (!geom?.coordinates?.[0]) continue;
+    const newRoom = {
+      externalId: `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${created.length}`,
+      buildingExternalId: currentEditorState.buildingExternalId,
+      floor: currentEditorState.selectedFloor,
+      displayName: `Sala ${currentEditorState.rooms.length + created.length + 1}`,
+      shortName: "",
+      type: "sala",
+      unit: "",
+      service: "",
+      status: "active",
+      capacity: null,
+      geometryJson: JSON.stringify(geom),
+      source: "manual",
+      notes: "",
+      isNew: true,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+    };
+    created.push(newRoom);
+  }
+
+  if (created.length > 0) {
+    pushUndo({ type: "create-rooms", rooms: created });
+    currentEditorState.rooms.push(...created);
+    currentEditorState.isDirty = true;
+    renderRooms();
+    updatePopupContent();
+    setAdminMapToolsStatus(`${created.length} sala(s) pegada(s) en piso ${currentEditorState.selectedFloor}. Ctrl+Z para deshacer.`);
+  }
+};
+
 const parseGeometryToCoordinates = (geometryJson) => {
   if (!geometryJson) return [];
   try {
@@ -1508,48 +1937,21 @@ const runQuickSuggestion = async () => {
   setAdminMapToolsStatus("Generando sugerencias...");
 
   try {
-    const buildingCoords = currentEditorState.buildingGeometry?.coordinates?.[0];
-    if (!buildingCoords) {
+    const buildingGeometry = currentEditorState.buildingGeometry;
+    if (!buildingGeometry?.coordinates?.[0]) {
       setAdminMapToolsStatus("No se encontro la geometria del edificio.");
       return;
     }
 
-    const buildingAreaM2 = calculateAreaMeters(buildingCoords);
+    const buildingAreaM2 = calculateAreaMeters(buildingGeometry.coordinates[0]);
     const roomAreaM2 = 20;
     const corridorFactor = 0.3;
     const roomCount = Math.max(1, Math.floor((buildingAreaM2 * (1 - corridorFactor)) / roomAreaM2));
 
-    const response = await fetch(`${getApiUrl()}/api/room-layouts/suggest`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        buildingExternalId: currentEditorState.buildingExternalId,
-        floor: currentEditorState.selectedFloor,
-        roomCount: roomCount,
-        pattern: "grid",
-        rows: 0,
-        columns: 0,
-        corridorWidth: 1.5,
-        internalCorridor: 1.2,
-        roomType: "sala",
-        namePrefix: "Sala",
-        coordinates: buildingCoords,
-      }),
+    const suggestions = generateContourRooms(buildingGeometry, roomCount, {
+      roomDepth: 5,
+      corridorWidth: 1.5,
     });
-
-    if (response.status === 401) {
-      setAdminMapToolsStatus("Sesion expirada. Recarga la pagina.");
-      return;
-    }
-    if (!response.ok) {
-      let msg = "Error al generar sugerencias.";
-      try { const body = await response.json(); if (body.message) msg += " " + body.message; } catch {}
-      setAdminMapToolsStatus(msg);
-      return;
-    }
-
-    const suggestions = await response.json();
 
     if (!suggestions || suggestions.length === 0) {
       setAdminMapToolsStatus("El edificio es muy pequeno para generar salas con los parametros actuales.");
@@ -1568,7 +1970,7 @@ const runQuickSuggestion = async () => {
     setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en el check para guardarlas.`);
   } catch (error) {
     console.error("Error running suggestion:", error);
-    setAdminMapToolsStatus("Error al conectar con el servidor.");
+    setAdminMapToolsStatus("Error al generar sugerencias.");
   }
 };
 
