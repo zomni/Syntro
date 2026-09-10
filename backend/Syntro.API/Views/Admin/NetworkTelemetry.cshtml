@@ -761,6 +761,7 @@
                         <option value="ip">IP</option>
                         <option value="os">SO</option>
                         <option value="model">Modelo</option>
+                        <option value="category">Categoria</option>
                         <option value="antivirus">AV</option>
                         <option value="patch">Parches</option>
                         <option value="online">Red</option>
@@ -1774,7 +1775,7 @@
                                 <tr>
                                     <th>${buildSortableHeader("S/N", "serial", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Equipo", "device", currentSortBy, currentDirection, "device")}</th>
-                                    <th>Cat.</th>
+                                    <th>${buildSortableHeader("Cat.", "category", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Usuario", "user", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Subred", "subnet", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Perfil", "profile", currentSortBy, currentDirection, "device")}</th>

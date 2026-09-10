@@ -57,18 +57,17 @@
         .sidebar-brand { color: #2dd4bf !important; font-weight: 700; }
         .session-card { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08); }
         .session-card .text-info { color: #2dd4bf !important; }
-        .session-dropdown-toggle { border: 0; background: transparent; padding: 0.25rem 0 0.25rem 0.25rem; box-shadow: none; }
+        .session-dropdown-toggle { border: 0; background: transparent; padding: 0.25rem 0 0.25rem 0.25rem; box-shadow: none; transition: transform 0.18s ease; }
         .session-dropdown-toggle:focus, .session-dropdown-toggle:active, .session-dropdown-toggle:focus-visible { box-shadow: none; outline: none; }
-        .session-dropdown-toggle .bi-chevron-down { transition: transform 0.15s ease; }
-        .session-dropdown.show .session-dropdown-toggle .bi-chevron-down { transform: rotate(180deg); }
-        .session-dropdown-menu { background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 0.4rem; min-width: 210px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4); }
-        .session-dropdown-menu .dropdown-item { color: #cbd5e1; padding: 0.45rem 0.75rem; font-size: 0.9rem; border-radius: 6px; }
-        .session-dropdown-menu .dropdown-item:hover, .session-dropdown-menu .dropdown-item:focus, .session-dropdown-menu .dropdown-item.active { color: #fff; background: #1e293b; }
-        .session-dropdown-menu .dropdown-divider { border-color: rgba(255, 255, 255, 0.08); margin: 0.4rem 0; }
-        .session-dropdown-menu .dropdown-submenu { position: relative; }
-        .session-dropdown-menu .dropdown-submenu .dropdown-submenu-menu { display: none; position: absolute; left: 100%; top: -8px; min-width: 190px; background: #0f172a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; padding: 0.4rem; z-index: 1060; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.4); }
+        .session-dropdown-toggle:hover { transform: translateX(6px); }
+        .session-dropdown-menu { background: #ffffff; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 10px; padding: 0.4rem; min-width: 210px; box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22); }
+        .session-dropdown-menu .dropdown-item { color: #0f172a; padding: 0.45rem 0.75rem; font-size: 0.9rem; border-radius: 6px; }
+        .session-dropdown-menu .dropdown-item:hover, .session-dropdown-menu .dropdown-item:focus, .session-dropdown-menu .dropdown-item.active { color: #0f172a; background: #f1f5f9; }
+        .session-dropdown-menu .dropdown-divider { border-color: #e2e8f0; margin: 0.4rem 0; }
+        .session-dropdown-menu .dropdown-submenu .dropdown-submenu-menu { display: none; margin: 0.15rem 0 0.25rem; padding: 0; min-width: 0; background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+        .session-dropdown-menu .dropdown-submenu .dropdown-submenu-menu .dropdown-item { padding-left: 1.6rem; }
         .session-dropdown-menu .dropdown-submenu.open .dropdown-submenu-menu { display: block; }
-        .session-dropdown-menu .dropdown-submenu.open > .dropdown-toggle { color: #fff; background: #1e293b; }
+        .session-dropdown-menu .dropdown-submenu.open > .dropdown-toggle { color: #0f172a; background: #f1f5f9; }
         .badge-active { background: #16a34a; }
         .badge-maintenance { background: #f59e0b; }
         .badge-inactive { background: #ef4444; }
@@ -130,12 +129,11 @@
                                     : "viewer";
                     }
                     <div class="dropdown session-dropdown">
-                        <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center justify-content-between" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center" type="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <span class="d-flex flex-column gap-1">
                                 <span class="fw-semibold text-truncate">@(User.Identity?.Name ?? "Sin sesion")</span>
                                 <span class="small text-info">Rol: @roleLabel</span>
                             </span>
-                            <span class="ms-2 text-secondary"><i class="bi bi-chevron-down"></i></span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end session-dropdown-menu">
                             <li>

@@ -1368,6 +1368,8 @@ public class NetworkTelemetryService
             ("os", false) => query.OrderByDescending(observation => observation.OperatingSystem).ThenByDescending(observation => observation.OperatingSystemVersion).ThenByDescending(observation => observation.Id),
             ("model", true) => query.OrderBy(observation => observation.Manufacturer).ThenBy(observation => observation.Model).ThenBy(observation => observation.Id),
             ("model", false) => query.OrderByDescending(observation => observation.Manufacturer).ThenByDescending(observation => observation.Model).ThenByDescending(observation => observation.Id),
+            ("category", true) => query.OrderBy(observation => observation.DeviceCategory).ThenBy(observation => observation.DeviceName).ThenBy(observation => observation.Id),
+            ("category", false) => query.OrderByDescending(observation => observation.DeviceCategory).ThenByDescending(observation => observation.DeviceName).ThenByDescending(observation => observation.Id),
             ("antivirus", true) => query.OrderBy(observation => observation.AntivirusStatus).ThenBy(observation => observation.DeviceName).ThenBy(observation => observation.Id),
             ("antivirus", false) => query.OrderByDescending(observation => observation.AntivirusStatus).ThenByDescending(observation => observation.DeviceName).ThenByDescending(observation => observation.Id),
             ("patch", true) => query.OrderBy(observation => observation.PatchStatus).ThenBy(observation => observation.DeviceName).ThenBy(observation => observation.Id),
