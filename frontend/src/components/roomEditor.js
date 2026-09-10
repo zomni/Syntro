@@ -709,6 +709,17 @@ const updateBottomBar = () => {
   saveBtn.title = "Guardar cambios";
   saveBtn.addEventListener("click", () => saveRoomEditor());
   bottomBarEl.appendChild(saveBtn);
+
+  if (currentEditorState.dropdownOpen) {
+    const dd = bottomBarEl.querySelector(".room-editor-dropdown");
+    const btn = bottomBarEl.querySelector(".room-editor-suggest-wrapper .room-editor-tool-btn");
+    if (dd && btn) {
+      const rect = btn.getBoundingClientRect();
+      dd.style.left = rect.left + "px";
+      dd.style.top = (rect.top - 4) + "px";
+      dd.style.transform = "translateY(-100%)";
+    }
+  }
 };
 
 const getHintForMode = (mode, snapEnabled) => {
@@ -1442,7 +1453,7 @@ const startDrawHand = () => {
     const closedRing = [...simplified, simplified[0]];
     const geoJsonCoords = closedRing.map((c) => [c[1], c[0]]);
 
-    const buildingRing = currentEditorState.buildingGeometry?.coordinates?.[0];
+    const buildingRing = currentEditorState.buildingGeometry?.coordinates?.[0]?.map((c) => [c[1], c[0]]);
     if (buildingRing) {
       const insideCount = closedRing.filter((p) => pointInRing(p, buildingRing)).length;
       const ratio = insideCount / closedRing.length;
@@ -1959,9 +1970,11 @@ const runQuickSuggestion = async () => {
     }
 
     currentEditorState.suggestions = suggestions.map((s, i) => ({
-      ...s,
-      approved: true,
       externalId: `SUG-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${i}`,
+      displayName: s.DisplayName,
+      type: s.Type,
+      coordinates: s.Coordinates,
+      approved: true,
     }));
 
     clearSuggestionPreviewLayers();

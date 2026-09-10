@@ -1426,14 +1426,12 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .room-editor-dropdown {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 0;
+    position: fixed;
     background: #fff;
     border: 1px solid #e5e7eb;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-    z-index: 520;
+    z-index: 99999;
     min-width: 240px;
     padding: 4px 0;
     display: none;

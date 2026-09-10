@@ -141,70 +141,207 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
   const mToLng = (m) => m / metersPerDegLng;
   const mToLat = (m) => m / METERS_PER_DEG_LAT;
 
-  const edges = [];
-  let totalPerimeterM = 0;
-  for (let i = 0; i < ring.length - 1; i++) {
-    const a = ring[i];
-    const b = ring[i + 1];
-    const dxM = (b[0] - a[0]) * metersPerDegLng;
-    const dyM = (b[1] - a[1]) * METERS_PER_DEG_LAT;
-    const lenM = Math.sqrt(dxM * dxM + dyM * dyM);
-    edges.push({ a, b, lenM, dxM, dyM });
-    totalPerimeterM += lenM;
-  }
+  const uniqueRing = (rng) => {
+    const first = rng[0];
+    const last = rng[rng.length - 1];
+    return first[0] === last[0] && first[1] === last[1] ? rng.slice(0, -1) : rng.slice();
+  };
 
+  const ringCentroid = (rng) => {
+    const pts = uniqueRing(rng);
+    const cLng = pts.reduce((s, c) => s + c[0], 0) / pts.length;
+    const cLat = pts.reduce((s, c) => s + c[1], 0) / pts.length;
+    return [cLng, cLat];
+  };
+
+  const edgeLenM = (a, b) => {
+    const dx = (b[0] - a[0]) * metersPerDegLng;
+    const dy = (b[1] - a[1]) * METERS_PER_DEG_LAT;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const ringPerimeter = (rng) => {
+    let per = 0;
+    for (let i = 0; i < rng.length - 1; i++) per += edgeLenM(rng[i], rng[i + 1]);
+    return per;
+  };
+
+  const erodeRing = (rng, offsetM) => {
+    const pts = uniqueRing(rng);
+    const [cLng, cLat] = ringCentroid(rng);
+    const eroded = pts.map((pt) => {
+      const dLng = cLng - pt[0];
+      const dLat = cLat - pt[1];
+      const distM = Math.sqrt((dLng * metersPerDegLng) ** 2 + (dLat * METERS_PER_DEG_LAT) ** 2);
+      if (distM < 1e-9) return [pt[0], pt[1]];
+      const stepM = Math.min(offsetM, distM * 0.99);
+      const stepLng = (dLng * stepM) / distM;
+      const stepLat = (dLat * stepM) / distM;
+      return [pt[0] + stepLng, pt[1] + stepLat];
+    });
+    const first = eroded[0];
+    eroded.push([first[0], first[1]]);
+    return eroded;
+  };
+
+  const ringMinSideM = (rng) => {
+    let minLng = Infinity;
+    let maxLng = -Infinity;
+    let minLat = Infinity;
+    let maxLat = -Infinity;
+    for (const p of rng) {
+      if (p[0] < minLng) minLng = p[0];
+      if (p[0] > maxLng) maxLng = p[0];
+      if (p[1] < minLat) minLat = p[1];
+      if (p[1] > maxLat) maxLat = p[1];
+    }
+    return Math.min((maxLng - minLng) * metersPerDegLng, (maxLat - minLat) * METERS_PER_DEG_LAT);
+  };
+
+  const totalPerimeterM = ringPerimeter(ring);
   if (totalPerimeterM <= 0) return [];
+  const ringLatLng = ring.map((c) => [c[1], c[0]]);
+  const targetRoomWidth = Math.max(totalPerimeterM / roomCount - corridorWidth, 2);
 
-  const rooms = [];
+  const orient = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const crosses = (a, b, c, d) => {
+    const o1 = orient(a, b, c);
+    const o2 = orient(a, b, d);
+    const o3 = orient(c, d, a);
+    const o4 = orient(c, d, b);
+    return (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0);
+  };
+
+  const ringEdges = [];
+  for (let i = 0; i < ring.length - 1; i++) ringEdges.push([ring[i], ring[i + 1]]);
+
+  const isInsideBuilding = (poly) => {
+    for (let k = 0; k < 4; k++) {
+      if (!pointInRing([poly[k][1], poly[k][0]], ringLatLng)) return false;
+    }
+    for (let e = 0; e < 4; e++) {
+      const a = poly[e];
+      const b = poly[(e + 1) % 4];
+      for (const [c, d] of ringEdges) {
+        if (crosses(a, b, c, d)) return false;
+      }
+    }
+    return true;
+  };
+
+  const intersectsRoom = (poly1, poly2) => {
+    for (let e = 0; e < 4; e++) {
+      for (let f = 0; f < 4; f++) {
+        if (crosses(poly1[e], poly1[(e + 1) % 4], poly2[f], poly2[(f + 1) % 4])) return true;
+      }
+    }
+    return false;
+  };
+
+  const candidateRooms = [];
   let roomIndex = 0;
+  const minSideM = corridorWidth * 2;
+  const bandOffsetM = (roomDepth + corridorWidth) * Math.SQRT2;
+  const EPSILON_M = 0.02;
+  const epsLng = mToLng(EPSILON_M);
+  const epsLat = mToLat(EPSILON_M);
 
-  for (const edge of edges) {
-    if (edge.lenM < 2) continue;
-    const roomsOnEdge = Math.max(1, Math.round((edge.lenM / totalPerimeterM) * roomCount));
-    const usableLenM = edge.lenM - corridorWidth * (roomsOnEdge - 1);
-    if (usableLenM <= 0) continue;
-    const roomWidthM = usableLenM / roomsOnEdge;
+  const buildBand = (curRing) => {
+    const [cLng, cLat] = ringCentroid(curRing);
 
-    const ux = edge.dxM / edge.lenM;
-    const uy = edge.dyM / edge.lenM;
-    const nx = -uy;
-    const ny = ux;
+    const edges = [];
+    let bandPerimeter = 0;
+    for (let i = 0; i < curRing.length - 1; i++) {
+      const a = curRing[i];
+      const b = curRing[i + 1];
+      const lenM = edgeLenM(a, b);
+      edges.push({ a, b, lenM, dxM: (b[0] - a[0]) * metersPerDegLng, dyM: (b[1] - a[1]) * METERS_PER_DEG_LAT });
+      bandPerimeter += lenM;
+    }
+    if (bandPerimeter <= 0) return false;
 
     const depthLng = mToLng(roomDepth);
     const depthLat = mToLat(roomDepth);
-    const halfGapLng = mToLng(corridorWidth / 2);
 
-    let cursorM = corridorWidth / 2;
-    for (let r = 0; r < roomsOnEdge; r++) {
-      const startM = cursorM;
-      const endM = cursorM + roomWidthM;
-      const sx = edge.a[0] + ux * mToLng(startM);
-      const sy = edge.a[1] + uy * mToLat(startM);
-      const ex = edge.a[0] + ux * mToLng(endM);
-      const ey = edge.a[1] + uy * mToLat(endM);
+    for (const edge of edges) {
+      if (edge.lenM < corridorWidth * 2) continue;
+      let roomsOnEdge = Math.max(1, Math.round(edge.lenM / (targetRoomWidth + corridorWidth)));
+      let usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
+      while (usableLenM <= 0 && roomsOnEdge > 1) {
+        roomsOnEdge--;
+        usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
+      }
+      if (usableLenM <= 0) continue;
+      const roomWidthM = usableLenM / roomsOnEdge;
 
-      const p1 = [sx + nx * halfGapLng, sy + ny * mToLat(corridorWidth / 2)];
-      const p2 = [ex + nx * halfGapLng, ey + ny * mToLat(corridorWidth / 2)];
-      const p3 = [ex - nx * depthLng, ey - ny * depthLat];
-      const p4 = [sx - nx * depthLng, sy - ny * depthLat];
-      const poly = [p1, p2, p3, p4, p1];
+      const ux = edge.dxM / edge.lenM;
+      const uy = edge.dyM / edge.lenM;
+      let nx = -uy;
+      let ny = ux;
 
-      const cx = (p1[0] + p2[0] + p3[0] + p4[0]) / 4;
-      const cy = (p1[1] + p2[1] + p3[1] + p4[1]) / 4;
-      if (!pointInRing([cy, cx], ring)) {
-        cursorM = endM + corridorWidth;
-        continue;
+      const midLng = (edge.a[0] + edge.b[0]) / 2;
+      const midLat = (edge.a[1] + edge.b[1]) / 2;
+      const dot = nx * (cLng - midLng) + ny * (cLat - midLat);
+      if (dot > 0) {
+        nx = -nx;
+        ny = -ny;
       }
 
-      roomIndex++;
-      rooms.push({
-        DisplayName: `Sala ${roomIndex}`,
-        Type: "sala",
-        Coordinates: poly.map((c) => [c[0], c[1]]),
-      });
-      cursorM = endM + corridorWidth;
+      let cursorM = corridorWidth / 2;
+      for (let r = 0; r < roomsOnEdge; r++) {
+        const startM = cursorM;
+        const endM = cursorM + roomWidthM;
+        const sx = edge.a[0] + ux * mToLng(startM);
+        const sy = edge.a[1] + uy * mToLat(startM);
+        const ex = edge.a[0] + ux * mToLng(endM);
+        const ey = edge.a[1] + uy * mToLat(endM);
+
+        const p1 = [sx, sy];
+        const p2 = [ex, ey];
+        const p3 = [ex - nx * depthLng, ey - ny * depthLat];
+        const p4 = [sx - nx * depthLng, sy - ny * depthLat];
+        const poly = [p1, p2, p3, p4];
+
+        const testPoly = [
+          [p1[0] - nx * epsLng, p1[1] - ny * epsLat],
+          [p2[0] - nx * epsLng, p2[1] - ny * epsLat],
+          p3,
+          p4,
+        ];
+
+        cursorM = endM + corridorWidth;
+        if (!isInsideBuilding(testPoly)) continue;
+
+        roomIndex++;
+        candidateRooms.push({ poly, roomIndex });
+      }
     }
+    return true;
+  };
+
+  let curRing = ring;
+  const maxBands = 20;
+  for (let band = 0; band < maxBands; band++) {
+    if (ringMinSideM(curRing) < minSideM) break;
+    buildBand(curRing);
+    curRing = erodeRing(curRing, bandOffsetM);
   }
 
-  return rooms.slice(0, roomCount);
+  const kept = [];
+  for (const cand of candidateRooms) {
+    let ok = true;
+    for (const prev of kept) {
+      if (intersectsRoom(cand.poly, prev.poly)) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) kept.push(cand);
+  }
+
+  return kept.map((cand) => ({
+    DisplayName: `Sala ${cand.roomIndex}`,
+    Type: "sala",
+    Coordinates: [...cand.poly, cand.poly[0]],
+  }));
 };
