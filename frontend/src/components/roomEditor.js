@@ -1,4 +1,4 @@
-import { BACKEND_API_URL } from "../views/map.js";
+﻿import { BACKEND_API_URL } from "../views/map.js";
 import { refreshCurrentMapData } from "@app/goToCampus";
 import {
   requestAdminMapToolMode,
@@ -34,21 +34,23 @@ const addDrawVertexMarker = (latlng) => {
 };
 
 const ICONS = {
-  select: "&#9757;",
-  square: "&#9633;",
-  rect: "&#9645;",
-  circle: "&#9675;",
-  free: "&#10070;",
-  hand: "&#9998;",
-  delete: "&#10005;",
-  undo: "&#8630;",
-  suggest: "&#10024;",
-  save: "&#10003;",
-  copy: "&#10697;",
-  paste: "&#9654;",
-  snap: "&#128278;",
-  copyLayout: "&#128203;",
-  pasteLayout: "&#128205;",
+  select: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>',
+  square: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/></svg>',
+  rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="1"/></svg>',
+  circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
+  free: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 22,8.5 19,20 5,20 2,8.5"/></svg>',
+  hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+  door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5"/><path d="M9 2v20"/><path d="M16 10h.01"/><rect x="7" y="6" width="2" height="4" rx="0.5"/></svg>',
+  stair: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg>',
+  delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+  undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
+  suggest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z"/></svg>',
+  save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
+  snap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M8 6l4-4 4 4"/><circle cx="12" cy="16" r="4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 20v2"/></svg>',
+  copyLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="14" height="14" rx="2"/><path d="M4 8H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>',
+  pasteLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
 };
 
 let currentEditorState = null;
@@ -204,7 +206,9 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       floors,
       selectedFloor,
       rooms: [],
+      annotations: [],
       selectedRoom: null,
+      selectedRoomIds: [],
       mode: "select",
       isDirty: false,
       buildingPolygonLayer: null,
@@ -215,6 +219,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       suggestions: [],
       suggestionPreviewLayers: [],
       removedExternalIds: [],
+      removedAnnotationExternalIds: [],
       dragging: null,
       rotating: null,
       snapEnabled: true,
@@ -252,12 +257,14 @@ const installKeyboardShortcuts = () => {
         clearDrawState();
         currentEditorState.mode = "select";
         currentEditorState.selectedRoom = null;
+        currentEditorState.selectedRoomIds = [];
         if (popupMap) {
           popupMap.dragging.enable();
           popupMap.keyboard.enable();
         }
         updatePopupContent();
         updateSidePanel();
+        updateBottomBar();
         setAdminMapToolsStatus("Dibujo cancelado.");
       }
     } else if (e.key === "Enter") {
@@ -306,6 +313,14 @@ const installKeyboardShortcuts = () => {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
       selectRoomMode("draw-free");
+    } else if (e.key === "d" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-door");
+    } else if (e.key === "e" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("draw-stair");
     } else if (e.key === "s" && !e.ctrlKey && !e.metaKey) {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
@@ -365,8 +380,23 @@ const fetchRoomsForFloor = async (buildingExternalId, floor) => {
   return response.json();
 };
 
+const fetchAnnotationsForFloor = async (buildingExternalId, floor) => {
+  const response = await fetch(
+    `${getApiUrl()}/api/annotations?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
+    { credentials: "include", cache: "no-store" }
+  );
+  if (!response.ok) return [];
+  return response.json();
+};
+
 const loadRoomsForFloor = async (buildingExternalId, floor) => {
   currentEditorState.rooms = await fetchRoomsForFloor(buildingExternalId, floor);
+  currentEditorState.annotations = await loadAnnotationsForFloor(buildingExternalId, floor);
+};
+
+const loadAnnotationsForFloor = async (buildingExternalId, floor) => {
+  const annotations = await fetchAnnotationsForFloor(buildingExternalId, floor);
+  return annotations.map((a) => ({ ...a, kind: "annotation", rotation: a.rotation || 0, scaleX: a.scaleX || 1, scaleY: a.scaleY || 1 }));
 };
 
 const createPopup = () => {
@@ -462,19 +492,27 @@ const initPopupMap = (geometry) => {
     popupMap.setMinZoom(Math.min(popupMap.getZoom(), 22));
   });
 
-  popupMap.on("click", (e) => {
-    if (!currentEditorState || currentEditorState.mode !== "select") return;
-    const clickedOnRoom = currentEditorState.roomLayers?.some((layer) =>
-      layer.getBounds?.().contains(e.latlng)
-    );
-    if (!clickedOnRoom && currentEditorState.selectedRoom) {
-      currentEditorState.selectedRoom = null;
-      popupMap.dragging.enable();
-      popupMap.keyboard.enable();
-      renderRooms();
-      updateSidePanel();
-    }
-  });
+  popupMap.on("click", handleMapDeselectClick);
+};
+
+const handleMapDeselectClick = (e) => {
+  if (!currentEditorState || !popupMap || currentEditorState.mode !== "select") return;
+  if (currentEditorState._suppressDeselectClick) {
+    currentEditorState._suppressDeselectClick = false;
+    return;
+  }
+  const clickedOnRoom = currentEditorState.roomLayers?.some((layer) =>
+    layer.getBounds?.().contains(e.latlng)
+  );
+  if (!clickedOnRoom && (currentEditorState.selectedRoom || getSelectedRoomIds().length > 0)) {
+    currentEditorState.selectedRoomIds = [];
+    currentEditorState.selectedRoom = null;
+    popupMap.dragging.enable();
+    popupMap.keyboard.enable();
+    renderRooms();
+    updateSidePanel();
+    updateBottomBar();
+  }
 };
 
 const updatePopupContent = () => {
@@ -582,6 +620,8 @@ const updateBottomBar = () => {
     { id: "draw-circle", icon: ICONS.circle, title: "Circulo (C)" },
     { id: "draw-free", icon: ICONS.free, title: "Libre - vertices (L)" },
     { id: "draw-hand", icon: ICONS.hand, title: "Mano alzada (H)" },
+    { id: "draw-door", icon: ICONS.door, title: "Puerta (D)" },
+    { id: "draw-stair", icon: ICONS.stair, title: "Escalera (E)" },
   ];
 
   for (const t of toolDefs) {
@@ -606,12 +646,15 @@ const updateBottomBar = () => {
   divider1.className = "room-editor-divider";
   tools.appendChild(divider1);
 
+  const selectedCount = selectedRoom ? Math.max(getSelectedRoomIds().length, 1) : getSelectedRoomIds().length;
+  const canOperate = selectedCount > 0;
+
   const deleteBtn = document.createElement("button");
   deleteBtn.type = "button";
   deleteBtn.className = "room-editor-tool-btn is-icon-only";
   deleteBtn.innerHTML = `<span>${ICONS.delete}</span>`;
-  deleteBtn.title = "Eliminar sala seleccionada (Supr)";
-  deleteBtn.disabled = !selectedRoom;
+  deleteBtn.title = selectedCount > 1 ? `Eliminar ${selectedCount} elementos (Supr)` : "Eliminar elemento seleccionado (Supr)";
+  deleteBtn.disabled = !canOperate;
   deleteBtn.addEventListener("click", () => deleteSelectedRoom());
   tools.appendChild(deleteBtn);
 
@@ -619,8 +662,8 @@ const updateBottomBar = () => {
   copyBtn.type = "button";
   copyBtn.className = "room-editor-tool-btn is-icon-only";
   copyBtn.innerHTML = `<span>${ICONS.copy}</span>`;
-  copyBtn.title = "Copiar sala (Ctrl+C)";
-  copyBtn.disabled = !selectedRoom;
+  copyBtn.title = selectedCount > 1 ? `Copiar ${selectedCount} elementos (Ctrl+C)` : "Copiar elemento (Ctrl+C)";
+  copyBtn.disabled = !canOperate;
   copyBtn.addEventListener("click", () => copySelectedRoom());
   tools.appendChild(copyBtn);
 
@@ -725,12 +768,14 @@ const updateBottomBar = () => {
 const getHintForMode = (mode, snapEnabled) => {
   const snapText = snapEnabled ? "S=snap OFF" : "S=snap ON";
   switch (mode) {
-    case "select": return `Modo seleccion. Ctrl+mover | Shift=rotar | ${snapText}`;
+    case "select": return `Seleccion: click=sumar/quitar | Ctrl+arrastrar=mover | Shift+arrastrar=rotar | ${snapText}`;
     case "draw-square": return "Cuadrado: click 1ra esquina, click 2da esquina. Esc cancelar.";
     case "draw-rect": return "Rectangulo: click 1ra esquina, click 2da esquina. Esc cancelar.";
     case "draw-circle": return "Circulo: click centro, click radio. Esc cancelar.";
     case "draw-free": return "Libre: click para vertices, Enter/dblclick cerrar. Shift=ortogonal. Esc cancelar.";
     case "draw-hand": return "Mano alzada: click+arrastra para dibujar. Shift=rectos. Esc cancelar.";
+    case "draw-door": return "Puerta: dibuja el contorno de la puerta. Enter/dblclick cerrar. Esc cancelar.";
+    case "draw-stair": return "Escalera: dibuja el contorno de la escalera. Enter/dblclick cerrar. Esc cancelar.";
     default: return "";
   }
 };
@@ -739,15 +784,83 @@ const updateSidePanel = () => {
   if (!sidePanelEl || !currentEditorState) return;
 
   const { selectedRoom } = currentEditorState;
+  const selectedCount = getSelectedRoomIds().length;
 
-  if (selectedRoom) {
+  if (selectedCount > 1) {
     sidePanelEl.className = "room-editor-side-panel is-visible";
     sidePanelEl.innerHTML = "";
-    sidePanelEl.appendChild(buildPropertiesPanel(selectedRoom));
+    const container = document.createElement("div");
+    const header = document.createElement("div");
+    header.className = "room-editor-side-panel-header";
+    header.innerHTML = `<span class="room-editor-side-panel-title">Grupo (${selectedCount})</span>`;
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "room-editor-side-panel-close";
+    closeBtn.innerHTML = "&times;";
+    closeBtn.addEventListener("click", () => {
+      currentEditorState.selectedRoomIds = [];
+      syncSelectedRoomFromIds();
+      renderRooms();
+      updateSidePanel();
+      updateBottomBar();
+    });
+    header.appendChild(closeBtn);
+    container.appendChild(header);
+    const hint = document.createElement("div");
+    hint.className = "room-editor-group-hint";
+    hint.textContent = "Comandos: Ctrl+arrastrar = mover grupo | Shift+arrastrar = rotar grupo | Ctrl+C / Ctrl+V = copiar/pegar | Supr = eliminar | Ctrl+Z / Ctrl+Y = deshacer/rehacer | G = guardar";
+    container.appendChild(hint);
+    sidePanelEl.appendChild(container);
+  } else if (selectedRoom) {
+    sidePanelEl.className = "room-editor-side-panel is-visible";
+    sidePanelEl.innerHTML = "";
+    if (selectedRoom.kind === "annotation") {
+      sidePanelEl.appendChild(buildAnnotationPanel(selectedRoom));
+    } else {
+      sidePanelEl.appendChild(buildPropertiesPanel(selectedRoom));
+    }
   } else {
     sidePanelEl.className = "room-editor-side-panel";
     sidePanelEl.innerHTML = "";
   }
+};
+
+const buildAnnotationPanel = (annotation) => {
+  const container = document.createElement("div");
+
+  const header = document.createElement("div");
+  header.className = "room-editor-side-panel-header";
+  const label = annotation.annotationType === "stair" ? "Escalera" : "Puerta";
+  header.innerHTML = `<span class="room-editor-side-panel-title">${label}</span>`;
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "room-editor-side-panel-close";
+  closeBtn.innerHTML = "&times;";
+  closeBtn.addEventListener("click", () => {
+    currentEditorState.selectedRoom = null;
+    currentEditorState.selectedRoomIds = [];
+    renderRooms();
+    updateSidePanel();
+    updateBottomBar();
+  });
+  header.appendChild(closeBtn);
+  container.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "room-editor-side-panel-body";
+  body.innerHTML = `
+    <p class="room-editor-annotation-hint">Marca de ${label.toLowerCase()} (solo visual). Ctrl+arrastrar para mover, Shift+arrastrar para rotar.</p>
+  `;
+  container.appendChild(body);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.className = "room-editor-delete-room-btn";
+  deleteBtn.textContent = "Eliminar marca";
+  deleteBtn.addEventListener("click", () => deleteSelectedRoom());
+  container.appendChild(deleteBtn);
+
+  return container;
 };
 
 const buildPropertiesPanel = (room) => {
@@ -762,8 +875,10 @@ const buildPropertiesPanel = (room) => {
   closeBtn.innerHTML = "&times;";
   closeBtn.addEventListener("click", () => {
     currentEditorState.selectedRoom = null;
+    currentEditorState.selectedRoomIds = [];
     renderRooms();
     updateSidePanel();
+    updateBottomBar();
   });
   header.appendChild(closeBtn);
   container.appendChild(header);
@@ -863,7 +978,7 @@ const buildPropertiesPanel = (room) => {
   if (deleteRoomBtn) {
     deleteRoomBtn.addEventListener("click", () => {
       if (!currentEditorState?.selectedRoom) return;
-      if (!window.confirm("¿Eliminar esta sala?")) return;
+      if (!window.confirm("Â¿Eliminar esta sala?")) return;
       deleteSelectedRoom();
       updateSidePanel();
     });
@@ -912,81 +1027,97 @@ const renderRooms = () => {
 
   if (!currentEditorState || !popupMap) return;
 
-  for (const room of currentEditorState.rooms) {
-    if (!room.geometryJson) continue;
+  const renderShape = (shape) => {
+    if (!shape.geometryJson) return;
 
     try {
-      const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
-      if (!geom.coordinates) continue;
+      const geom = typeof shape.geometryJson === "string" ? JSON.parse(shape.geometryJson) : shape.geometryJson;
+      if (!geom.coordinates) return;
 
       const coords = geom.coordinates[0];
+      if (!Array.isArray(coords) || coords.length < 3) return;
+
       let latLngs = coords.map((c) => [c[1], c[0]]);
 
-      const rotation = room.rotation || 0;
-      const scaleX = room.scaleX || 1;
-      const scaleY = room.scaleY || 1;
+      const rotation = shape.rotation || 0;
+      const scaleX = shape.scaleX || 1;
+      const scaleY = shape.scaleY || 1;
 
       if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
         latLngs = transformLatLngs(latLngs, rotation, scaleX, scaleY);
       }
 
-      const isSelected = currentEditorState.selectedRoom?.externalId === room.externalId;
+      const selectedIds = getSelectedRoomIds();
+      const isSelected = selectedIds.length > 0
+        ? selectedIds.includes(shape.externalId)
+        : currentEditorState.selectedRoom?.externalId === shape.externalId;
+
+      const style = shape.kind === "annotation"
+        ? (shape.annotationType === "stair"
+            ? { color: "#7c3aed", weight: 2, fillColor: isSelected ? "#f59e0b" : "#7c3aed", fillOpacity: isSelected ? 0.3 : 0.25 }
+            : { color: "#0ea5e9", weight: 2, fillColor: isSelected ? "#f59e0b" : "#0ea5e9", fillOpacity: isSelected ? 0.3 : 0.25 })
+        : { color: isSelected ? "#f59e0b" : "#059669", weight: isSelected ? 3 : 2, fillColor: isSelected ? "#f59e0b" : "#059669", fillOpacity: isSelected ? 0.3 : 0.2 };
 
       const layer = L.polygon(latLngs, {
-        color: isSelected ? "#f59e0b" : "#059669",
-        weight: isSelected ? 3 : 2,
-        fillColor: isSelected ? "#f59e0b" : "#059669",
-        fillOpacity: isSelected ? 0.3 : 0.2,
+        ...style,
         className: ROOM_LAYER_CLASS,
       }).addTo(popupMap);
 
-      layer.on("mousedown", (e) => {
-        const oe = e.originalEvent;
+      layer.roomData = shape;
+      currentEditorState.roomLayers.push(layer);
 
-        if (oe.ctrlKey) {
-          L.DomEvent.stop(e);
-          enableDragLayer(layer, room, e);
-        } else if (oe.shiftKey) {
-          L.DomEvent.stop(e);
-          enableRotateLayer(layer, room, e);
-        } else if (currentEditorState.mode === "select") {
-          L.DomEvent.stop(e);
-          selectRoom(room);
+      layer.on("mousedown", (e) => {
+        L.DomEvent.stop(e);
+        const ids = getSelectedRoomIds();
+        const isSelectedShape = ids.includes(shape.externalId);
+        if (isSelectedShape && e.originalEvent.shiftKey) {
+          ids.length > 1 ? enableMultiRotateLayer(e) : enableRotateLayer(layer, shape, e);
+        } else if (isSelectedShape && e.originalEvent.ctrlKey) {
+          ids.length > 1 ? enableMultiDragLayer(e) : enableDragLayer(layer, shape, e);
+        } else {
+          beginMultiSelectInteraction(layer, shape, e);
         }
       });
-
-      layer.roomData = room;
-      currentEditorState.roomLayers.push(layer);
     } catch (e) {
-      console.warn("Error rendering room:", room.externalId, e);
+      console.warn("Error rendering shape:", shape.externalId, e);
     }
-  }
+  };
+
+  for (const room of currentEditorState.rooms) renderShape(room);
+  for (const annotation of currentEditorState.annotations || []) renderShape(annotation);
 };
 
 const transformLatLngs = (latLngs, rotationDeg, scaleX, scaleY) => {
-  if (latLngs.length < 3) return latLngs;
+  if (latLngs.length < 3) return latLngs.map((ll) => [...ll]);
+  if (!popupMap) return latLngs;
 
-  const centerLat = latLngs.reduce((s, ll) => s + ll[0], 0) / latLngs.length;
-  const centerLng = latLngs.reduce((s, ll) => s + ll[1], 0) / latLngs.length;
+  const pts = latLngs.map((ll) => popupMap.latLngToContainerPoint(L.latLng(ll[0], ll[1])));
+  const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+  const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
   const rad = (rotationDeg * Math.PI) / 180;
   const cosR = Math.cos(rad);
   const sinR = Math.sin(rad);
 
-  return latLngs.map((ll) => {
-    const dx = (ll[1] - centerLng) * scaleX;
-    const dy = (ll[0] - centerLat) * scaleY;
-    const newLng = centerLng + dx * cosR - dy * sinR;
-    const newLat = centerLat + dx * sinR + dy * cosR;
-    return [newLat, newLng];
+  return pts.map((p) => {
+    const dx = (p.x - cx) * scaleX;
+    const dy = (p.y - cy) * scaleY;
+    const nx = cx + dx * cosR - dy * sinR;
+    const ny = cy + dx * sinR + dy * cosR;
+    const ll = popupMap.containerPointToLatLng(L.point(nx, ny));
+    return [ll.lat, ll.lng];
   });
 };
 
 const enableDragLayer = (layer, room, e) => {
   if (!popupMap) return;
   L.DomEvent.stop(e);
+  popupMap.dragging.disable();
 
   const startLatLng = e.latlng;
-  const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  let geom;
+  try {
+    geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  } catch { return; }
   if (!geom?.coordinates?.[0]) return;
 
   const origCoords = geom.coordinates[0].map((c) => [...c]);
@@ -1028,7 +1159,9 @@ const enableDragLayer = (layer, room, e) => {
     dragging = false;
     popupMap.off("mousemove", onMove);
     popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
     popupMap.getContainer().style.cursor = "";
+    currentEditorState._suppressDeselectClick = true;
   };
 
   popupMap.getContainer().style.cursor = "grabbing";
@@ -1039,8 +1172,12 @@ const enableDragLayer = (layer, room, e) => {
 const enableRotateLayer = (layer, room, e) => {
   if (!popupMap) return;
   L.DomEvent.stop(e);
+  popupMap.dragging.disable();
 
-  const geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  let geom;
+  try {
+    geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  } catch { return; }
   if (!geom?.coordinates?.[0]) return;
 
   const coords = geom.coordinates[0];
@@ -1073,7 +1210,205 @@ const enableRotateLayer = (layer, room, e) => {
     rotating = false;
     popupMap.off("mousemove", onMove);
     popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
     popupMap.getContainer().style.cursor = "";
+    currentEditorState._suppressDeselectClick = true;
+  };
+
+  popupMap.getContainer().style.cursor = "crosshair";
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
+};
+
+const getMultiSelectItems = () => {
+  if (!currentEditorState) return [];
+  const ids = getSelectedRoomIds();
+  return currentEditorState.roomLayers
+    .filter((l) => ids.includes(l.roomData.externalId))
+    .map((l) => {
+      const room = l.roomData;
+      if (!room.geometryJson) return null;
+      let geom;
+      try {
+        geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+      } catch { return null; }
+      const coords = geom?.coordinates?.[0];
+      if (!Array.isArray(coords) || coords.length < 3) return null;
+      return { layer: l, room, coords: coords.map((c) => [...c]) };
+    })
+    .filter(Boolean);
+};
+
+const beginMultiSelectInteraction = (layer, room, e) => {
+  if (!popupMap) return;
+  L.DomEvent.stop(e);
+  popupMap.dragging.disable();
+  const startClientX = e.originalEvent.clientX;
+  const startClientY = e.originalEvent.clientY;
+  let moved = false;
+
+  const onMapMove = (ev) => {
+    if (moved) return;
+    const dx = ev.originalEvent.clientX - startClientX;
+    const dy = ev.originalEvent.clientY - startClientY;
+    if (Math.abs(dx) + Math.abs(dy) < 5) return;
+    moved = true;
+    popupMap.off("mousemove", onMapMove);
+    popupMap.off("mouseup", onMapUp);
+
+    if (!getSelectedRoomIds().includes(room.externalId)) {
+      // drag started on an unselected room: do not move/rotate any group
+      popupMap.dragging.enable();
+      return;
+    }
+    if (ev.originalEvent.shiftKey) {
+      enableMultiRotateLayer(ev);
+    } else if (ev.originalEvent.ctrlKey) {
+      enableMultiDragLayer(ev);
+    } else {
+      // plain drag without Ctrl/Shift: no group action, map drag is blocked
+      popupMap.once("mouseup", () => popupMap.dragging.enable());
+    }
+  };
+
+  const onMapUp = () => {
+    popupMap.off("mousemove", onMapMove);
+    popupMap.off("mouseup", onMapUp);
+    if (moved) return;
+    popupMap.dragging.enable();
+    toggleRoomSelection(room);
+  };
+
+  popupMap.on("mousemove", onMapMove);
+  popupMap.on("mouseup", onMapUp);
+};
+
+const enableMultiDragLayer = (e) => {
+  if (!popupMap) return;
+  L.DomEvent.stop(e);
+  const items = getMultiSelectItems();
+  if (!items.length) return;
+
+  const startLatLng = e.latlng;
+  const before = items.map((it) => ({ id: it.room.externalId, geometryJson: it.room.geometryJson }));
+  let dragging = true;
+
+  const onMove = (ev) => {
+    if (!dragging) return;
+    const dLat = ev.latlng.lat - startLatLng.lat;
+    const dLng = ev.latlng.lng - startLatLng.lng;
+    for (const it of items) {
+      const newCoords = it.coords.map((c) => [c[0] + dLng, c[1] + dLat]);
+      const newGeo = { type: "Polygon", coordinates: [newCoords] };
+      it.room.geometryJson = JSON.stringify(newGeo);
+      currentEditorState.isDirty = true;
+
+      let newLatLngs = newCoords.map((c) => [c[1], c[0]]);
+      const rotation = it.room.rotation || 0;
+      const scaleX = it.room.scaleX || 1;
+      const scaleY = it.room.scaleY || 1;
+      if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
+        newLatLngs = transformLatLngs(newLatLngs, rotation, scaleX, scaleY);
+      }
+      it.layer.setLatLngs(newLatLngs);
+    }
+    setAdminMapToolsStatus(`Moviendo ${items.length} elemento(s). G para guardar.`);
+  };
+
+  const onUp = () => {
+    dragging = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
+    popupMap.getContainer().style.cursor = "";
+    const after = items.map((it) => ({ id: it.room.externalId, geometryJson: it.room.geometryJson }));
+    const changed = after.some((a, i) => a.geometryJson !== before[i].geometryJson);
+    if (changed) {
+      pushUndo({ type: "move-rooms", ids: before.map((b) => b.id), before: before.map((b) => b.geometryJson), after: after.map((a) => a.geometryJson) });
+      setAdminMapToolsStatus("Grupo movido. G para guardar.");
+    } else {
+      setAdminMapToolsStatus("Los elementos no se movieron.");
+    }
+    currentEditorState._suppressDeselectClick = true;
+  };
+
+  popupMap.getContainer().style.cursor = "grabbing";
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
+};
+
+const enableMultiRotateLayer = (e) => {
+  if (!popupMap) return;
+  L.DomEvent.stop(e);
+  popupMap.dragging.disable();
+  const items = getMultiSelectItems();
+  if (!items.length) return;
+
+  const groupCenter = L.latLng(
+    items.reduce((s, it) => s + it.coords.reduce((sa, c) => sa + c[1], 0) / it.coords.length, 0) / items.length,
+    items.reduce((s, it) => s + it.coords.reduce((sa, c) => sa + c[0], 0) / it.coords.length, 0) / items.length
+  );
+  const groupCenterPt = popupMap.latLngToContainerPoint(groupCenter);
+  const basePts = items.map((it) => ({
+    layer: it.layer,
+    room: it.room,
+    pts: it.coords.map((c) => popupMap.latLngToContainerPoint(L.latLng(c[1], c[0]))),
+  }));
+
+  const startAngle = Math.atan2(popupMap.latLngToContainerPoint(e.latlng).y - groupCenterPt.y, popupMap.latLngToContainerPoint(e.latlng).x - groupCenterPt.x);
+  const before = items.map((it) => ({ id: it.room.externalId, geometryJson: it.room.geometryJson }));
+  let rotating = true;
+
+  const onMove = (ev) => {
+    if (!rotating) return;
+    const evPt = popupMap.latLngToContainerPoint(ev.latlng);
+    const currentAngle = Math.atan2(evPt.y - groupCenterPt.y, evPt.x - groupCenterPt.x);
+    const deltaDeg = ((currentAngle - startAngle) * 180) / Math.PI;
+    const rad = (deltaDeg * Math.PI) / 180;
+    const cosR = Math.cos(rad);
+    const sinR = Math.sin(rad);
+
+    for (const base of basePts) {
+      const rotatedPts = base.pts.map((p) => {
+        const dx = p.x - groupCenterPt.x;
+        const dy = p.y - groupCenterPt.y;
+        return L.point(groupCenterPt.x + dx * cosR - dy * sinR, groupCenterPt.y + dx * sinR + dy * cosR);
+      });
+      const newLatLngs = rotatedPts.map((p) => {
+        const ll = popupMap.containerPointToLatLng(p);
+        return [ll.lat, ll.lng];
+      });
+      const newCoords = newLatLngs.map((ll) => [ll[1], ll[0]]);
+      const newGeo = { type: "Polygon", coordinates: [newCoords] };
+      base.room.geometryJson = JSON.stringify(newGeo);
+      currentEditorState.isDirty = true;
+
+      const displayed = transformLatLngs(
+        newLatLngs,
+        base.room.rotation || 0,
+        base.room.scaleX || 1,
+        base.room.scaleY || 1
+      );
+      base.layer.setLatLngs(displayed);
+    }
+    setAdminMapToolsStatus(`Rotando ${basePts.length} elemento(s) como grupo. G para guardar.`);
+  };
+
+  const onUp = () => {
+    rotating = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
+    popupMap.getContainer().style.cursor = "";
+    const after = items.map((it) => ({ id: it.room.externalId, geometryJson: it.room.geometryJson }));
+    const changed = after.some((a, i) => a.geometryJson !== before[i].geometryJson);
+    if (changed) {
+      pushUndo({ type: "rotate-rooms", ids: before.map((b) => b.id), before: before.map((b) => b.geometryJson), after: after.map((a) => a.geometryJson) });
+      setAdminMapToolsStatus("Grupo rotado. G para guardar.");
+    } else {
+      setAdminMapToolsStatus("Los elementos no se rotaron.");
+    }
+    currentEditorState._suppressDeselectClick = true;
   };
 
   popupMap.getContainer().style.cursor = "crosshair";
@@ -1100,26 +1435,70 @@ const clearRoomLayers = () => {
   currentEditorState.roomLayers = [];
 };
 
-const selectRoom = (room) => {
+const getSelectedRoomIds = () => {
+  if (!currentEditorState) return [];
+  const ids = currentEditorState.selectedRoomIds || [];
+  const valid = new Set([
+    ...currentEditorState.rooms.map((r) => r.externalId),
+    ...(currentEditorState.annotations || []).map((a) => a.externalId),
+  ]);
+  return ids.filter((id) => valid.has(id));
+};
+
+const syncSelectedRoomFromIds = () => {
   if (!currentEditorState) return;
-  currentEditorState.selectedRoom = room;
-  if (popupMap) {
-    if (room) {
-      popupMap.dragging.disable();
-      popupMap.keyboard.disable();
-    } else {
+  const ids = getSelectedRoomIds();
+  if (ids.length === 0) {
+    currentEditorState.selectedRoom = null;
+    if (popupMap) {
       popupMap.dragging.enable();
       popupMap.keyboard.enable();
     }
+    return;
   }
+  const anchor = findShapeById(ids[0]);
+  currentEditorState.selectedRoom = anchor;
+};
+
+const findShapeById = (id) => {
+  if (!currentEditorState) return null;
+  const room = currentEditorState.rooms.find((r) => r.externalId === id);
+  if (room) return room;
+  return (currentEditorState.annotations || []).find((a) => a.externalId === id) || null;
+};
+
+const allShapes = () => [...(currentEditorState?.rooms || []), ...(currentEditorState?.annotations || [])];
+
+const toggleRoomSelection = (room) => {
+  if (!currentEditorState) return;
+  const ids = getSelectedRoomIds();
+  if (ids.includes(room.externalId)) {
+    currentEditorState.selectedRoomIds = ids.filter((id) => id !== room.externalId);
+  } else {
+    currentEditorState.selectedRoomIds = [...ids, room.externalId];
+  }
+  syncSelectedRoomFromIds();
   renderRooms();
   updateSidePanel();
+  updateBottomBar();
+  if (getSelectedRoomIds().length > 0) {
+    setAdminMapToolsStatus(`${getSelectedRoomIds().length} elemento(s) seleccionado(s). Ctrl+arrastrar para mover, Shift+arrastrar para rotar, G para guardar.`);
+  }
+};
+
+const clearRoomSelection = () => {
+  if (!currentEditorState) return;
+  currentEditorState.selectedRoomIds = [];
+  currentEditorState.selectedRoom = null;
 };
 
 const selectRoomEditorFloor = async (floor) => {
   if (!currentEditorState) return;
   currentEditorState.selectedFloor = floor;
   currentEditorState.selectedRoom = null;
+  currentEditorState.selectedRoomIds = [];
+  currentEditorState.removedExternalIds = [];
+  currentEditorState.removedAnnotationExternalIds = [];
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
@@ -1129,12 +1508,18 @@ const selectRoomEditorFloor = async (floor) => {
 const selectRoomMode = (mode) => {
   if (!currentEditorState) return;
   clearDrawState();
+  const wasDrawMode = currentEditorState.mode !== "select";
   currentEditorState.mode = mode;
-  currentEditorState.selectedRoom = null;
+  if (mode === "select") {
+    syncSelectedRoomFromIds();
+  } else if (wasDrawMode) {
+    currentEditorState.selectedRoom = null;
+  }
   if (popupMap) {
     popupMap.dragging.enable();
     popupMap.keyboard.enable();
   }
+  renderRooms();
   updateBottomBar();
   updateSidePanel();
 
@@ -1159,8 +1544,16 @@ const selectRoomMode = (mode) => {
       setAdminMapToolsStatus("Click y arrastra para dibujar. Shift = lineas rectas.");
       startDrawHand();
       break;
+    case "draw-door":
+      setAdminMapToolsStatus("Puerta: dibuja el contorno de la puerta (click para vertices, Enter/dblclick cerrar).");
+      startDrawAnnotation("door");
+      break;
+    case "draw-stair":
+      setAdminMapToolsStatus("Escalera: dibuja el contorno de la escalera (click para vertices, Enter/dblclick cerrar).");
+      startDrawAnnotation("stair");
+      break;
     default:
-      setAdminMapToolsStatus("Modo seleccion. Ctrl+click para mover, Shift+click para rotar.");
+      setAdminMapToolsStatus("Modo seleccion. Click para sumar/quitar, Ctrl+arrastrar para mover, Shift+arrastrar para rotar. Ctrl+Z deshacer, G guardar.");
   }
 };
 
@@ -1314,10 +1707,10 @@ const startDrawCircle = () => {
   popupMap.on("click", onClick);
 };
 
-const startDrawFree = () => {
+const startDrawFree = (mode = "draw-free") => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
-  currentEditorState.mode = "draw-free";
+  currentEditorState.mode = mode;
   currentEditorState.drawPoints = [];
   let shiftHeld = false;
 
@@ -1371,6 +1764,12 @@ const startDrawFree = () => {
 
   popupMap.on("click", onClick);
   popupMap.on("dblclick", onDblClick);
+};
+
+const startDrawAnnotation = (type) => {
+  if (!currentEditorState || !popupMap) return;
+  currentEditorState.pendingDrawType = type || "door";
+  startDrawFree(type === "stair" ? "draw-stair" : "draw-door");
 };
 
 const startDrawHand = () => {
@@ -1514,6 +1913,7 @@ const clearDrawState = () => {
   popupMap.off("mousemove");
   popupMap.off("mousedown");
   popupMap.off("mouseup");
+  popupMap.on("click", handleMapDeselectClick);
 };
 
 const ensureSnapMarker = () => {
@@ -1537,7 +1937,10 @@ const applySnap = (latlng) => {
   if (!currentEditorState.snapRefs) {
     const buildingCoords = currentEditorState.buildingGeometry?.coordinates?.[0];
     const roomCoords = currentEditorState.rooms.map((r) => {
-      const geom = typeof r.geometryJson === "string" ? JSON.parse(r.geometryJson) : r.geometryJson;
+      let geom = null;
+      try {
+        geom = typeof r.geometryJson === "string" ? JSON.parse(r.geometryJson) : r.geometryJson;
+      } catch { geom = null; }
       return geom?.coordinates?.[0] || [];
     });
     currentEditorState.snapRefs = buildSnapRefs(buildingCoords, roomCoords);
@@ -1547,33 +1950,44 @@ const applySnap = (latlng) => {
   return result.latlng;
 };
 
+const buildNewRoomObject = (geoJsonCoords, extra = {}) => ({
+  externalId: extra.externalId || `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+  buildingExternalId: currentEditorState.buildingExternalId,
+  floor: currentEditorState.selectedFloor,
+  displayName: extra.displayName || `Sala ${currentEditorState.rooms.length + 1}`,
+  shortName: "",
+  type: extra.type || "sala",
+  unit: "",
+  service: "",
+  status: "active",
+  capacity: null,
+  geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
+  source: "manual",
+  notes: "",
+  isNew: true,
+  rotation: 0,
+  scaleX: 1,
+  scaleY: 1,
+});
+
 const createNewRoom = (geoJsonCoords) => {
   if (!currentEditorState) return;
 
-  const newRoom = {
-    externalId: `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}`,
-    buildingExternalId: currentEditorState.buildingExternalId,
-    floor: currentEditorState.selectedFloor,
-    displayName: `Sala ${currentEditorState.rooms.length + 1}`,
-    shortName: "",
-    type: "sala",
-    unit: "",
-    service: "",
-    status: "active",
-    capacity: null,
-    geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
-    source: "manual",
-    notes: "",
-    isNew: true,
-    rotation: 0,
-    scaleX: 1,
-    scaleY: 1,
-  };
+  const drawMode = currentEditorState.mode;
+  if (drawMode === "draw-door" || drawMode === "draw-stair" || currentEditorState.pendingDrawType) {
+    const type = currentEditorState.pendingDrawType || (drawMode === "draw-stair" ? "stair" : "door");
+    delete currentEditorState.pendingDrawType;
+    createNewAnnotation(geoJsonCoords, type);
+    return;
+  }
+
+  const newRoom = buildNewRoomObject(geoJsonCoords);
 
   pushUndo({ type: "create-room", room: newRoom });
 
   currentEditorState.rooms.push(newRoom);
   currentEditorState.selectedRoom = newRoom;
+  currentEditorState.selectedRoomIds = [newRoom.externalId];
   currentEditorState.isDirty = true;
   clearDrawState();
   currentEditorState.mode = "select";
@@ -1582,17 +1996,79 @@ const createNewRoom = (geoJsonCoords) => {
   setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
 };
 
+const buildNewAnnotationObject = (geoJsonCoords, type) => ({
+  externalId: `ANN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+  buildingExternalId: currentEditorState.buildingExternalId,
+  floor: currentEditorState.selectedFloor,
+  annotationType: type,
+  geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
+  kind: "annotation",
+  rotation: 0,
+  scaleX: 1,
+  scaleY: 1,
+  isNew: true,
+});
+
+const createNewAnnotation = (geoJsonCoords, type) => {
+  if (!currentEditorState) return;
+  if (!currentEditorState.annotations) currentEditorState.annotations = [];
+
+  const newAnnotation = buildNewAnnotationObject(geoJsonCoords, type);
+
+  pushUndo({ type: "create-annotation", annotation: newAnnotation });
+
+  currentEditorState.annotations.push(newAnnotation);
+  currentEditorState.selectedRoom = newAnnotation;
+  currentEditorState.selectedRoomIds = [newAnnotation.externalId];
+  currentEditorState.isDirty = true;
+  clearDrawState();
+  currentEditorState.mode = "select";
+  renderRooms();
+  updatePopupContent();
+  const label = type === "stair" ? "Escalera" : "Puerta";
+  setAdminMapToolsStatus(`${label} creada. Ctrl+arrastrar para mover, G para guardar.`);
+};
+
 const deleteSelectedRoom = () => {
-  if (!currentEditorState?.selectedRoom) return;
+  if (!currentEditorState) return;
 
-  const room = currentEditorState.selectedRoom;
-  pushUndo({ type: "delete-room", room });
+  const ids = getSelectedRoomIds();
+  let rooms = currentEditorState.rooms.filter((r) => ids.includes(r.externalId));
+  let annotations = (currentEditorState.annotations || []).filter((a) => ids.includes(a.externalId));
 
-  currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== room.externalId);
-  if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
-    currentEditorState.removedExternalIds.push(room.externalId);
+  if (rooms.length === 0 && annotations.length === 0 && currentEditorState.selectedRoom) {
+    const shape = currentEditorState.selectedRoom;
+    if (shape.kind === "annotation") annotations = [shape];
+    else rooms = [shape];
   }
-  currentEditorState.selectedRoom = null;
+
+  if (rooms.length === 0 && annotations.length === 0) {
+    setAdminMapToolsStatus("No hay elementos seleccionados para eliminar.");
+    return;
+  }
+
+  if (rooms.length > 0) {
+    pushUndo({ type: rooms.length > 1 ? "delete-rooms" : "delete-room", rooms });
+    currentEditorState.rooms = currentEditorState.rooms.filter((r) => !rooms.some((del) => del.externalId === r.externalId));
+    for (const room of rooms) {
+      if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
+        currentEditorState.removedExternalIds.push(room.externalId);
+      }
+    }
+  }
+
+  if (annotations.length > 0) {
+    pushUndo({ type: "delete-annotations", annotations });
+    currentEditorState.annotations = currentEditorState.annotations.filter((a) => !annotations.some((del) => del.externalId === a.externalId));
+    for (const annotation of annotations) {
+      if (!annotation.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(annotation.externalId)) {
+        currentEditorState.removedAnnotationExternalIds.push(annotation.externalId);
+      }
+    }
+  }
+
+  currentEditorState.selectedRoomIds = [];
+  syncSelectedRoomFromIds();
   currentEditorState.isDirty = true;
   if (popupMap) {
     popupMap.dragging.enable();
@@ -1600,41 +2076,81 @@ const deleteSelectedRoom = () => {
   }
   renderRooms();
   updatePopupContent();
-  updateSidePanel();
-  setAdminMapToolsStatus("Sala eliminada.");
+  const total = rooms.length + annotations.length;
+  setAdminMapToolsStatus(total > 1 ? `${total} elementos eliminados. G para guardar.` : "Elemento eliminado. G para guardar.");
 };
 
 const copySelectedRoom = () => {
-  if (!currentEditorState?.selectedRoom) return;
-  const room = currentEditorState.selectedRoom;
+  if (!currentEditorState) return;
+  const ids = getSelectedRoomIds();
+  const shapes = allShapes().filter((s) => ids.includes(s.externalId));
+  if (shapes.length === 0 && currentEditorState.selectedRoom) {
+    shapes.push(currentEditorState.selectedRoom);
+  }
+  if (shapes.length === 0) {
+    setAdminMapToolsStatus("Selecciona al menos un elemento para copiar.");
+    return;
+  }
   copiedRoomData = {
-    geometryJson: room.geometryJson,
-    type: room.type,
+    items: shapes.map((s) => ({
+      kind: s.kind || "room",
+      annotationType: s.annotationType,
+      type: s.type,
+      geometryJson: s.geometryJson,
+    })),
   };
-  setAdminMapToolsStatus("Sala copiada. Ctrl+V para pegar.");
+  setAdminMapToolsStatus(shapes.length > 1 ? `${shapes.length} elementos copiados. Ctrl+V para pegar.` : "Elemento copiado. Ctrl+V para pegar.");
 };
 
 const pasteRoom = () => {
   if (!currentEditorState || !copiedRoomData) {
-    setAdminMapToolsStatus("No hay sala copiada.");
+    setAdminMapToolsStatus("No hay elemento copiado.");
     return;
   }
 
-  const geom = typeof copiedRoomData.geometryJson === "string"
-    ? JSON.parse(copiedRoomData.geometryJson)
-    : copiedRoomData.geometryJson;
+  const items = Array.isArray(copiedRoomData.items) && copiedRoomData.items.length
+    ? copiedRoomData.items
+    : [{ kind: copiedRoomData.kind || "room", annotationType: copiedRoomData.annotationType, type: copiedRoomData.type, geometryJson: copiedRoomData.geometryJson }];
 
-  if (!geom?.coordinates?.[0]) return;
-
+  const baseRoomsLen = currentEditorState.rooms.length;
+  const baseAnnLen = (currentEditorState.annotations || []).length;
   const OFFSET = 0.0001;
-  const newCoords = geom.coordinates[0].map((c) => [c[0] + OFFSET, c[1] + OFFSET]);
-  newCoords.push(newCoords[0]);
+  const createdRooms = [];
+  const createdAnnotations = [];
 
-  createNewRoom(newCoords);
-  if (currentEditorState?.selectedRoom) {
-    currentEditorState.selectedRoom.type = copiedRoomData.type;
+  items.forEach((src, idx) => {
+    if (!src?.geometryJson) return;
+    const geom = typeof src.geometryJson === "string" ? JSON.parse(src.geometryJson) : src.geometryJson;
+    if (!geom?.coordinates?.[0]) return;
+    const newCoords = geom.coordinates[0].map((c) => [c[0] + OFFSET * (idx + 1), c[1] + OFFSET * (idx + 1)]);
+    newCoords.push(newCoords[0]);
+    if (src.kind === "annotation") {
+      createdAnnotations.push(buildNewAnnotationObject(newCoords, src.annotationType || "door"));
+    } else {
+      createdRooms.push(buildNewRoomObject(newCoords, {
+        displayName: `Sala ${baseRoomsLen + 1 + idx}`,
+        type: src.type || "sala",
+      }));
+    }
+  });
+
+  if (createdRooms.length === 0 && createdAnnotations.length === 0) return;
+
+  if (createdRooms.length > 0) {
+    pushUndo({ type: "create-rooms", rooms: createdRooms });
+    currentEditorState.rooms.push(...createdRooms);
   }
-  setAdminMapToolsStatus("Sala pegada. Ctrl+drag para mover.");
+  if (createdAnnotations.length > 0) {
+    pushUndo({ type: "create-annotations", annotations: createdAnnotations });
+    currentEditorState.annotations.push(...createdAnnotations);
+  }
+  currentEditorState.selectedRoomIds = [...createdRooms, ...createdAnnotations].map((r) => r.externalId);
+  syncSelectedRoomFromIds();
+  currentEditorState.isDirty = true;
+  renderRooms();
+  updateSidePanel();
+  updateBottomBar();
+  setAdminMapToolsStatus(`${createdRooms.length + createdAnnotations.length} elemento(s) pegados. Ctrl+drag para mover, G para guardar.`);
 };
 
 const updateRoomProperty = (property, value) => {
@@ -1677,20 +2193,61 @@ const undoRoomEditor = () => {
         currentEditorState.selectedRoom = null;
       }
       break;
-    case "delete-room":
-      currentEditorState.rooms.push(action.room);
-      if (!action.room.isNew && currentEditorState.removedExternalIds) {
-        const idx = currentEditorState.removedExternalIds.indexOf(action.room.externalId);
-        if (idx !== -1) currentEditorState.removedExternalIds.splice(idx, 1);
+    case "create-annotation":
+      currentEditorState.annotations = (currentEditorState.annotations || []).filter((a) => a.externalId !== action.annotation.externalId);
+      if (currentEditorState.selectedRoom?.externalId === action.annotation.externalId) {
+        currentEditorState.selectedRoom = null;
       }
       break;
+    case "create-annotations":
+      for (const a of action.annotations) {
+        currentEditorState.annotations = (currentEditorState.annotations || []).filter((x) => x.externalId !== a.externalId);
+      }
+      if (action.annotations.some((a) => currentEditorState.selectedRoom?.externalId === a.externalId)) {
+        currentEditorState.selectedRoom = null;
+      }
+      break;
+    case "delete-room": {
+      const deleted = action.rooms || [action.room];
+      currentEditorState.rooms.push(...deleted);
+      for (const room of deleted) {
+        if (!room.isNew && currentEditorState.removedExternalIds) {
+          const idx = currentEditorState.removedExternalIds.indexOf(room.externalId);
+          if (idx !== -1) currentEditorState.removedExternalIds.splice(idx, 1);
+        }
+      }
+      break;
+    }
+    case "delete-annotations": {
+      currentEditorState.annotations = [...(currentEditorState.annotations || []), ...action.annotations];
+      for (const a of action.annotations) {
+        if (!a.isNew && currentEditorState.removedAnnotationExternalIds) {
+          const idx = currentEditorState.removedAnnotationExternalIds.indexOf(a.externalId);
+          if (idx !== -1) currentEditorState.removedAnnotationExternalIds.splice(idx, 1);
+        }
+      }
+      break;
+    }
     case "update-property": {
       const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
       if (room) room[action.property] = action.prevValue;
       break;
     }
+    case "move-rooms":
+      action.ids.forEach((id, i) => {
+        const shape = findShapeById(id);
+        if (shape) shape.geometryJson = action.before[i];
+      });
+      break;
+    case "rotate-rooms":
+      action.ids.forEach((id, i) => {
+        const shape = findShapeById(id);
+        if (shape) shape.geometryJson = action.before[i];
+      });
+      break;
   }
 
+  syncSelectedRoomFromIds();
   renderRooms();
   updatePopupContent();
 };
@@ -1707,19 +2264,52 @@ const redoRoomEditor = () => {
     case "create-rooms":
       currentEditorState.rooms.push(...action.rooms);
       break;
-    case "delete-room":
-      currentEditorState.rooms = currentEditorState.rooms.filter((r) => r.externalId !== action.room.externalId);
-      if (!action.room.isNew && currentEditorState.removedExternalIds) {
-        currentEditorState.removedExternalIds.push(action.room.externalId);
+    case "create-annotation":
+      currentEditorState.annotations = [...(currentEditorState.annotations || []), action.annotation];
+      break;
+    case "create-annotations":
+      currentEditorState.annotations = [...(currentEditorState.annotations || []), ...action.annotations];
+      break;
+    case "delete-room": {
+      const deleted = action.rooms || [action.room];
+      currentEditorState.rooms = currentEditorState.rooms.filter((r) => !deleted.some((d) => d.externalId === r.externalId));
+      for (const room of deleted) {
+        if (!room.isNew && currentEditorState.removedExternalIds && !currentEditorState.removedExternalIds.includes(room.externalId)) {
+          currentEditorState.removedExternalIds.push(room.externalId);
+        }
       }
       break;
+    }
+    case "delete-annotations": {
+      const deleted = action.annotations || [];
+      currentEditorState.annotations = (currentEditorState.annotations || []).filter((a) => !deleted.some((d) => d.externalId === a.externalId));
+      for (const a of deleted) {
+        if (!a.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(a.externalId)) {
+          currentEditorState.removedAnnotationExternalIds.push(a.externalId);
+        }
+      }
+      break;
+    }
     case "update-property": {
       const room = currentEditorState.rooms.find((r) => r.externalId === action.roomExternalId);
       if (room) room[action.property] = action.newValue;
       break;
     }
+    case "move-rooms":
+      action.ids.forEach((id, i) => {
+        const shape = findShapeById(id);
+        if (shape) shape.geometryJson = action.after[i];
+      });
+      break;
+    case "rotate-rooms":
+      action.ids.forEach((id, i) => {
+        const shape = findShapeById(id);
+        if (shape) shape.geometryJson = action.after[i];
+      });
+      break;
   }
 
+  syncSelectedRoomFromIds();
   renderRooms();
   updatePopupContent();
 };
@@ -1728,7 +2318,7 @@ const saveRoomEditor = async () => {
   if (!currentEditorState) return;
 
   const savedBuildingId = currentEditorState.buildingExternalId;
-  setAdminMapToolsStatus("Guardando salas...");
+  setAdminMapToolsStatus("Guardando salas y marcas...");
 
   try {
     for (const room of currentEditorState.rooms) {
@@ -1798,7 +2388,59 @@ if (!res.ok) {
     }
     currentEditorState.removedExternalIds = [];
 
-    setAdminMapToolsStatus("Salas guardadas correctamente.");
+    for (const annotation of currentEditorState.annotations || []) {
+      const coordinates = parseGeometryToCoordinates(annotation.geometryJson);
+      if (annotation.isNew) {
+        const res = await fetch(`${getApiUrl()}/api/annotations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            externalId: annotation.externalId,
+            buildingExternalId: annotation.buildingExternalId,
+            floor: annotation.floor,
+            annotationType: annotation.annotationType,
+            coordinates,
+          }),
+        });
+        if (!res.ok) {
+          let msg = `Error al crear la marca (${annotation.annotationType}).`;
+          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+          throw new Error(msg);
+        }
+      } else {
+        const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(annotation.externalId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            floor: annotation.floor,
+            annotationType: annotation.annotationType,
+            coordinates,
+          }),
+        });
+        if (!res.ok) {
+          let msg = `Error al actualizar la marca (${annotation.annotationType}).`;
+          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+          throw new Error(msg);
+        }
+      }
+    }
+
+    for (const externalId of currentEditorState.removedAnnotationExternalIds || []) {
+      const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(externalId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = `Error al eliminar la marca '${externalId}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        throw new Error(msg);
+      }
+    }
+    currentEditorState.removedAnnotationExternalIds = [];
+
+    setAdminMapToolsStatus("Salas y marcas guardadas correctamente.");
 
     destroyPopup();
     clearRoomEditorState();

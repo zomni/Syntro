@@ -549,6 +549,36 @@ public static class ExtendedSchemaInitializer
                 """);
 
             await context.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS BuildingAnnotations (
+                    Id INTEGER NOT NULL CONSTRAINT PK_BuildingAnnotations PRIMARY KEY AUTOINCREMENT,
+                    ExternalId TEXT NOT NULL,
+                    BuildingExternalId TEXT NOT NULL,
+                    Floor INTEGER NOT NULL,
+                    AnnotationType TEXT NOT NULL,
+                    GeometryJson TEXT NOT NULL,
+                    Source TEXT NOT NULL,
+                    IsActive INTEGER NOT NULL DEFAULT 1,
+                    DeletedAtUtc TEXT NULL,
+                    DeletedBy TEXT NULL,
+                    CreatedBy TEXT NOT NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedBy TEXT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 0
+                );
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_BuildingAnnotations_ExternalId
+                ON BuildingAnnotations (ExternalId);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS IX_BuildingAnnotations_BuildingExternalId_Floor
+                ON BuildingAnnotations (BuildingExternalId, Floor);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS RoomGeometryOverrides (
                     Id INTEGER NOT NULL CONSTRAINT PK_RoomGeometryOverrides PRIMARY KEY AUTOINCREMENT,
                     RoomExternalId TEXT NOT NULL,

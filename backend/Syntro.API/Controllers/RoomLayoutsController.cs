@@ -87,11 +87,16 @@ public class RoomLayoutsController : ControllerBase
 
         foreach (var room in request.Rooms)
         {
+            if (room.Coordinates == null || room.Coordinates.Count < 3)
+                return BadRequest(new { message = $"La sala '{room.ExternalId}' tiene coordenadas inválidas (se requieren al menos 3 puntos)." });
+
+            var geometryJson = BuildGeometryJson(room.Coordinates);
+            if (string.IsNullOrWhiteSpace(geometryJson))
+                return BadRequest(new { message = $"La sala '{room.ExternalId}' no generó una geometría válida." });
+
             var exists = await _context.ManualRooms
                 .AnyAsync(r => r.ExternalId == room.ExternalId && r.DeletedAtUtc == null, cancellationToken);
             if (exists) continue;
-
-            var geometryJson = BuildGeometryJson(room.Coordinates);
 
             var entity = new ManualRoom
             {

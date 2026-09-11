@@ -28,6 +28,7 @@ public class AppDbContext : DbContext
     public DbSet<TelemetryScanSchedule> TelemetryScanSchedules => Set<TelemetryScanSchedule>();
     public DbSet<MlTrainingRun> MlTrainingRuns => Set<MlTrainingRun>();
     public DbSet<ManualRoom> ManualRooms => Set<ManualRoom>();
+    public DbSet<BuildingAnnotation> BuildingAnnotations => Set<BuildingAnnotation>();
     public DbSet<RoomGeometryOverride> RoomGeometryOverrides => Set<RoomGeometryOverride>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -400,6 +401,18 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Notes).HasMaxLength(2000);
         });
 
+        modelBuilder.Entity<BuildingAnnotation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.ExternalId).IsUnique();
+            entity.HasIndex(e => new { e.BuildingExternalId, e.Floor });
+            entity.Property(e => e.ExternalId).IsRequired().HasMaxLength(120);
+            entity.Property(e => e.BuildingExternalId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.AnnotationType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.GeometryJson).IsRequired();
+            entity.Property(e => e.Source).HasMaxLength(50);
+        });
+
         modelBuilder.Entity<RoomGeometryOverride>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -415,6 +428,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ManualBuilding>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<BuildingGeometryOverride>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<ManualRoom>().HasQueryFilter(e => e.DeletedAtUtc == null);
+        modelBuilder.Entity<BuildingAnnotation>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<RoomGeometryOverride>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<WalkingRouteNode>().HasQueryFilter(e => e.DeletedAtUtc == null);
         modelBuilder.Entity<WalkingRouteEdge>().HasQueryFilter(e => e.DeletedAtUtc == null);

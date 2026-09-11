@@ -1222,6 +1222,12 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     line-height: 1;
 }
 
+.room-editor-tool-btn.is-icon-only span svg {
+    width: 16px;
+    height: 16px;
+    display: block;
+}
+
 .room-editor-tool-btn:hover {
     background: #f3f4f6;
 }
