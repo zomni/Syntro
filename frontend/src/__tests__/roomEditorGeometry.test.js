@@ -182,4 +182,113 @@ describe("generateContourRooms", () => {
       expect(room.Coordinates[0]).toEqual(room.Coordinates[4]);
     }
   });
+
+  const M_PER_DEG = 111320;
+  const buildingRing = rectBuilding.coordinates[0].map((c) => [c[1], c[0]]);
+  const ringSegs = (ring) => {
+    const segs = [];
+    for (let i = 0; i < ring.length - 1; i++) segs.push([ring[i], ring[i + 1]]);
+    return segs;
+  };
+  const distPtSegM = (p, a, b) => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len2 = dx * dx + dy * dy;
+    let t = len2 === 0 ? 0 : ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    const q = [a[0] + t * dx, a[1] + t * dy];
+    return Math.hypot(p[0] - q[0], p[1] - q[1]) * M_PER_DEG;
+  };
+  const distanceToRingM = (ptLatLng, ring) => {
+    if (pointInRing(ptLatLng, ring)) return 0;
+    let d = Infinity;
+    for (const [a, b] of ringSegs([...ring, ring[0]])) d = Math.min(d, distPtSegM(ptLatLng, a, b));
+    return d;
+  };
+  const orient = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const properCross = (a, b, c, d) => {
+    const o1 = orient(a, b, c);
+    const o2 = orient(a, b, d);
+    const o3 = orient(c, d, a);
+    const o4 = orient(c, d, b);
+    return (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0);
+  };
+  const ringsCross = (r1, r2) => {
+    for (const [a, b] of ringSegs(r1)) {
+      for (const [c, d] of ringSegs(r2)) {
+        if (properCross(a, b, c, d)) return true;
+      }
+    }
+    return false;
+  };
+  const distM = (p, q) => (p[0] === q[0] && p[1] === q[1] ? 0 : distanceMeters([p[1], p[0]], [q[1], q[0]]));
+  const sharesWall = (r1, r2, tolM = 0.1) => {
+    for (const [a1, a2] of ringSegs(r1.Coordinates)) {
+      for (const [b1, b2] of ringSegs(r2.Coordinates)) {
+        if (distM(a1, b2) <= tolM && distM(a2, b1) <= tolM) return true;
+      }
+    }
+    return false;
+  };
+
+  test("adjacent rooms share a wall (no gaps between them)", () => {
+    const rooms = generateContourRooms(rectBuilding, 6);
+    expect(rooms.length).toBeGreaterThanOrEqual(2);
+    let shared = false;
+    for (let i = 0; i < rooms.length && !shared; i++) {
+      for (let j = i + 1; j < rooms.length; j++) {
+        if (sharesWall(rooms[i], rooms[j])) {
+          shared = true;
+          break;
+        }
+      }
+    }
+    expect(shared).toBe(true);
+  });
+
+  test("rooms do not overlap each other", () => {
+    const rooms = generateContourRooms(rectBuilding, 6);
+    for (let i = 0; i < rooms.length; i++) {
+      for (let j = i + 1; j < rooms.length; j++) {
+        expect(ringsCross(rooms[i].Coordinates, rooms[j].Coordinates)).toBe(false);
+      }
+    }
+  });
+
+  test("rooms stay inside the building contour", () => {
+    const rooms = generateContourRooms(rectBuilding, 6);
+    for (const room of rooms) {
+      for (const [lng, lat] of room.Coordinates) {
+        expect(distanceToRingM([lat, lng], buildingRing)).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  test("consecutive rows are separated by a corridor (no touching across rows)", () => {
+    const w = 20 / M_PER_DEG;
+    const h = 20 / M_PER_DEG;
+    const bigBuilding = {
+      type: "Polygon",
+      coordinates: [
+        [
+          [0, 0],
+          [0, h],
+          [w, h],
+          [w, 0],
+          [0, 0],
+        ],
+      ],
+    };
+    const rooms = generateContourRooms(bigBuilding, 10);
+    for (let i = 0; i < rooms.length; i++) {
+      for (let j = i + 1; j < rooms.length; j++) {
+        if (sharesWall(rooms[i], rooms[j])) continue;
+        let d = Infinity;
+        for (const p of rooms[i].Coordinates) {
+          for (const q of rooms[j].Coordinates) d = Math.min(d, distM(p, q));
+        }
+        expect(d).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
 });

@@ -130,7 +130,8 @@ export const simplifyRing = (pointsLatLng, toleranceMeters = 2) => {
 };
 
 export const generateContourRooms = (buildingGeometry, roomCount, options = {}) => {
-  const { roomDepth = 5, corridorWidth = 1.5 } = options;
+  const { roomDepth = 5, corridorWidth = 1.5, packing = "touching" } = options;
+  const spaced = packing !== "touching";
   if (!buildingGeometry?.coordinates?.[0]) return [];
   const ring = buildingGeometry.coordinates[0];
   if (ring.length < 3 || roomCount < 1) return [];
@@ -184,6 +185,87 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
     return eroded;
   };
 
+  const offsetRing = (rng, offsetM) => {
+    const pts = uniqueRing(rng);
+    const n = pts.length;
+    if (n < 3) return rng;
+    const [cLng, cLat] = ringCentroid(rng);
+
+    const unitEdges = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % n];
+      const dx = (b[0] - a[0]) * metersPerDegLng;
+      const dy = (b[1] - a[1]) * METERS_PER_DEG_LAT;
+      const len = Math.hypot(dx, dy) || 1e-9;
+      unitEdges.push({ x: dx / len, y: dy / len });
+    }
+
+    const normals = [];
+    for (let i = 0; i < n; i++) {
+      let nx = -unitEdges[i].y;
+      let ny = unitEdges[i].x;
+      const mid = pts[(i + 1) % n];
+      const dLng = cLng - mid[0];
+      const dLat = cLat - mid[1];
+      if (nx * dLng * metersPerDegLng + ny * dLat * METERS_PER_DEG_LAT > 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      normals.push({ x: nx, y: ny });
+    }
+
+    const shifted = [];
+    for (let i = 0; i < n; i++) {
+      const na = normals[(i - 1 + n) % n];
+      const nb = normals[i];
+      const sx = pts[i][0] * metersPerDegLng;
+      const sy = pts[i][1] * METERS_PER_DEG_LAT;
+      const det = na.x * nb.y - na.y * nb.x;
+      if (Math.abs(det) < 1e-9) {
+        shifted.push({ x: sx - na.x * offsetM, y: sy - na.y * offsetM });
+      } else {
+        const ca = na.x * sx + na.y * sy - offsetM;
+        const cb = nb.x * sx + nb.y * sy - offsetM;
+        shifted.push({ x: (ca * nb.y - cb * na.y) / det, y: (na.x * cb - nb.x * ca) / det });
+      }
+    }
+
+    const ringLL = pts.map((p) => [p[1], p[0]]);
+    const sharePt = (p, q) => p.x === q.x && p.y === q.y;
+    const segCross = (a, b, c, d) => {
+      const cross = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+      const o1 = cross(a, b, c);
+      const o2 = cross(a, b, d);
+      const o3 = cross(c, d, a);
+      const o4 = cross(c, d, b);
+      return o1 * o2 < 0 && o3 * o4 < 0;
+    };
+
+    let valid = shifted.length === n;
+    for (let i = 0; i < n && valid; i++) {
+      const a = shifted[i];
+      const b = shifted[(i + 1) % n];
+      if (!pointInRing([a.y / METERS_PER_DEG_LAT, a.x / metersPerDegLng], ringLL)) {
+        valid = false;
+        break;
+      }
+      for (let j = i + 1; j < n && valid; j++) {
+        const c = shifted[j];
+        const d = shifted[(j + 1) % n];
+        if (sharePt(a, c) || sharePt(a, d) || sharePt(b, c) || sharePt(b, d)) continue;
+        if (segCross(a, b, c, d)) {
+          valid = false;
+          break;
+        }
+      }
+    }
+    if (!valid) return erodeRing(rng, offsetM);
+    const out = shifted.map((p) => [p.x / metersPerDegLng, p.y / METERS_PER_DEG_LAT]);
+    out.push([out[0][0], out[0][1]]);
+    return out;
+  };
+
   const ringMinSideM = (rng) => {
     let minLng = Infinity;
     let maxLng = -Infinity;
@@ -201,7 +283,7 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
   const totalPerimeterM = ringPerimeter(ring);
   if (totalPerimeterM <= 0) return [];
   const ringLatLng = ring.map((c) => [c[1], c[0]]);
-  const targetRoomWidth = Math.max(totalPerimeterM / roomCount - corridorWidth, 2);
+  const targetRoomWidth = Math.max(totalPerimeterM / roomCount - (spaced ? corridorWidth : 0), 2);
 
   const orient = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
   const crosses = (a, b, c, d) => {
@@ -209,7 +291,7 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
     const o2 = orient(a, b, d);
     const o3 = orient(c, d, a);
     const o4 = orient(c, d, b);
-    return (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0);
+    return o1 * o2 < 0 && o3 * o4 < 0;
   };
 
   const ringEdges = [];
@@ -229,10 +311,43 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
     return true;
   };
 
+  const distPtSegDeg = (p, a, b) => {
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const l2 = dx * dx + dy * dy;
+    if (l2 === 0) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+    let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+  };
+
+  const pointStrictlyInside = (pt, poly) => {
+    if (!pointInRing([pt[1], pt[0]], poly.map((p) => [p[1], p[0]]))) return false;
+    for (let k = 0; k < 4; k++) {
+      if (distPtSegDeg(pt, poly[k], poly[(k + 1) % 4]) < 1e-7) return false;
+    }
+    return true;
+  };
+
   const intersectsRoom = (poly1, poly2) => {
-    for (let e = 0; e < 4; e++) {
-      for (let f = 0; f < 4; f++) {
-        if (crosses(poly1[e], poly1[(e + 1) % 4], poly2[f], poly2[(f + 1) % 4])) return true;
+    for (let r = 0; r < 2; r++) {
+      const pa = r === 0 ? poly1 : poly2;
+      const pb = r === 0 ? poly2 : poly1;
+      for (let e = 0; e < 4; e++) {
+        const a = pa[e];
+        const b = pa[(e + 1) % 4];
+        if (
+          crosses(a, b, pb[0], pb[1]) ||
+          crosses(a, b, pb[1], pb[2]) ||
+          crosses(a, b, pb[2], pb[3]) ||
+          crosses(a, b, pb[3], pb[0])
+        ) {
+          return true;
+        }
+        const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (pointStrictlyInside(mid, pb) || pointStrictlyInside(a, pb) || pointStrictlyInside(b, pb)) {
+          return true;
+        }
       }
     }
     return false;
@@ -241,7 +356,7 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
   const candidateRooms = [];
   let roomIndex = 0;
   const minSideM = corridorWidth * 2;
-  const bandOffsetM = (roomDepth + corridorWidth) * Math.SQRT2;
+  const bandOffsetM = spaced ? (roomDepth + corridorWidth) * Math.SQRT2 : roomDepth + corridorWidth;
   const EPSILON_M = 0.02;
   const epsLng = mToLng(EPSILON_M);
   const epsLat = mToLat(EPSILON_M);
@@ -265,14 +380,21 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
 
     for (const edge of edges) {
       if (edge.lenM < corridorWidth * 2) continue;
-      let roomsOnEdge = Math.max(1, Math.round(edge.lenM / (targetRoomWidth + corridorWidth)));
-      let usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
-      while (usableLenM <= 0 && roomsOnEdge > 1) {
-        roomsOnEdge--;
-        usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
+      let roomsOnEdge;
+      let roomWidthM;
+      if (spaced) {
+        roomsOnEdge = Math.max(1, Math.round(edge.lenM / (targetRoomWidth + corridorWidth)));
+        let usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
+        while (usableLenM <= 0 && roomsOnEdge > 1) {
+          roomsOnEdge--;
+          usableLenM = edge.lenM - corridorWidth * roomsOnEdge;
+        }
+        if (usableLenM <= 0) continue;
+        roomWidthM = usableLenM / roomsOnEdge;
+      } else {
+        roomsOnEdge = Math.max(1, Math.round(edge.lenM / targetRoomWidth));
+        roomWidthM = edge.lenM / roomsOnEdge;
       }
-      if (usableLenM <= 0) continue;
-      const roomWidthM = usableLenM / roomsOnEdge;
 
       const ux = edge.dxM / edge.lenM;
       const uy = edge.dyM / edge.lenM;
@@ -287,7 +409,7 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
         ny = -ny;
       }
 
-      let cursorM = corridorWidth / 2;
+      let cursorM = spaced ? corridorWidth / 2 : 0;
       for (let r = 0; r < roomsOnEdge; r++) {
         const startM = cursorM;
         const endM = cursorM + roomWidthM;
@@ -309,7 +431,7 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
           p4,
         ];
 
-        cursorM = endM + corridorWidth;
+        cursorM = spaced ? endM + corridorWidth : endM;
         if (!isInsideBuilding(testPoly)) continue;
 
         roomIndex++;
@@ -320,11 +442,11 @@ export const generateContourRooms = (buildingGeometry, roomCount, options = {}) 
   };
 
   let curRing = ring;
-  const maxBands = 20;
+  const maxBands = spaced ? 20 : 4;
   for (let band = 0; band < maxBands; band++) {
     if (ringMinSideM(curRing) < minSideM) break;
     buildBand(curRing);
-    curRing = erodeRing(curRing, bandOffsetM);
+    curRing = offsetRing(curRing, bandOffsetM);
   }
 
   const kept = [];
