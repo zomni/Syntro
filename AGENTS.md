@@ -14,14 +14,20 @@
   (`frontend/`) o las tools (`tools/`), el agente DEBE encargarse él mismo de
   detener, rebuildear y levantar de nuevo los servicios afectados para que el
   usuario pueda probar los cambios sin pasos manuales.
-- El backend corre en `http://localhost:5001` y el frontend en `http://localhost:8081`
-  (puerto definido por `FrontendAppUrl` en `appsettings.json` / `FRONTEND_APP_URL` en
-  `.env` / `docker-compose.yml`).
+- El backend corre en `http://localhost:5001` (servicio Docker `api`, contenedor `syntro-api-1`) y el
+  frontend en `http://localhost:8081` (servicio `frontend`, bundle webpack horneado en la imagen = nginx;
+  `docker compose build --no-cache frontend` + `docker compose up -d frontend`). El backend usa
+  `dotnet watch` en dev (añade/detener API con `docker compose up -d --no-deps api`).
 - Preferir `docker compose up -d --build` cuando el stack esté en Docker; de lo
   contrario `dotnet build` + `dotnet run` (backend) y el dev server de webpack
   (frontend).
-- Antes de entregar una tarea, verificar con un smoke check que los servicios
-  respondan (p. ej. `GET /api/health/integrity` en el backend).
+
+## Verificación antes de entregar
+
+- Frontend: `npx jest` (64 tests) y `npx webpack` deben pasar; verificar el bundle servido
+  en `http://localhost:8081/index.js?t=<timestamp>` cuando el cambio toque `roomEditor.js` o `addData.js`.
+- Backend: `dotnet build` de `Syntro.API` y `dotnet test backend/Syntro.API.Tests` (79 tests) deben pasar.
+- Smoke check: `GET /api/health/integrity` en el backend.
 
 ## Git
 

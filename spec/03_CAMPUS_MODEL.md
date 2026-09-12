@@ -41,3 +41,15 @@ Backend:
 
 - El campus es la identidad raíz de la plantilla; no se introduce una entidad Organization adicional.
 - Los editores existentes (edificios, geometría, rutas) se conservan; solo se parametriza el campus que inyectan.
+
+## Aplicado (estado real 2026-09)
+
+- El campus ya no es una entidad backend: los sitios vienen de `Organization → CampusSite`
+  (multi-tenant) y el frontend los resuelve en runtime vía `GET /api/auth/session`
+  (`frontend/src/config/siteConfig.js` → evento `sites-loaded`). `campuses.js` queda como fallback
+  y fuente de verdad de datos estáticos por campus.
+- Los edificios de la instalación actual (hospital, campus `sotero`) siguen el dominio
+  `Campus → Building → Floor → Room`; la sala manual actual puede tener `Floor` único y
+  `BuildingExternalId`; las marcas (puertas/escaleras) se asocian al mismo par edificio+piso.
+- El backend no asume ningún nombre de campus por defecto: los escritores exigen `campus`/`CampusKey`
+  explícito (los manual rooms y annotations usan `BuildingExternalId`).

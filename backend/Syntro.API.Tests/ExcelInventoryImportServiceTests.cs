@@ -16,6 +16,7 @@ public class ExcelInventoryImportServiceTests : IDisposable
     private readonly string _tempDirectory;
     private readonly ItemClassificationService _classificationService;
     private readonly MlSettingsService _mlSettings;
+    private readonly MlAutoTrainService _autoTrainService;
 
     public ExcelInventoryImportServiceTests()
     {
@@ -23,13 +24,21 @@ public class ExcelInventoryImportServiceTests : IDisposable
         _context = TestDbContextFactory.CreateContext(_connection);
         _tempDirectory = Path.Combine(Path.GetTempPath(), $"syntro-import-tests-{Guid.NewGuid():N}");
         Directory.CreateDirectory(_tempDirectory);
+        var emptyConfig = TestConfiguration.FromSettings(new Dictionary<string, string?>());
         _classificationService = new ItemClassificationService(
-            TestConfiguration.FromSettings(new Dictionary<string, string?>()),
+            emptyConfig,
             new LoggerFactory().CreateLogger<ItemClassificationService>());
         _mlSettings = new MlSettingsService(
-            TestConfiguration.FromSettings(new Dictionary<string, string?>()),
+            emptyConfig,
             new FakeWebHostEnvironment(_tempDirectory),
             new LoggerFactory().CreateLogger<MlSettingsService>());
+        _autoTrainService = new MlAutoTrainService(
+            _classificationService,
+            new RiskPredictionService(emptyConfig, new LoggerFactory().CreateLogger<RiskPredictionService>()),
+            _mlSettings,
+            _context,
+            emptyConfig,
+            new LoggerFactory().CreateLogger<MlAutoTrainService>());
     }
 
     public void Dispose()
@@ -70,7 +79,7 @@ public class ExcelInventoryImportServiceTests : IDisposable
             ["InventoryCategories:Statuses:0:Name"] = "active",
             ["InventoryCategories:Statuses:0:Tokens:0"] = "FUNCIONA"
         });
-        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings);
+        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings, _autoTrainService);
 
         var result = await service.ImportAsync("inventario.xlsx");
 
@@ -93,7 +102,7 @@ public class ExcelInventoryImportServiceTests : IDisposable
         {
             ["ExcelImportRoot"] = _tempDirectory
         });
-        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings);
+        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings, _autoTrainService);
 
         await Assert.ThrowsAsync<FileNotFoundException>(
             () => service.ImportAsync("missing.xlsx"));
@@ -106,7 +115,7 @@ public class ExcelInventoryImportServiceTests : IDisposable
         {
             ["ExcelImportRoot"] = _tempDirectory
         });
-        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings);
+        var service = new ExcelInventoryImportService(_context, config, _classificationService, _mlSettings, _autoTrainService);
 
         var status = await service.GetStatusAsync();
 

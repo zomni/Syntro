@@ -25,16 +25,22 @@ Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
   ES reales; `webpack.config.js` mantiene los mismos alias para el build de producción.
 - **Módulos principales**:
   - `views/map.js` — inicializa Leaflet, expone `map` y `BACKEND_API_URL`.
-  - `utils/campusConfig.js` — campus canónico (`data/campuses.js`); deriva nombres de
-    archivos de datos, índice de búsqueda y catálogo de edificios.
+  - `config/siteConfig.js` — fuente de verdad de sitios en runtime: consume
+    `GET /api/auth/session` (cached, `credentials: include`) y normaliza cada
+    `CampusSite`; `campuses.js` queda como fallback (`sites-loaded` event).
+  - `utils/campusConfig.js` — campus canónico; deriva nombres de archivos de datos,
+    índice de búsqueda y catálogo de edificios.
   - `utils/identifiers.js` — prefijos centralizados de `localStorage`, eventos `CustomEvent`,
     globals y nombre de ventana (prefijo `syntro-*`).
   - `utils/addData.js`, `utils/searchMetadata.js` — carga de GeoJSON por piso, catálogo y
-    fusión con metadatos/overrides del backend.
+    fusión con metadatos/overrides del backend; pintado por piso de salas manuales
+    (`addManualRoomPolygonsForFloor`) y marcas de puertas/escaleras (`addAnnotationsForFloor`).
   - `components/routePlanner.js`, `utils/walkingRouteStorage.js` — rutas entre edificios.
   - `components/networkTelemetryPanel.js` — panel de telemetría de red (bajo demanda).
   - `components/{manualBuildingEditor,walkingRouteEditor,buildingGeometryEditor}.js` —
     herramientas de edición de mapa (solo rol admin).
+  - `components/adminMapToolsPanel.js` — panel unificado de herramientas admin y
+    `roomEditor.js` — editor de salas/marcas de piso (manual rooms + puertas/escaleras).
 - **Datos estáticos**: `src/data/` contiene el GeoJSON por piso (`<school>_<campus>_<floor>.json`),
   el índice de búsqueda (`<school>_<campus>_search.json`) y el catálogo
   (`<campus>_buildings_catalog.json`). Se generan con los scripts de `frontend/scripts/`.
@@ -55,32 +61,51 @@ Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
   - Ubicaciones + inventario de equipos (`LocationsController`, `EquipmentsController`).
   - Edificios manuales y sincronizados (`ManualBuildingsController`, sync desde el catálogo
     del frontend con `FrontendSyncService`).
+  - Salas manuales y layout de piso (`ManualRoomsController`, `RoomLayoutsController`) con
+    geometría GeoJSON por sala.
+  - Marcas de puertas/escaleras (`AnnotationsController`, entidad `BuildingAnnotation`).
   - Rutas peatonales (`WalkingRoutesController`: nodos, tramos, caminos).
   - Respaldo estático (`FrontendStaticBackupController`) que escribe JSON a `src/data`.
   - Importación de inventario por Excel (`ExcelInventoryImportService`, ClosedXML).
   - Formulario de entrega de equipos (`DeliveryForm`, genera documento).
   - Telemetría de red (`NetworkTelemetryLiveScanService`, hosted service desactivado por
-    configuración; ingesta HTTP con `IngestApiKey`).
+    configuración; ingesta HTTP con `IngestaApiKey`) y planificación de capturas
+    (`TelemetryScanSchedulesController`, `TelemetryScanScheduleService`).
+  - Multi-tenant: `Organization` / `CampusSite` (`OrganizationsController` REST,
+    `OrganizationsAdminController` Razor) con `OrganizationAccessService` para scoping por
+    campus en los controllers de datos.
 - **Panel admin**: vistas Razor bajo `/dashboard` y `/admin/*` (inventario, equipos,
-  cumplimiento, telemetría, usuarios).
+  cumplimiento, telemetría, organizaciones/sitios, usuarios).
 
-## Campus (cliente único)
+## Campus (multi-tenant)
 
-El campus es **configuración, no código**:
+El campus es **configuración, no código**. La instalación actual usa el campus `sotero`
+(Complejo Hospitalario Sotero del Río, school `cs`) como fallback estático.
 
-- `frontend/src/data/campuses.js` define el campus único `sotero` (school `cs`,
-  pisos, centro, bounds).
-- Los nombres de datos derivan de `school` + key del campus.
-- En backend, el campus por defecto es `CampusSettings:DefaultCampus`. Las
-  operaciones de escritura (edificios manuales, rutas, respaldo estático) rechazan peticiones
-  sin campus con `400`.
+- `frontend/src/data/campuses.js` define el campus/sitio de ejemplo (school, pisos, centro,
+  bounds) y `frontend/src/config/siteConfig.js` lo reemplaza en runtime con los
+  `CampusSite` de la sesión (`GET /api/auth/session`).
+- Los nombres de datos derivan de `school` + campus (`<school>_<campus>_<floor>.json`).
+- En backend, las operaciones de escritura (edificios manuales, rutas, respaldo estático)
+  exigen `campus`/`CampusKey` explícito; la telemetría y los schedules se scopean por
+  `CampusKey` y por organización vía `OrganizationAccessService`.
+
+## Editor de salas y marcas (piso)
+
+- `ManualRoom` y `BuildingAnnotation` se guardan por `BuildingExternalId` + `Floor` y se
+  exponen en `GET /api/manual-rooms` y `GET /api/annotations` (anónimo, con filtros).
+- El editor (`roomEditor.js`) dibuja salas y marcas (puertas `door` / escaleras `stair`),
+  con multiselección siempre activa y rotación conforme en píxeles proyectados.
+- El mapa principal pinta salas y marcas por piso (visible para todos los usuarios);
+  el guardado refresca vía `refreshCurrentMapData()` + evento `syntro-rooms-changed`.
 
 ## Identificadores
 
 Prefijos de artefactos en `frontend/src/utils/identifiers.js`:
 
 - `localStorage`: `syntro_map_*`, `syntro_network_*`, etc.
-- Eventos: `syntro-map-data-refreshed`, `syntro-session-changed`, `syntro-admin-map-tool-mode`.
+- Eventos: `syntro-map-data-refreshed`, `syntro-session-changed`, `syntro-admin-map-tool-mode`,
+  `syntro-rooms-changed` (salas/marcas guardadas por edificio).
 - Ventana/globals: `syntro-dashboard`, `window.syntroAdminMapToolMode`.
 - Cookies/claims: `Syntro.Auth`, `Syntro.MfaPending`, `syntro:*`.
 - Archivos de respaldo: `syntro_buildings_backend_backup.json`, `walking_routes_backup.json`.

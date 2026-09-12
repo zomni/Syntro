@@ -29,6 +29,22 @@ GET    /api/points-of-interest
 POST   /api/points-of-interest
 PUT    /api/points-of-interest/{id}
 DELETE /api/points-of-interest/{id}
+GET    /api/room-layouts?buildingExternalId={id}&floor={n}
+GET    /api/room-layouts/{buildingExternalId}/floors
+POST   /api/room-layouts/bulk-save
+GET    /api/manual-rooms?buildingExternalId={id}&floor={n}
+POST   /api/manual-rooms
+PUT    /api/manual-rooms/{externalId}
+DELETE /api/manual-rooms/{externalId}
+GET    /api/annotations?buildingExternalId={id}&floor={n}
+POST   /api/annotations
+PUT    /api/annotations/{externalId}
+DELETE /api/annotations/{externalId}
+GET    /api/network-telemetry/schedule
+POST   /api/network-telemetry/schedule/preview
+POST   /api/network-telemetry/schedule
+PUT    /api/network-telemetry/schedule/{id}
+DELETE /api/network-telemetry/schedule/{id}
 
 ## Admin Contracts
 

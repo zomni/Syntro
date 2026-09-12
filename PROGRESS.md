@@ -53,7 +53,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - SPEC 25: `appsettings.Production.json` (ForceHttps, cookies `Secure=Always`, sin Swagger/demo/telemetría); `dotnet publish -c Release` verificado; despliegue documentado en `docs/ARCHITECTURE.md`.
   - SPEC 26: proyecto xUnit `Syntro.API.Tests` (30 tests, SQLite en memoria, sin DB real ni LibreOffice: PasswordPolicy, BackendAuth, importación Excel con fixture ClosedXML, reconciliación, auditoría, config) + jest en frontend (7 tests: `campusConfig.js`, `identifiers.js`). Se corrigió el parser Excel para aceptar targets de hoja con `/` inicial (compatibilidad ClosedXML).
 - **Fase 6 parcial (visual/branding + neutralización delivery form)**:
-  - Tema CSS-variables implementado en frontend (`:root` design tokens en `index.css` + `styles/*.css`, ~240 reemplazos de colores hardcodeados); colores de marca ahora tokenizados y sobrescribibles en runtime vía `window.PIREON_CONFIG.themePrimary/themeSecondary` (`applyBrandingTheme()` en `src/index.js`). Paleta heredada azul `#2d79a0/#154860` reemplazada por teal `#0f766e/#134e4a`.
+  - Tema CSS-variables implementado en frontend (`:root` design tokens en `index.css` + `styles/*.css`, ~240 reemplazos de colores hardcodeados); colores de marca ahora tokenizados y sobrescribibles en runtime vía `window.SYNTRO_CONFIG.themePrimary/themeSecondary` (`applyBrandingTheme()` en `src/index.js`). Paleta heredada azul `#2d79a0/#154860` reemplazada por teal `#0f766e/#134e4a`.
   - Admin Razor + Auth views recolorizados a la misma paleta (sidebar, nav activo, botones primarios, cards de login/MFA/access denied) y logos `app-logo-frontend.svg`/`app-logo-backend.svg` neutrales actualizados al teal.
   - Delivery form neutralizado: `DeliveryForm:ApplicationChecklist:Sections = []` en `appsettings.json` y `GetDefaultSections()` retorna lista vacía (se eliminaron las apps clínicas Medicas/Administrativas del template); formulario, DOCX y PDF se renderizan sin secciones; test actualizado (`DeliveryFormChecklist_ReturnsEmptyWhenUnconfigured`).
 - **Multi-tenant (organizaciones + sitios) — backend**:
@@ -76,10 +76,10 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - Acceso superadmin: se incluyo `superadmin` en todas las listas de roles restantes (`admin,auditor`, `admin,editor,viewer,auditor` de `AuditLogController`, `HealthController`, `NetworkTelemetryController`, `NetworkTelemetryOfficeController`, `AdminController.Activity/Compliance/ComplianceLegacy/suggestions`), de modo que el superadmin nunca recibe AccessDenied en el admin/dashboard.
   - URL del mapa: `_Layout.cshtml`, `Views/Admin/Locations.cshtml`, `Views/Admin/Equipments.cshtml` y `AdminController.ResolveFrontendMapUrl()` ahora respetan `FrontendAppUrl` (8081) antes del fallback con host (8080).
   - Build y 30 tests backend verdes.
-- **CorrecciÃ³n de panel de estado del mapa**:
-  - Se reforzÃ³ `frontend/src/views/featureDisplay.js` para reconstruir el panel superior izquierdo si detecta markup incompleto, mantener valores de respaldo visibles y evitar que queden espacios vacÃ­os.
-  - Se actualizÃ³ el cache-buster de `@app/featureDisplay` en `frontend/src/index.html` para forzar que el navegador cargue la versiÃ³n nueva.
-  - Se levantÃ³ nuevamente el stack con `docker compose up -d --build`.
+- **Corrección de panel de estado del mapa**:
+  - Se reforzó `frontend/src/views/featureDisplay.js` para reconstruir el panel superior izquierdo si detecta markup incompleto, mantener valores de respaldo visibles y evitar que queden espacios vacíos.
+  - Se actualizó el cache-buster de `@app/featureDisplay` en `frontend/src/index.html` para forzar que el navegador cargue la versión nueva.
+  - Se levantó nuevamente el stack con `docker compose up -d --build`.
 
 - **F1: Planificación de capturas (Red y riesgo) implementada**:
   - Backend: entidad `TelemetryScanSchedule` (Label, Cron, TimeZone, CampusKey, IsEnabled, SortOrder + audit) con migración `AddTelemetryScanSchedules`; `TelemetryScanScheduleService` (CRUD con soft-delete, validación cron vía Cronos TryParse, cálculo de próximas ocurrencias en UTC/local, resolución de timezone, preview); `TelemetryScanSchedulesController` (`GET api/network-telemetry/schedule` [admin,superadmin,auditor], `POST /preview`, `POST/PUT/{id}/DELETE/{id}` [admin,superadmin] con auditoría).
@@ -102,6 +102,43 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - **Agent volume montado**: `./runtime/network-telemetry-agent:/runtime/network-telemetry-agent` en `docker-compose.yml` + directorio creado; el backend ahora puede leer `agent-heartbeat.json` y el agente puede escribir archivos compartidos.
   - Verificación: scheduler log "Next live telemetry scan scheduled in 00:09:56" confirma que detecta schedules habilitados.
 
+- **Editor de salas (manual rooms) + marcas de puertas/escaleras (sala manual por edificio/piso)**:
+  - Backend: entidad `ManualRoom` (AuditableEntity, `ExternalId UNIQUE`, `BuildingExternalId + Floor` index) con
+    migración `AddManualRoomsAndRoomGeometryOverrides` + bloque idempotente en `ExtendedSchemaInitializer`;
+    `ManualRoomsController` (`GET /api/manual-rooms` anónimo con filtros building+floor, `POST/PUT/DELETE` admin/editor, auditoría);
+    `RoomLayoutsController` (`GET /api/room-layouts` devuelve salas con `geometryJson` shape + `/floors`; bulk-save con
+    guardia de coordenadas válidas por sala). Popup del mapa incluye salas manuales; `syntro-rooms-changed` refresca el mapa.
+  - Frontend (`roomEditor.js`): editor modal por edificio+piso (Leaflet, zoom hasta 22, snap, Draw rect/circle/free + mano alzada),
+    panel lateral de propiedades, sugerencias de salas por contorno en bandas (pegadas a la muralla, validación de 4 esquinas,
+    dedup y multi-banda) + copiar layout entre pisos, undo/redo (Ctrl+Z/Y), guardar (G) con POST/PUT/DELETE + `removedExternalIds`.
+  - Eliminación del piso 0 (`RemoveFloorZero`): piso 0 y 1 consolidados en 1 (buildings/salas/resúmenes), defaultFloor pasa a 1;
+    `campuses.js` y estáticos sin piso 0.
+  - **Marcas de puertas y escaleras**: botones "Puertas" (D) y "Escaleras" (E) en el editor; dibujan polígonos
+    persistentes por edificio+piso con las **mismas funciones que las salas** (seleccionar, mover/rotar en grupo,
+    copiar/pegar, eliminar, undo/redo, panel lateral "Puerta/Escalera" y guardado). IDs `ANN-*`; colores door `#0ea5e9`,
+    stair `#7c3aed`, selección `#f59e0b`. Backend: entidad `BuildingAnnotation` + DbContext/query filter + bloque
+    idempotente `BuildingAnnotations` + `AnnotationsController` (`GET /api/annotations` anónimo por building+floor,
+    `POST/PUT/DELETE` admin/editor con auditoría). Mapa principal (`addData.js`): marca pintada por piso junto a salas
+    manuales (`addAnnotationsForFloor`, visible para todos los usuarios).
+  - **Multiselección unificada**: el editor ya no tiene botón de activación de multiselección (siempre activa):
+    clic = alternar selección; `Ctrl+arrastrar` = mover grupo; `Shift+arrastrar` = rotar grupo; arrastre normal = no-op;
+    los gestos solo actúan si el arrastre comienza sobre un elemento ya seleccionado. `SelectedRoomIds` cubre salas y marcas.
+  - **Rotación conforme en espacio de píxeles**: `transformLatLngs` y el gesto de rotación de grupo rotan los vértices en
+    píxeles proyectados (`latLngToContainerPoint`/`containerPointToLatLng`) en vez de lat/lng crudos, para que las salas
+    conserven su forma y tamaño exactos al rotar (fix del efecto romboide/shrink). Antes de esto, los grupos se rotaban
+    como cuerpo rígido pero con deformación; los datos ya guardados con la fórmula antigua quedan deformados hasta
+    re-rotarlos/re-guardarlos una vez.
+  - Fix de gestos previo: el mapa `popupMap` se bloquea (`dragging.disable()`) durante mover/rotar y se re-habilita en
+    todos los caminos de salida (incl. clic de toggle y arrastre simple), evitando que el ctrl+click izquierdo se topara
+    con el pan del mapa.
+  - Tests: jest `roomEditorGeometry` (motores de touching: `offsetRing`, `crosses`, `erodeRing`; salas contiguas,
+    compartición de pared, sin superposiciones, bounds) → **64/64 en 7 suites**; webpack verde.
+- **Batch de fixes/features recientes** (capturados para continuar): botón Guardar respaldo/export eliminado; markers solo
+  para geometrías Point (fix de burbujas de contador); fix de crash `reArrange` con centro null (deriva del centro del
+  polígono); login API JSON + modal de credenciales en el mapa; piso de popup sin re-encuadrar; sidebar admin redux de
+  sesión (dropdown a la derecha, submenús), orden por categoría en equipos, crear usuarios/alta-baja; sufijos de docs y
+  branch `main` con repo único `Syntro` (5001/8081), white-label confirmado a cliente único (README/SPECs alineados).
+
 ## Pendiente
 
 - F2 (importar Sotero): registrar Organization "Hospital Sótero del Río" + CampusSite `sotero` (school `cs`, floors `["-1".."5"]`, defaultFloor `b1`), copiar estáticos de `/app/frontend-data` renombrando sin `.map`, sembrar schedules ("Lun-Jue 08:30/13:30/17:30; Vie 08:30/13:30/16:30" en `America/Santiago`, cron por fila), agregar `sotero` a `campuses.js`.
@@ -110,8 +147,9 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
 - Revisiones SPECs 12–27 y aprobación del usuario.
 - Multi-tenant — frontend: agrupar el campus selector por organización (superadmin), adaptar los editores y storage restantes al campus activo.
 - Multi-tenant — tests: tests backend para CRUD org/sitios, scoping y payload de sesión; tests frontend para `siteConfig`.
-- Docs multi-tenant: actualizar SPEC 01/03/13/14/15, ROADMAP y PROGRESS.
+- Docs al día (especs 01/03/13/14/15/17/20/26/27, README, ARCHITECTURE, PROGRESS, AGENTS, `.opencode` plans) **hecho** — commit "docs".
 - Fase 6 (roadmap en `spec/27_ROADMAP.md`): producto, visual/branding (pendiente revisión del usuario), decisión del contenido del checklist del formulario de entrega, documentación y onboarding.
+- Próxima semana: revisión en vivo del editor de salas/marcas y rotación con el usuario (hard refresh `:8081`), y continuar con el push pendiente si se autoriza.
 
 
 ## Decisiones de implementación documentadas

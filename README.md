@@ -7,11 +7,13 @@ Refundido de los repositorios `sotero_map` (frontend) y `sotero_map_api`
 (backend) en un proyecto único, adaptado a un despliegue de cliente único.
 
 - **Frontend**: mapa interactivo (JavaScript vanilla + Leaflet + Webpack) con búsqueda,
-  rutas entre edificios, inventario, telemetría de red, POIs, editor de salas/geometría
-  y herramientas de edición de mapa (campus `sotero`, pisos -1 a 5).
+  rutas entre edificios, inventario, telemetría de red, POIs, editor de salas y marcas
+  (puertas/escaleras) y herramientas de edición de mapa (campus `sotero`, pisos -1 a 5; el
+  mapa resuelve sus sitios desde la sesión — multi-tenant).
 - **Backend**: API ASP.NET Core 8 + EF Core + SQLite + panel de administración Razor,
-  con autenticación local/LDAP, MFA, importación de inventario por Excel, auditoría,
-  respaldos y despliegue de documentos (formulario de entrega con generación de PDF).
+  con autenticación local/LDAP, MFA, multi-tenant (organizaciones/sitios, rol `superadmin`),
+  importación de inventario por Excel, auditoría, respaldos, planificación de capturas de
+  telemetría y despliegue de documentos (formulario de entrega con generación de PDF).
 - **Herramientas**: recolector de telemetría de red para Windows (`tools/Syntro.NetworkCollector`).
 
 ## Estructura
@@ -61,10 +63,10 @@ estas variables, la API falla al iniciar con un error claro.
 ## Desarrollo
 
 - Backend: `dotnet run --project backend/Syntro.API` (o `docker compose up -d --build`).
-- Backend tests: `dotnet test backend/Syntro.sln` (xUnit, SQLite en memoria).
+- Backend tests: `dotnet test backend/Syntro.sln` (xUnit, SQLite en memoria; 79 tests).
 - Frontend: `cd frontend && npm ci && npm run build` (salida en `frontend/dist/`).
   La URL de la API se inyecta en el bundle vía `API_BASE_URL` (`webpack DefinePlugin`).
-- Frontend tests: `cd frontend && npm test` (jest).
+- Frontend tests: `cd frontend && npm test` (jest; 64 tests en 7 suites).
 
 ## Configuración
 

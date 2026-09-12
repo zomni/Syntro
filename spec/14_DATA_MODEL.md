@@ -21,13 +21,24 @@ is_active
 
 ## Constraints
 
-- Campus: unique name, top-level.
+- Campus: unique name, top-level; sites (`CampusSite`) belong to one `Organization`.
 - Building: belongs to one Campus, unique code inside Campus.
 - Floor: belongs to one Building, level unique inside Building.
 - Room: belongs to one Building.
 - Equipment: serial number is the priority identifier.
 - PointOfInterest: belongs to one Campus (and optionally one Floor).
 - WalkingRouteEdge: connects two WalkingRouteNodes.
+- ManualRoom: unique `ExternalId`, index `(BuildingExternalId, Floor)`.
+- BuildingAnnotation: unique `ExternalId`, index `(BuildingExternalId, Floor)`, `AnnotationType` in {door, stair}.
+- RoomGeometryOverride: unique `RoomExternalId` (one geometry override per room).
+
+## Naming / id conventions
+
+- Rooms and annotations use a globally unique `ExternalId`; the editor emits
+  `MAN-*` for manual rooms and `ANN-*` for door/stair annotations. Legacy rooms
+  synced from the source keep their source `ExternalId`.
+- `GeometryJson` stores a GeoJSON `Polygon` (`coordinates[0]` = closed ring of
+  `[lng, lat]` pairs) for both entities.
 
 ## Soft Delete
 

@@ -1,5 +1,13 @@
 # Plan: rutas del sotero, separación por organización y gestor de capturas programadas
 
+> **Estado (2026-09-11): PLAN COMPLETADO.** El repo definitivo es `Syntro` (no `Pireon`):
+> rutas peatonales importadas desde `sotero_live.db` (244 nodos / 274 aristas, campus `sotero`),
+> separación por organización implementada (selector en 4 páginas, scoping por `CampusKey`),
+> y gestor de capturas programadas como sección en "Red y riesgo" (`TelemetryScanSchedule`).
+> El archivo queda solo como registro histórico; las rutas/Binarios `Pireon.API` y
+> `migrate-sotero-to-pireon.py` que menciona corresponden a la nomenclatura previa al refactor
+> a `Syntro.API` / `tools/migrate-sotero-to-syntro.py`.
+
 ## Contexto / decisiones confirmadas
 - "Rutas del sotero" = red de rutas peatonales (244 nodos / 274 aristas, campus `sotero`) que solo existe en
   `sotero_live.db` y nunca se migró a `pireon.db` (que solo tiene 14/12 filas huérfanas del campus `sca`).

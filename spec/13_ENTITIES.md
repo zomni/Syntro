@@ -24,6 +24,25 @@ A map marker with a type, name and coordinates.
 ## SyncedBuilding / SyncedRoom
 Locations managed or overridden by the backend.
 
+## ManualRoom
+A room created from the map (`roomEditor.js`). Belongs to a building (`BuildingExternalId`)
+and a `Floor`, identified by `ExternalId` (`MAN-*` prefix in the editor, unique), polygon
+geometry in `GeometryJson`, plus display metadata (ShortName, Type, Unit, Service, Status,
+Capacity, Notes). SERVER entity: `ManualRoom` (auditable, soft delete).
+
+## BuildingAnnotation
+A visual-only map mark for the building's entrance/exit doors or stairs, created from
+`roomEditor.js`. Belongs to a building (`BuildingExternalId`) and a `Floor`,
+`AnnotationType` is `door` or `stair`, geometry in `GeometryJson`, `ExternalId` unique
+(`ANN-*` prefix in the editor). Renders per floor on the main map for all users.
+SERVER entity: `BuildingAnnotation` (auditable, soft delete).
+
+## Organization / CampusSite
+Multi-tenant containers: an `Organization` owns `CampusSite` records (each with a
+`CampusKey`, name, school, floors, defaultFloor, center/zoom/bounds); a site maps to a
+campus in the runtime frontend config. Only `superadmin` manages organizations; org
+admins can only access their own sites.
+
 ## ManualBuilding
 A building created from the map.
 
@@ -46,6 +65,7 @@ Inventory imported from Excel or created from a delivery form.
 Account with access to the platform.
 
 Roles
+- superadmin (multi-tenant: manages organizations/sites, sees all campuses)
 - admin
 - editor
 - viewer
