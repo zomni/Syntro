@@ -23,7 +23,7 @@
     <script type="importmap">
       {
         "imports": {
-          "@app/index": "./index.js?v=20260902a",
+          "@app/index": "./index.js?v=20260914a",
           "@app/findByUrl": "./utils/findByUrl.js?v=20260827a",
           "@app/routePlanner": "./components/routePlanner.js?v=20260608b",
           "@app/featureDisplay": "./views/featureDisplay.js?v=20260902a",
@@ -32,7 +32,7 @@
           "@app/addData": "./utils/addData.js?v=20260827a",
           "@app/autocompleteSearchBox": "./components/autocompleteSearchBox.js?v=20260608b",
           "@app/manualBuildingEditor": "./components/manualBuildingEditor.js?v=20260812a",
-          "@app/sessionModeBadge": "./components/sessionModeBadge.js?v=20260811d",
+          "@app/sessionModeBadge": "./components/sessionModeBadge.js?v=20260914a",
           "@app/buildingGeometryEditor": "./components/buildingGeometryEditor.js?v=20260608b",
           "@app/walkingRouteEditor": "./components/walkingRouteEditor.js?v=20260608b",
           "@app/walkingRouteLayer": "./components/walkingRouteLayer.js?v=20260625a",
@@ -125,6 +125,15 @@
       <div id="map-loading-overlay" class="map-loading-overlay" hidden>
         <div class="map-loading-spinner" aria-hidden="true"></div>
         <div class="map-loading-text">Cargando campus...</div>
+      </div>
+    </div>
+
+    <div id="welcome-loading-overlay" class="welcome-loading-overlay" hidden>
+      <div class="welcome-loading-card">
+        <img src="assets/branding/app-logo-frontend.svg" alt="Syntro" class="welcome-loading-logo" width="88" height="88" />
+        <div class="welcome-loading-title">SYNTRO</div>
+        <div class="welcome-loading-spinner" aria-hidden="true"></div>
+        <div class="welcome-loading-text">Cargando datos del mapa...</div>
       </div>
     </div>
   </body>

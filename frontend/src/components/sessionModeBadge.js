@@ -72,7 +72,7 @@ const openLoginModal = () => {
           <input name="username" type="text" autocomplete="username" required />
         </label>
         <label>
-          <span>Contrasena</span>
+          <span>Contraseña</span>
           <input name="password" type="password" autocomplete="current-password" required />
         </label>
         <div class="session-login-error" data-login-error hidden></div>
@@ -116,7 +116,17 @@ const openLoginModal = () => {
 
     errorEl.hidden = true;
     const submitButton = form.querySelector('button[type="submit"]');
-    if (submitButton) submitButton.disabled = true;
+    if (submitButton) {
+      submitButton.disabled = true;
+      submitButton.innerHTML = `<span class="session-login-spinner" aria-hidden="true"></span> Iniciando...`;
+    }
+    form.querySelectorAll("input").forEach((i) => (i.disabled = true));
+
+    const startTime = Date.now();
+    const ensureSpinnerVisible = async () => {
+      const remaining = Math.max(0, 500 - (Date.now() - startTime));
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+    };
 
     try {
       const response = await fetch(`${BACKEND_API_URL}/api/auth/login`, {
@@ -129,18 +139,26 @@ const openLoginModal = () => {
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        errorEl.textContent = data?.message || "No se pudo iniciar sesion.";
+        await ensureSpinnerVisible();
+        errorEl.textContent = data?.message || "No se pudo iniciar sesión.";
         errorEl.hidden = false;
         return;
       }
 
+      await ensureSpinnerVisible();
       close();
+      window.showWelcomeLoading?.();
       await refreshSessionBadge();
     } catch {
+      await ensureSpinnerVisible();
       errorEl.textContent = "No se pudo contactar el backend.";
       errorEl.hidden = false;
     } finally {
-      if (submitButton) submitButton.disabled = false;
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = "Iniciar sesión";
+      }
+      form.querySelectorAll("input").forEach((i) => (i.disabled = false));
     }
   });
 
@@ -275,9 +293,21 @@ const ensureBadge = () => {
   return badge;
 };
 
-const ensureInventoryLink = () => {
+const ensureInventoryLink = (session) => {
   const badge = document.getElementById(rootId);
-  if (!badge) return null;
+
+  const removeInventoryLink = () => {
+    const existing = document.getElementById(inventoryLinkId);
+    if (existing) {
+      existing.remove();
+      window.dispatchEvent(new CustomEvent("syntro-inventory-link-removed"));
+    }
+  };
+
+  if (!badge || !session?.isAuthenticated) {
+    removeInventoryLink();
+    return null;
+  }
 
   let link = document.getElementById(inventoryLinkId);
   if (link) return link;
@@ -285,13 +315,22 @@ const ensureInventoryLink = () => {
   link = document.createElement("a");
   link.id = inventoryLinkId;
   link.className = "dashboard-link session-inventory-link";
-  link.href = `${BACKEND_API_URL}/dashboard`;
+  link.href = `${BACKEND_API_URL}/dashboard/inventory`;
   link.target = identifiers.windowName;
   link.rel = "noreferrer";
   link.textContent = "Inventario";
-  link.addEventListener("click", (event) => {
+  link.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    try {
+      await fetch(`${BACKEND_API_URL}/api/auth/mark-inventory-entry`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+    } catch {
+      // Si el backend no responde, se abre igual intentando el dashboard.
+    }
     const dashboardWindow = window.open(link.href, identifiers.windowName);
     dashboardWindow?.focus?.();
   });
@@ -320,7 +359,7 @@ const refreshSessionBadge = async () => {
 
   lastSessionKey = sessionKey;
   renderBadge(badge, session);
-  ensureInventoryLink();
+  ensureInventoryLink(session);
   requestAnimationFrame(positionInventoryLink);
   window.dispatchEvent(new CustomEvent(identifiers.events.sessionChanged, { detail: session || {} }));
 };

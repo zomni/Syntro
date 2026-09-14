@@ -117,7 +117,7 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: result.User.Username,
             cancellationToken: cancellationToken);
-        return RedirectToLocal(model.ReturnUrl);
+        return RedirectToUnifiedEntry();
     }
 
     [Authorize]
@@ -341,7 +341,7 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: user.Username,
             cancellationToken: cancellationToken);
-        return RedirectToLocal(model.ReturnUrl);
+        return RedirectToUnifiedEntry();
     }
 
     [HttpGet]
@@ -464,7 +464,7 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: user.Username,
             cancellationToken: cancellationToken);
-        return RedirectToLocal(model.ReturnUrl);
+        return RedirectToUnifiedEntry();
     }
 
     [Authorize]
@@ -530,6 +530,49 @@ public class AuthController : Controller
         }
 
         return Redirect("/dashboard");
+    }
+
+    private IActionResult RedirectToUnifiedEntry()
+    {
+        var configured = _configuration["FrontendAppUrl"];
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            return Redirect($"{configured.TrimEnd('/')}/?welcome=1");
+        }
+
+        var requestHost = Request?.Host.Host;
+        if (!string.IsNullOrWhiteSpace(requestHost))
+        {
+            var requestScheme = string.IsNullOrWhiteSpace(Request?.Scheme) ? "http" : Request.Scheme;
+            return Redirect($"{requestScheme}://{requestHost}:8080/?welcome=1");
+        }
+
+        return Redirect("http://localhost:8081/?welcome=1");
+    }
+
+    private const string InventoryFromMapCookieName = "syntro-inventory-from-map";
+
+    [Authorize]
+    [HttpPost("/api/auth/mark-inventory-entry")]
+    public IActionResult MarkInventoryEntry()
+    {
+        if (!(User.Identity?.IsAuthenticated == true))
+        {
+            return Unauthorized(new { ok = false, message = "session-expired" });
+        }
+
+        Response.Cookies.Append(
+            InventoryFromMapCookieName,
+            "1",
+            new CookieOptions
+            {
+                SameSite = SameSiteMode.Lax,
+                HttpOnly = false,
+                Secure = string.Equals(_environment.EnvironmentName, "Production", StringComparison.OrdinalIgnoreCase),
+                MaxAge = TimeSpan.FromMinutes(10)
+            });
+
+        return Ok(new { ok = true });
     }
 
     private async Task<IActionResult> BeginMfaFlowAsync(AuthUser user, LoginViewModel model, CancellationToken cancellationToken)

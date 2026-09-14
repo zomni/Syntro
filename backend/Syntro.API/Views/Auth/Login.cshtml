@@ -1,7 +1,13 @@
 @model Syntro.API.ViewModels.LoginViewModel
+@inject Microsoft.Extensions.Configuration.IConfiguration Configuration
 @{
     Layout = null;
     ViewData["Title"] = "Login";
+    var frontendMapUrl = (Configuration["FrontendAppUrl"] ?? "").TrimEnd('/');
+    if (string.IsNullOrWhiteSpace(frontendMapUrl))
+    {
+        frontendMapUrl = "http://localhost:8081";
+    }
 }
 <!DOCTYPE html>
 <html lang="es">
@@ -74,8 +80,12 @@
                         <input asp-for="RememberMe" class="form-check-input" />
                         <label asp-for="RememberMe" class="form-check-label"></label>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+<button type="submit" class="btn btn-primary w-100">Entrar</button>
                 </form>
+
+                <div class="text-center mt-3">
+                    <a href="@(frontendMapUrl)/?welcome=1" class="small text-decoration-underline">Ingresar sin inicio de sesión</a>
+                </div>
             </div>
         </div>
     </div>

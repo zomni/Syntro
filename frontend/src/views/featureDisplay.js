@@ -28,12 +28,26 @@ window.openSyntroDashboard = (event, url) => {
 
   if (!url) return false;
 
-  const dashboardWindow = window.open("", "syntro-dashboard");
-  if (dashboardWindow) {
-    dashboardWindow.location.href = url;
-    dashboardWindow.focus?.();
+  const openWindow = () => {
+    const dashboardWindow = window.open("", "syntro-dashboard");
+    if (dashboardWindow) {
+      dashboardWindow.location.href = url;
+      dashboardWindow.focus?.();
+    } else {
+      window.location.href = url;
+    }
+  };
+
+  if (url.includes("/dashboard/inventory")) {
+    fetch(`${BACKEND_API_URL}/api/auth/mark-inventory-entry`, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+    })
+      .catch(() => {})
+      .finally(openWindow);
   } else {
-    window.location.href = url;
+    openWindow();
   }
 
   return false;
@@ -265,6 +279,7 @@ let backendSessionPendingPromise = null;
 let buildingEquipmentSummaryCache = null;
 let buildingEquipmentSummaryPromise = null;
 let globalEquipmentTypeFilter = "";
+let lastKnownSessionIsAuthenticated = false;
 const buildingEquipmentBubbleEntries = new Map();
 const EQUIPMENT_SYNC_POLL_MS = 30000;
 const EQUIPMENT_SYNC_RETRY_MS = 5000;
@@ -1221,6 +1236,13 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   } else {
     topActions.appendChild(wrapper);
   }
+  syncEquipmentTypeFilterVisibility();
+};
+
+const syncEquipmentTypeFilterVisibility = () => {
+  const field = document.querySelector(".map-equipment-type-filter-field");
+  if (!field) return;
+  field.style.display = lastKnownSessionIsAuthenticated ? "" : "none";
 };
 
 const buildRoomsMap = (rooms) => {
@@ -2217,6 +2239,9 @@ if (document.readyState === "loading") {
 window.addEventListener("syntro-session-changed", (event) => {
   const detail = event.detail || {};
   const hasAuthFlag = typeof detail.isAuthenticated === "boolean";
+
+  lastKnownSessionIsAuthenticated = Boolean(detail.isAuthenticated);
+  syncEquipmentTypeFilterVisibility();
 
   if (hasAuthFlag) {
     updateBackendSessionCache(detail);

@@ -509,6 +509,8 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       expectedRenderSequence
     );
 
+    await addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence);
+
     await addAnnotationsForFloor(floorNumber, expectedRenderSequence);
 
     updateEmptyCampusNotice(!hasSvgForFloor(location, floorNumber) && featuresToRender.length === 0);

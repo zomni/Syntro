@@ -188,6 +188,7 @@ export const getSites = () => sites;
 export const getSite = (campusKey) => sites[campusKey];
 export const hasCampus = (campusKey) => campusKey in sites;
 export const isAuthenticated = () => isBackendAuthenticated === true;
+export const getBackendAuthStatus = () => isBackendAuthenticated;
 export const getPrimaryCampusKey = () => {
   return Object.keys(sites)[0] || "";
 };

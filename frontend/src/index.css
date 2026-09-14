@@ -344,6 +344,18 @@
     font: 600 12px/1.35 sans-serif;
 }
 
+.session-login-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.35);
+    border-top-color: #fff;
+    animation: pi-map-spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
 .session-inventory-link {
     position: fixed;
     top: 214px;
@@ -2547,6 +2559,79 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
 .map-loading-text {
     color: var(--pi-gray-800);
     font: 600 13px/1.2 sans-serif;
+}
+
+.welcome-loading-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, #001e3c, #001428);
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.welcome-loading-overlay[hidden] {
+    display: none;
+}
+
+.welcome-loading-overlay.is-fading {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.welcome-loading-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding: 36px 48px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.35);
+    animation: pi-welcome-pop 0.4s ease-out;
+}
+
+.welcome-loading-logo {
+    width: 88px;
+    height: 88px;
+    border-radius: 22px;
+    object-fit: cover;
+    box-shadow: 0 10px 24px rgba(15, 118, 110, 0.28);
+}
+
+.welcome-loading-title {
+    font: 800 26px/1.1 sans-serif;
+    letter-spacing: 4px;
+    color: var(--pi-primary);
+}
+
+.welcome-loading-spinner {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 3px solid rgba(var(--pi-primary-rgb), 0.25);
+    border-top-color: var(--pi-primary-deep);
+    animation: pi-map-spin 0.8s linear infinite;
+}
+
+.welcome-loading-text {
+    color: var(--pi-gray-800);
+    font: 600 14px/1.2 sans-serif;
+}
+
+@keyframes pi-welcome-pop {
+    from {
+        transform: scale(0.92);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 @media (max-width: 700px) {

@@ -1,9 +1,13 @@
 // Apply instance theme before any UI renders (SPEC 01/02).
-import { applyBrandingTheme } from "./config/appConfig.js";
+import { applyBrandingTheme, appConfig } from "./config/appConfig.js";
 
 // Load site configuration from the backend session, with
 // fallback to the static campuses.js template.
-import { loadSites, isAuthenticated, getPrimaryCampusKey } from "./config/siteConfig.js";
+import {
+  loadSites,
+  getBackendAuthStatus,
+  getPrimaryCampusKey,
+} from "./config/siteConfig.js";
 import { identifiers } from "./utils/identifiers.js";
 import { goTo, setDefaultFloor } from "@app/goToCampus";
 
@@ -56,6 +60,44 @@ window.addEventListener(
 );
 
 loadSites();
+
+const urlParams = new URLSearchParams(window.location.search);
+const cameFromWelcome = urlParams.has("welcome");
+
+const runWelcomeLoading = () => {
+  const overlay = document.getElementById("welcome-loading-overlay");
+  if (!overlay) return;
+
+  overlay.hidden = false;
+  overlay.classList.remove("is-fading");
+
+  window.setTimeout(() => {
+    if (!overlay.isConnected) return;
+    overlay.classList.add("is-fading");
+    window.setTimeout(() => {
+      overlay.hidden = true;
+    }, 500);
+  }, 2000);
+};
+
+window.showWelcomeLoading = runWelcomeLoading;
+
+const handleWelcomeGate = () => {
+  loadSites().then(() => {
+    if (cameFromWelcome) {
+      runWelcomeLoading();
+      return;
+    }
+
+    const authStatus = getBackendAuthStatus();
+    if (authStatus === false) {
+      window.location.replace(`${appConfig.apiBaseUrl}/Auth/Login`);
+      return;
+    }
+  });
+};
+
+handleWelcomeGate();
 
 let appliedInitialCampus = false;
 

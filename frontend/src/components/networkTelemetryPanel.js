@@ -36,6 +36,12 @@ const registerControlSurface = (element) => {
 
 const getRiskLabel = (score, level) => `${String(level || "low").toUpperCase()} (${Number(score) || 0})`;
 
+const syncTelemetrySessionVisibility = (session) => {
+  const group = document.getElementById("network-telemetry-group");
+  if (!group) return;
+  group.style.display = session?.isAuthenticated ? "" : "none";
+};
+
 const getRankIcon = (index) => {
   if (index === 0) return "🥇";
   if (index === 1) return "🥈";
@@ -194,6 +200,7 @@ const initTelemetryPanel = () => {
     group = document.createElement("div");
     group.id = "network-telemetry-group";
     group.className = "map-control-card network-telemetry-group";
+    group.style.display = "none";
     const routeCard = document.getElementById("route-planner-card");
     if (routeCard) {
       routeCard.insertAdjacentElement("afterend", group);
@@ -234,8 +241,9 @@ const initTelemetryPanel = () => {
     void refreshPanel({ forceRefresh: true });
   });
 
-  window.addEventListener(identifiers.events.sessionChanged, () => {
+  window.addEventListener(identifiers.events.sessionChanged, (event) => {
     resetNetworkTelemetryCache();
+    syncTelemetrySessionVisibility(event.detail);
     if (!panel.hidden) {
       void refreshPanel({ forceRefresh: true });
     }

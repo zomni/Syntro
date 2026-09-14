@@ -69,7 +69,7 @@ let copiedFloorNumber = null;
 let dropdownClickOutsideHandler = null;
 
 const getApiUrl = () => {
-  return BACKEND_API_URL || "http://localhost:5002";
+  return BACKEND_API_URL || "http://localhost:5001";
 };
 
 const loadSession = async () => {

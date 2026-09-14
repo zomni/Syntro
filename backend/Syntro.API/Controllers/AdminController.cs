@@ -1076,6 +1076,10 @@ public class AdminController : Controller
             DELETE FROM Locations;
             DELETE FROM Equipments;
             DELETE FROM MlTrainingRuns;
+            DELETE FROM ManualRooms;
+            DELETE FROM BuildingAnnotations;
+            DELETE FROM RoomGeometryOverrides;
+            DELETE FROM TelemetryScanSchedules;
             COMMIT;
             PRAGMA foreign_keys = ON;
             """, cancellationToken);
@@ -1125,6 +1129,10 @@ public class AdminController : Controller
             DELETE FROM Locations;
             DELETE FROM Equipments;
             DELETE FROM MlTrainingRuns;
+            DELETE FROM ManualRooms;
+            DELETE FROM BuildingAnnotations;
+            DELETE FROM RoomGeometryOverrides;
+            DELETE FROM TelemetryScanSchedules;
             COMMIT;
             PRAGMA foreign_keys = ON;
             """, cancellationToken);
@@ -2312,6 +2320,8 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Inventory));
     }
 
+    private const string InventoryFromMapCookieName = "syntro-inventory-from-map";
+
     public async Task<IActionResult> Inventory(
         string? search,
         string? category,
@@ -2330,6 +2340,11 @@ public class AdminController : Controller
         int pageSize = 30,
         CancellationToken cancellationToken = default)
     {
+        if (!string.Equals(Request.Cookies[InventoryFromMapCookieName], "1", StringComparison.Ordinal))
+        {
+            return Redirect(ResolveFrontendMapUrl());
+        }
+
         pageSize = NormalizePageSize(pageSize);
         page = Math.Max(page, 1);
         assignment = string.IsNullOrWhiteSpace(assignment) ? "all" : assignment.Trim().ToLowerInvariant();

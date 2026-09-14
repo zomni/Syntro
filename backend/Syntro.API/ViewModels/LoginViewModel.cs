@@ -10,7 +10,7 @@ public class LoginViewModel
 
     [Required]
     [DataType(DataType.Password)]
-    [Display(Name = "Contrasena")]
+    [Display(Name = "Contraseña")]
     public string Password { get; set; } = string.Empty;
 
     [Display(Name = "Recordarme")]
