@@ -14,6 +14,7 @@ import {
   distanceMeters,
   generateContourRooms,
 } from "../utils/roomEditorGeometry.js";
+import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel } from "../config/staticIconCatalog.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -49,6 +50,7 @@ const ICONS = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>',
   snap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="M8 6l4-4 4 4"/><circle cx="12" cy="16" r="4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 20v2"/></svg>',
+  marker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
   copyLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="14" height="14" rx="2"/><path d="M4 8H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>',
   pasteLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
 };
@@ -207,19 +209,26 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       selectedFloor,
       rooms: [],
       annotations: [],
+      markers: [],
       selectedRoom: null,
+      selectedMarker: null,
       selectedRoomIds: [],
       mode: "select",
       isDirty: false,
       buildingPolygonLayer: null,
       roomLayers: [],
+      markerLayers: [],
       previewLayer: null,
       drawPoints: [],
       drawVertexMarkers: [],
       suggestions: [],
       suggestionPreviewLayers: [],
       removedExternalIds: [],
+      removedManualRoomExternalIds: [],
       removedAnnotationExternalIds: [],
+      removedMarkerExternalIds: [],
+      pendingMarkerIcon: null,
+      paletteOpen: false,
       dragging: null,
       rotating: null,
       snapEnabled: true,
@@ -288,7 +297,12 @@ const installKeyboardShortcuts = () => {
     } else if (e.key === "Delete" || e.key === "Backspace") {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
-      deleteSelectedRoom();
+      if (currentEditorState.selectedMarker && getSelectedRoomIds().length === 0) {
+        deleteSelectedMarker();
+        updateSidePanel();
+      } else {
+        deleteSelectedRoom();
+      }
     } else if (e.key === "g" && !e.ctrlKey && !e.metaKey) {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
@@ -313,14 +327,6 @@ const installKeyboardShortcuts = () => {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
       selectRoomMode("draw-free");
-    } else if (e.key === "d" && !e.ctrlKey && !e.metaKey) {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
-      e.preventDefault();
-      selectRoomMode("draw-door");
-    } else if (e.key === "e" && !e.ctrlKey && !e.metaKey) {
-      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
-      e.preventDefault();
-      selectRoomMode("draw-stair");
     } else if (e.key === "s" && !e.ctrlKey && !e.metaKey) {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
@@ -389,9 +395,19 @@ const fetchAnnotationsForFloor = async (buildingExternalId, floor) => {
   return response.json();
 };
 
+const fetchMarkersForFloor = async (buildingExternalId, floor) => {
+  const response = await fetch(
+    `${getApiUrl()}/api/map-markers?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
+    { credentials: "include", cache: "no-store" }
+  );
+  if (!response.ok) return [];
+  return response.json();
+};
+
 const loadRoomsForFloor = async (buildingExternalId, floor) => {
   currentEditorState.rooms = await fetchRoomsForFloor(buildingExternalId, floor);
   currentEditorState.annotations = await loadAnnotationsForFloor(buildingExternalId, floor);
+  currentEditorState.markers = await fetchMarkersForFloor(buildingExternalId, floor);
 };
 
 const loadAnnotationsForFloor = async (buildingExternalId, floor) => {
@@ -425,6 +441,10 @@ const createPopup = () => {
   document.body.appendChild(popupContainer);
 
   dropdownClickOutsideHandler = (e) => {
+    if (currentEditorState?.paletteOpen && !e.target.closest(".room-editor-icon-wrapper")) {
+      closeIconPalette();
+      updateBottomBar();
+    }
     if (!currentEditorState?.dropdownOpen) return;
     if (!e.target.closest(".room-editor-suggest-wrapper")) {
       closeDropdown();
@@ -493,6 +513,26 @@ const initPopupMap = (geometry) => {
   });
 
   popupMap.on("click", handleMapDeselectClick);
+
+  const container = popupMap.getContainer();
+  container.addEventListener("dragover", (e) => {
+    if (!currentEditorState) return;
+    const draggedKey = e.dataTransfer?.getData("text/plain");
+    if (STATIC_ICON_KEYS.includes(draggedKey)) {
+      e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+    }
+  });
+  container.addEventListener("drop", (e) => {
+    const draggedKey = e.dataTransfer?.getData("text/plain");
+    if (!currentEditorState || !popupMap || !STATIC_ICON_KEYS.includes(draggedKey)) return;
+    e.preventDefault();
+    const rect = container.getBoundingClientRect();
+    const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
+    const latlng = popupMap.containerPointToLatLng(point);
+    stopMarkerPlacement();
+    placeMarkerAt(latlng, draggedKey);
+  });
 };
 
 const handleMapDeselectClick = (e) => {
@@ -504,9 +544,10 @@ const handleMapDeselectClick = (e) => {
   const clickedOnRoom = currentEditorState.roomLayers?.some((layer) =>
     layer.getBounds?.().contains(e.latlng)
   );
-  if (!clickedOnRoom && (currentEditorState.selectedRoom || getSelectedRoomIds().length > 0)) {
+  if (!clickedOnRoom && (currentEditorState.selectedRoom || currentEditorState.selectedMarker || getSelectedRoomIds().length > 0)) {
     currentEditorState.selectedRoomIds = [];
     currentEditorState.selectedRoom = null;
+    currentEditorState.selectedMarker = null;
     popupMap.dragging.enable();
     popupMap.keyboard.enable();
     renderRooms();
@@ -620,8 +661,6 @@ const updateBottomBar = () => {
     { id: "draw-circle", icon: ICONS.circle, title: "Circulo (C)" },
     { id: "draw-free", icon: ICONS.free, title: "Libre - vertices (L)" },
     { id: "draw-hand", icon: ICONS.hand, title: "Mano alzada (H)" },
-    { id: "draw-door", icon: ICONS.door, title: "Puerta (D)" },
-    { id: "draw-stair", icon: ICONS.stair, title: "Escalera (E)" },
   ];
 
   for (const t of toolDefs) {
@@ -641,6 +680,60 @@ const updateBottomBar = () => {
   snapBtn.title = `Snap a contorno y muros (S) - ${snapEnabled ? "ON" : "OFF"}`;
   snapBtn.addEventListener("click", () => toggleSnap());
   tools.appendChild(snapBtn);
+
+  const iconWrapper = document.createElement("div");
+  iconWrapper.className = "room-editor-icon-wrapper";
+  const iconBtn = document.createElement("button");
+  iconBtn.type = "button";
+  iconBtn.className = `room-editor-tool-btn is-icon-only${mode === "marker-place" ? " is-active" : ""}`;
+  iconBtn.innerHTML = `<span>${ICONS.marker}</span>`;
+  iconBtn.title = "Iconos: arrastra o haz click en un icono para colocarlo en el mapa";
+  iconBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (mode === "marker-place") {
+      stopMarkerPlacement();
+    } else {
+      toggleIconPalette();
+    }
+  });
+  iconWrapper.appendChild(iconBtn);
+
+  const palette = document.createElement("div");
+  palette.className = `room-editor-icon-dropdown${currentEditorState.paletteOpen ? " is-open" : ""}`;
+
+  const paletteHint = document.createElement("div");
+  paletteHint.className = "room-editor-icon-dropdown-hint";
+  paletteHint.textContent = "Elige un icono: click para colocarlo o arrastralo al mapa.";
+  palette.appendChild(paletteHint);
+
+  const paletteGrid = document.createElement("div");
+  paletteGrid.className = "room-editor-icon-grid";
+  for (const key of STATIC_ICON_KEYS) {
+    const item = document.createElement("div");
+    item.className = `room-editor-icon-item${currentEditorState.pendingMarkerIcon === key ? " is-active" : ""}`;
+    item.draggable = true;
+    item.title = staticIconLabel(key);
+    const img = document.createElement("img");
+    img.src = staticIconUrl(key);
+    img.alt = staticIconLabel(key);
+    img.draggable = false;
+    item.appendChild(img);
+    const nameTag = document.createElement("span");
+    nameTag.textContent = staticIconLabel(key);
+    item.appendChild(nameTag);
+    item.addEventListener("dragstart", (e) => {
+      e.dataTransfer.setData("text/plain", key);
+      e.dataTransfer.effectAllowed = "copy";
+    });
+    item.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleMarkerPlacement(key);
+    });
+    paletteGrid.appendChild(item);
+  }
+  palette.appendChild(paletteGrid);
+  iconWrapper.appendChild(palette);
+  tools.appendChild(iconWrapper);
 
   const divider1 = document.createElement("div");
   divider1.className = "room-editor-divider";
@@ -763,6 +856,17 @@ const updateBottomBar = () => {
       dd.style.transform = "translateY(-100%)";
     }
   }
+
+  if (currentEditorState.paletteOpen) {
+    const p = bottomBarEl.querySelector(".room-editor-icon-dropdown");
+    const btn = bottomBarEl.querySelector(".room-editor-icon-wrapper .room-editor-tool-btn");
+    if (p && btn) {
+      const rect = btn.getBoundingClientRect();
+      p.style.left = rect.left + "px";
+      p.style.top = (rect.top - 4) + "px";
+      p.style.transform = "translateY(-100%)";
+    }
+  }
 };
 
 const getHintForMode = (mode, snapEnabled) => {
@@ -774,6 +878,7 @@ const getHintForMode = (mode, snapEnabled) => {
     case "draw-circle": return "Circulo: click centro, click radio. Esc cancelar.";
     case "draw-free": return "Libre: click para vertices, Enter/dblclick cerrar. Shift=ortogonal. Esc cancelar.";
     case "draw-hand": return "Mano alzada: click+arrastra para dibujar. Shift=rectos. Esc cancelar.";
+    case "marker-place": return "Icono: click en el mapa para colocarlo (o arrastra el icono). Click en el boton del icono para salir.";
     case "draw-door": return "Puerta: dibuja el contorno de la puerta. Enter/dblclick cerrar. Esc cancelar.";
     case "draw-stair": return "Escalera: dibuja el contorno de la escalera. Enter/dblclick cerrar. Esc cancelar.";
     default: return "";
@@ -783,10 +888,14 @@ const getHintForMode = (mode, snapEnabled) => {
 const updateSidePanel = () => {
   if (!sidePanelEl || !currentEditorState) return;
 
-  const { selectedRoom } = currentEditorState;
+  const { selectedRoom, selectedMarker } = currentEditorState;
   const selectedCount = getSelectedRoomIds().length;
 
-  if (selectedCount > 1) {
+  if (selectedMarker && !selectedRoom) {
+    sidePanelEl.className = "room-editor-side-panel is-visible";
+    sidePanelEl.innerHTML = "";
+    sidePanelEl.appendChild(buildMarkerPanel(selectedMarker));
+  } else if (selectedCount > 1) {
     sidePanelEl.className = "room-editor-side-panel is-visible";
     sidePanelEl.innerHTML = "";
     const container = document.createElement("div");
@@ -861,6 +970,85 @@ const buildAnnotationPanel = (annotation) => {
   container.appendChild(deleteBtn);
 
   return container;
+};
+
+const buildMarkerPanel = (marker) => {
+  const container = document.createElement("div");
+
+  const header = document.createElement("div");
+  header.className = "room-editor-side-panel-header";
+  const label = staticIconLabel(marker.iconKey);
+  header.innerHTML = `<span class="room-editor-side-panel-title">Marcador</span>`;
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "room-editor-side-panel-close";
+  closeBtn.innerHTML = "&times;";
+  closeBtn.addEventListener("click", () => {
+    currentEditorState.selectedMarker = null;
+    renderMarkers();
+    updateSidePanel();
+    updateBottomBar();
+  });
+  header.appendChild(closeBtn);
+  container.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "room-editor-side-panel-body";
+
+  const iconUrl = staticIconUrl(marker.iconKey);
+
+  body.innerHTML = `
+    <div class="room-editor-marker-preview">
+      <img src="${iconUrl}" alt="${escapeHtml(label)}" />
+      <span>${escapeHtml(label)}</span>
+    </div>
+    <div class="room-editor-form-grid">
+      <label>Etiqueta
+        <input value="${escapeHtml(marker.label || "")}" data-prop="label" />
+      </label>
+    </div>
+    <label class="room-editor-full-label">Notas
+      <textarea data-prop="notes">${escapeHtml(marker.notes || "")}</textarea>
+    </label>
+    <div class="room-editor-meta">Piso ${marker.floor} | ID: ${marker.externalId}</div>
+    <button
+      type="button"
+      class="room-editor-tool-btn room-editor-delete-room-btn"
+      data-action="delete-marker"
+      title="Eliminar este marcador"
+    >
+      <span>${ICONS.delete}</span> Eliminar marcador
+    </button>
+  `;
+
+  body.querySelectorAll("[data-prop]").forEach((el) => {
+    const prop = el.dataset.prop;
+    const handler = () => updateMarkerProperty(prop, el.value);
+    el.addEventListener("change", handler);
+    if (el.tagName === "INPUT") {
+      el.addEventListener("input", handler);
+    }
+  });
+
+  const deleteMarkerBtn = body.querySelector("[data-action='delete-marker']");
+  if (deleteMarkerBtn) {
+    deleteMarkerBtn.addEventListener("click", () => {
+      if (!currentEditorState?.selectedMarker) return;
+      if (!window.confirm("¿Eliminar este marcador?")) return;
+      deleteSelectedMarker();
+      updateSidePanel();
+    });
+  }
+
+  container.appendChild(body);
+  return container;
+};
+
+const updateMarkerProperty = (property, value) => {
+  if (!currentEditorState?.selectedMarker) return;
+  const marker = currentEditorState.selectedMarker;
+  marker[property] = value;
+  currentEditorState.isDirty = true;
 };
 
 const buildPropertiesPanel = (room) => {
@@ -1085,6 +1273,8 @@ const renderRooms = () => {
 
   for (const room of currentEditorState.rooms) renderShape(room);
   for (const annotation of currentEditorState.annotations || []) renderShape(annotation);
+
+  renderMarkers();
 };
 
 const transformLatLngs = (latLngs, rotationDeg, scaleX, scaleY) => {
@@ -1435,6 +1625,175 @@ const clearRoomLayers = () => {
   currentEditorState.roomLayers = [];
 };
 
+const clearMarkerLayers = () => {
+  if (!currentEditorState || !popupMap) return;
+  for (const layer of currentEditorState.markerLayers) {
+    popupMap.removeLayer(layer);
+  }
+  currentEditorState.markerLayers = [];
+};
+
+const buildMarkerLeafletIcon = (marker) =>
+  L.icon({
+    iconUrl: staticIconUrl(marker.iconKey),
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -12],
+    className: "room-editor-marker-icon",
+  });
+
+const renderMarkers = () => {
+  clearMarkerLayers();
+  if (!currentEditorState || !popupMap) return;
+
+  const selectedId = currentEditorState.selectedMarker?.externalId;
+
+  for (const marker of currentEditorState.markers) {
+    const layer = L.marker([marker.latitude, marker.longitude], {
+      icon: buildMarkerLeafletIcon(marker),
+      title: staticIconLabel(marker.iconKey),
+      interactive: true,
+      keyboard: false,
+      zIndexOffset: 500,
+    });
+    layer.markerData = marker;
+    if (marker.label && String(marker.label).trim()) {
+      layer.bindTooltip(String(marker.label).trim(), { direction: "top", offset: [0, -16] });
+    }
+    layer.on("click", (e) => {
+      L.DomEvent.stop(e);
+      selectMarker(marker);
+    });
+    layer.addTo(popupMap);
+    currentEditorState.markerLayers.push(layer);
+    const el = layer.getElement();
+    if (el && marker.externalId === selectedId) {
+      el.classList.add("is-selected");
+    }
+  }
+};
+
+const selectMarker = (marker) => {
+  if (!currentEditorState) return;
+  currentEditorState.selectedMarker = marker;
+  currentEditorState.selectedRoom = null;
+  currentEditorState.selectedRoomIds = [];
+  currentEditorState._suppressDeselectClick = true;
+  renderRooms();
+  updateSidePanel();
+  updateBottomBar();
+  setAdminMapToolsStatus("Marcador seleccionado. Edita la etiqueta o notas en el panel, G para guardar.");
+};
+
+const placeMarkerAt = (latlng, iconKey) => {
+  if (!currentEditorState || !popupMap || !iconKey) return;
+  const marker = {
+    externalId: `MKR-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    buildingExternalId: currentEditorState.buildingExternalId,
+    floor: currentEditorState.selectedFloor,
+    latitude: latlng.lat,
+    longitude: latlng.lng,
+    iconKey,
+    label: staticIconLabel(iconKey),
+    notes: "",
+    campus: "default",
+    source: "manual",
+    isNew: true,
+  };
+  pushUndo({ type: "create-marker", marker });
+  currentEditorState.markers.push(marker);
+  currentEditorState.selectedMarker = marker;
+  currentEditorState.selectedRoom = null;
+  currentEditorState.selectedRoomIds = [];
+  currentEditorState.isDirty = true;
+  renderRooms();
+  updateSidePanel();
+  updateBottomBar();
+  setAdminMapToolsStatus(`Marcador '${staticIconLabel(iconKey)}' colocado. Edítalo en el panel; G para guardar.`);
+};
+
+const deleteSelectedMarker = (markerToDelete) => {
+  if (!currentEditorState) return;
+  const marker = markerToDelete || currentEditorState.selectedMarker;
+  if (!marker) return;
+
+  pushUndo({ type: "delete-marker", marker });
+  currentEditorState.markers = currentEditorState.markers.filter((m) => m.externalId !== marker.externalId);
+  if (!marker.isNew && !currentEditorState.removedMarkerExternalIds.includes(marker.externalId)) {
+    currentEditorState.removedMarkerExternalIds.push(marker.externalId);
+  }
+  if (currentEditorState.selectedMarker?.externalId === marker.externalId) {
+    currentEditorState.selectedMarker = null;
+  }
+  currentEditorState.isDirty = true;
+  renderRooms();
+  updateSidePanel();
+  updateBottomBar();
+  setAdminMapToolsStatus("Marcador eliminado. G para guardar.");
+};
+
+const removeMarkerPlaceClickHandler = () => {
+  if (!currentEditorState?._markerPlaceClickHandler || !popupMap) return;
+  popupMap.off("click", currentEditorState._markerPlaceClickHandler);
+  currentEditorState._markerPlaceClickHandler = null;
+};
+
+const startMarkerPlacement = (iconKey) => {
+  if (!currentEditorState || !popupMap) return;
+  clearDrawState();
+  currentEditorState.pendingMarkerIcon = iconKey;
+  currentEditorState.mode = "marker-place";
+  currentEditorState.selectedMarker = null;
+  currentEditorState.selectedRoom = null;
+  currentEditorState.selectedRoomIds = [];
+  removeMarkerPlaceClickHandler();
+  const onClick = (e) => {
+    L.DomEvent.stop(e);
+    placeMarkerAt(e.latlng, currentEditorState?.pendingMarkerIcon || iconKey);
+  };
+  currentEditorState._markerPlaceClickHandler = onClick;
+  popupMap.on("click", onClick);
+  popupMap.dragging.enable();
+  popupMap.keyboard.enable();
+  renderRooms();
+  updateBottomBar();
+  updateSidePanel();
+  setAdminMapToolsStatus(`Coloca '${staticIconLabel(iconKey)}': click sobre el mapa o arrastra el icono. Click en el boton del icono para salir.`);
+};
+
+const stopMarkerPlacement = () => {
+  if (!currentEditorState) return;
+  removeMarkerPlaceClickHandler();
+  if (currentEditorState.mode === "marker-place") {
+    currentEditorState.mode = "select";
+    currentEditorState.pendingMarkerIcon = null;
+  }
+  renderRooms();
+  updateBottomBar();
+  updateSidePanel();
+};
+
+const toggleMarkerPlacement = (iconKey) => {
+  if (!currentEditorState) return;
+  if (currentEditorState.mode === "marker-place" && currentEditorState.pendingMarkerIcon === iconKey) {
+    stopMarkerPlacement();
+    setAdminMapToolsStatus("Colocacion de iconos detenida.");
+  } else {
+    startMarkerPlacement(iconKey);
+  }
+};
+
+const toggleIconPalette = () => {
+  if (!currentEditorState) return;
+  currentEditorState.paletteOpen = !currentEditorState.paletteOpen;
+  updateBottomBar();
+};
+
+const closeIconPalette = () => {
+  if (!currentEditorState?.paletteOpen) return;
+  currentEditorState.paletteOpen = false;
+};
+
 const getSelectedRoomIds = () => {
   if (!currentEditorState) return [];
   const ids = currentEditorState.selectedRoomIds || [];
@@ -1496,9 +1855,11 @@ const selectRoomEditorFloor = async (floor) => {
   if (!currentEditorState) return;
   currentEditorState.selectedFloor = floor;
   currentEditorState.selectedRoom = null;
+  currentEditorState.selectedMarker = null;
   currentEditorState.selectedRoomIds = [];
   currentEditorState.removedExternalIds = [];
   currentEditorState.removedAnnotationExternalIds = [];
+  currentEditorState.removedMarkerExternalIds = [];
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
@@ -1543,6 +1904,13 @@ const selectRoomMode = (mode) => {
     case "draw-hand":
       setAdminMapToolsStatus("Click y arrastra para dibujar. Shift = lineas rectas.");
       startDrawHand();
+      break;
+    case "marker-place":
+      if (currentEditorState.pendingMarkerIcon) {
+        startMarkerPlacement(currentEditorState.pendingMarkerIcon);
+      } else {
+        setAdminMapToolsStatus("Elige un icono de la paleta para colocarlo en el mapa.");
+      }
       break;
     case "draw-door":
       setAdminMapToolsStatus("Puerta: dibuja el contorno de la puerta (click para vertices, Enter/dblclick cerrar).");
@@ -1895,6 +2263,7 @@ const startDrawHand = () => {
 
 const clearDrawState = () => {
   if (!currentEditorState || !popupMap) return;
+  removeMarkerPlaceClickHandler();
   if (currentEditorState._handCleanup) {
     currentEditorState._handCleanup();
     currentEditorState._handCleanup = null;
@@ -2053,6 +2422,9 @@ const deleteSelectedRoom = () => {
     for (const room of rooms) {
       if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
         currentEditorState.removedExternalIds.push(room.externalId);
+        if ((room.source || "manual") === "manual") {
+          currentEditorState.removedManualRoomExternalIds.push(room.externalId);
+        }
       }
     }
   }
@@ -2207,6 +2579,20 @@ const undoRoomEditor = () => {
         currentEditorState.selectedRoom = null;
       }
       break;
+    case "create-marker":
+      currentEditorState.markers = (currentEditorState.markers || []).filter((m) => m.externalId !== action.marker.externalId);
+      if (currentEditorState.selectedMarker?.externalId === action.marker.externalId) {
+        currentEditorState.selectedMarker = null;
+      }
+      break;
+    case "delete-marker": {
+      currentEditorState.markers.push(action.marker);
+      if (!action.marker.isNew && currentEditorState.removedMarkerExternalIds) {
+        const idx = currentEditorState.removedMarkerExternalIds.indexOf(action.marker.externalId);
+        if (idx !== -1) currentEditorState.removedMarkerExternalIds.splice(idx, 1);
+      }
+      break;
+    }
     case "delete-room": {
       const deleted = action.rooms || [action.room];
       currentEditorState.rooms.push(...deleted);
@@ -2214,6 +2600,10 @@ const undoRoomEditor = () => {
         if (!room.isNew && currentEditorState.removedExternalIds) {
           const idx = currentEditorState.removedExternalIds.indexOf(room.externalId);
           if (idx !== -1) currentEditorState.removedExternalIds.splice(idx, 1);
+        }
+        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && (room.source || "manual") === "manual") {
+          const idx = currentEditorState.removedManualRoomExternalIds.indexOf(room.externalId);
+          if (idx !== -1) currentEditorState.removedManualRoomExternalIds.splice(idx, 1);
         }
       }
       break;
@@ -2270,12 +2660,29 @@ const redoRoomEditor = () => {
     case "create-annotations":
       currentEditorState.annotations = [...(currentEditorState.annotations || []), ...action.annotations];
       break;
+    case "create-marker":
+      currentEditorState.markers.push(action.marker);
+      currentEditorState.selectedMarker = action.marker;
+      break;
+    case "delete-marker": {
+      currentEditorState.markers = currentEditorState.markers.filter((m) => m.externalId !== action.marker.externalId);
+      if (!action.marker.isNew && currentEditorState.removedMarkerExternalIds && !currentEditorState.removedMarkerExternalIds.includes(action.marker.externalId)) {
+        currentEditorState.removedMarkerExternalIds.push(action.marker.externalId);
+      }
+      if (currentEditorState.selectedMarker?.externalId === action.marker.externalId) {
+        currentEditorState.selectedMarker = null;
+      }
+      break;
+    }
     case "delete-room": {
       const deleted = action.rooms || [action.room];
       currentEditorState.rooms = currentEditorState.rooms.filter((r) => !deleted.some((d) => d.externalId === r.externalId));
       for (const room of deleted) {
         if (!room.isNew && currentEditorState.removedExternalIds && !currentEditorState.removedExternalIds.includes(room.externalId)) {
           currentEditorState.removedExternalIds.push(room.externalId);
+        }
+        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && (room.source || "manual") === "manual" && !currentEditorState.removedManualRoomExternalIds.includes(room.externalId)) {
+          currentEditorState.removedManualRoomExternalIds.push(room.externalId);
         }
       }
       break;
@@ -2314,17 +2721,105 @@ const redoRoomEditor = () => {
   updatePopupContent();
 };
 
+const saveRoomEditorMarkers = async (state, pushError) => {
+  const blockErrors = [];
+
+  for (const externalId of state.removedMarkerExternalIds || []) {
+    const res = await fetch(`${getApiUrl()}/api/map-markers/${encodeURIComponent(externalId)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    if (!res.ok) {
+      let msg = `Error al eliminar el marcador '${externalId}'.`;
+      try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+      blockErrors.push(msg);
+    }
+  }
+  if (blockErrors.length === 0) {
+    state.removedMarkerExternalIds = [];
+  }
+
+  for (const marker of state.markers || []) {
+    if (marker.isNew) {
+      const res = await fetch(`${getApiUrl()}/api/map-markers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          externalId: marker.externalId,
+          buildingExternalId: marker.buildingExternalId,
+          campus: marker.campus || "default",
+          floor: marker.floor,
+          latitude: marker.latitude,
+          longitude: marker.longitude,
+          iconKey: marker.iconKey,
+          label: marker.label || "",
+          notes: marker.notes || "",
+        }),
+      });
+      if (!res.ok) {
+        let msg = `Error al crear el marcador '${marker.iconKey}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        blockErrors.push(msg);
+      } else {
+        marker.isNew = false;
+      }
+    } else {
+      const res = await fetch(`${getApiUrl()}/api/map-markers/${encodeURIComponent(marker.externalId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          floor: marker.floor,
+          latitude: marker.latitude,
+          longitude: marker.longitude,
+          iconKey: marker.iconKey,
+          label: marker.label || "",
+          notes: marker.notes || "",
+        }),
+      });
+      if (!res.ok) {
+        let msg = `Error al actualizar el marcador '${marker.iconKey}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        blockErrors.push(msg);
+      }
+    }
+  }
+
+  for (const msg of blockErrors) {
+    pushError(msg);
+  }
+};
+
 const saveRoomEditor = async () => {
   if (!currentEditorState) return;
 
   const savedBuildingId = currentEditorState.buildingExternalId;
   setAdminMapToolsStatus("Guardando salas y marcas...");
 
-  try {
-    for (const room of currentEditorState.rooms) {
-      const coordinates = parseGeometryToCoordinates(room.geometryJson);
+  const errors = [];
 
+  const pushError = (msg) => {
+    errors.push(msg);
+    console.error(msg);
+  };
+
+  try {
+    for (const externalId of currentEditorState.removedManualRoomExternalIds || []) {
+      const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(externalId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        let msg = `Error al eliminar la sala '${externalId}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        pushError(msg);
+      }
+    }
+
+    for (const room of currentEditorState.rooms) {
       if (room.isNew) {
+        const coordinates = parseGeometryToCoordinates(room.geometryJson);
         const res = await fetch(`${getApiUrl()}/api/manual-rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -2347,9 +2842,12 @@ const saveRoomEditor = async () => {
         if (!res.ok) {
           let msg = `Error al crear sala '${room.displayName}'.`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          throw new Error(msg);
+          pushError(msg);
+        } else {
+          room.isNew = false;
         }
-      } else {
+      } else if ((room.source || "manual") === "manual") {
+        const coordinates = parseGeometryToCoordinates(room.geometryJson);
         const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -2367,26 +2865,25 @@ const saveRoomEditor = async () => {
             notes: room.notes,
           }),
         });
-if (!res.ok) {
-        let msg = `Error al actualizar sala '${room.displayName}'.`;
-        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-        throw new Error(msg);
-      }
+        if (!res.ok) {
+          let msg = `Error al actualizar sala '${room.displayName}'.`;
+          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+          pushError(msg);
+        }
       }
     }
 
-    for (const externalId of currentEditorState.removedExternalIds || []) {
-      const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(externalId)}`, {
+    for (const externalId of currentEditorState.removedAnnotationExternalIds || []) {
+      const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(externalId)}`, {
         method: "DELETE",
         credentials: "include",
       });
       if (!res.ok) {
-        let msg = `Error al eliminar la sala '${externalId}'.`;
+        let msg = `Error al eliminar la marca '${externalId}'.`;
         try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-        throw new Error(msg);
+        pushError(msg);
       }
     }
-    currentEditorState.removedExternalIds = [];
 
     for (const annotation of currentEditorState.annotations || []) {
       const coordinates = parseGeometryToCoordinates(annotation.geometryJson);
@@ -2406,7 +2903,9 @@ if (!res.ok) {
         if (!res.ok) {
           let msg = `Error al crear la marca (${annotation.annotationType}).`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          throw new Error(msg);
+          pushError(msg);
+        } else {
+          annotation.isNew = false;
         }
       } else {
         const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(annotation.externalId)}`, {
@@ -2422,25 +2921,23 @@ if (!res.ok) {
         if (!res.ok) {
           let msg = `Error al actualizar la marca (${annotation.annotationType}).`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          throw new Error(msg);
+          pushError(msg);
         }
       }
     }
 
-    for (const externalId of currentEditorState.removedAnnotationExternalIds || []) {
-      const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(externalId)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        let msg = `Error al eliminar la marca '${externalId}'.`;
-        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-        throw new Error(msg);
-      }
+    await saveRoomEditorMarkers(currentEditorState, pushError);
+
+    if (errors.length > 0) {
+      setAdminMapToolsStatus(`${errors[0]}${errors.length > 1 ? ` (+${errors.length - 1} mas)` : ""} `);
+      return;
     }
+
+    currentEditorState.removedExternalIds = [];
+    currentEditorState.removedManualRoomExternalIds = [];
     currentEditorState.removedAnnotationExternalIds = [];
 
-    setAdminMapToolsStatus("Salas y marcas guardadas correctamente.");
+    setAdminMapToolsStatus("Salas, marcas y marcadores guardados correctamente.");
 
     destroyPopup();
     clearRoomEditorState();
@@ -2452,7 +2949,7 @@ if (!res.ok) {
     window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: savedBuildingId } }));
   } catch (error) {
     console.error("Error saving rooms:", error);
-    setAdminMapToolsStatus(error.message || "Error al guardar salas.");
+    setAdminMapToolsStatus("Error al guardar: " + (error.message || "error inesperado"));
   }
 };
 

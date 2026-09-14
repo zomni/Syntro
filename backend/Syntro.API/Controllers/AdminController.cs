@@ -1078,6 +1078,7 @@ public class AdminController : Controller
             DELETE FROM MlTrainingRuns;
             DELETE FROM ManualRooms;
             DELETE FROM BuildingAnnotations;
+            DELETE FROM MapMarkers;
             DELETE FROM RoomGeometryOverrides;
             DELETE FROM TelemetryScanSchedules;
             COMMIT;
@@ -1131,6 +1132,7 @@ public class AdminController : Controller
             DELETE FROM MlTrainingRuns;
             DELETE FROM ManualRooms;
             DELETE FROM BuildingAnnotations;
+            DELETE FROM MapMarkers;
             DELETE FROM RoomGeometryOverrides;
             DELETE FROM TelemetryScanSchedules;
             COMMIT;

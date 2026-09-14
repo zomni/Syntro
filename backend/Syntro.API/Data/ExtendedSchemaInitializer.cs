@@ -579,6 +579,40 @@ public static class ExtendedSchemaInitializer
                 """);
 
             await context.Database.ExecuteSqlRawAsync("""
+                CREATE TABLE IF NOT EXISTS MapMarkers (
+                    Id TEXT NOT NULL CONSTRAINT PK_MapMarkers PRIMARY KEY,
+                    ExternalId TEXT NOT NULL,
+                    Campus TEXT NOT NULL,
+                    BuildingExternalId TEXT NOT NULL,
+                    Floor INTEGER NOT NULL,
+                    Latitude REAL NOT NULL,
+                    Longitude REAL NOT NULL,
+                    IconKey TEXT NOT NULL,
+                    Label TEXT NOT NULL,
+                    Notes TEXT NOT NULL,
+                    Source TEXT NOT NULL,
+                    IsActive INTEGER NOT NULL DEFAULT 1,
+                    DeletedAtUtc TEXT NULL,
+                    DeletedBy TEXT NULL,
+                    CreatedBy TEXT NOT NULL,
+                    CreatedAtUtc TEXT NOT NULL,
+                    UpdatedBy TEXT NULL,
+                    UpdatedAtUtc TEXT NOT NULL,
+                    Version INTEGER NOT NULL DEFAULT 0
+                );
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_MapMarkers_ExternalId
+                ON MapMarkers (ExternalId);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
+                CREATE INDEX IF NOT EXISTS IX_MapMarkers_BuildingExternalId_Floor
+                ON MapMarkers (BuildingExternalId, Floor);
+                """);
+
+            await context.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS RoomGeometryOverrides (
                     Id INTEGER NOT NULL CONSTRAINT PK_RoomGeometryOverrides PRIMARY KEY AUTOINCREMENT,
                     RoomExternalId TEXT NOT NULL,

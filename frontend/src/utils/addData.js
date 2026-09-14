@@ -27,6 +27,7 @@ import {
   mergeCatalogWithSearch,
   mergeGeoJsonWithSearch,
 } from "@app/searchMetadata";
+import { staticIconUrl } from "../config/staticIconCatalog.js";
 
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
@@ -448,6 +449,60 @@ const addAnnotationsForFloor = async (floorNumber, expectedRenderSequence) => {
   console.info(`[annotations] ${paintedCount} marca(s) en piso ${floorNumber}`);
 };
 
+const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
+  if (!BACKEND_API_URL || expectedRenderSequence !== renderSequence) {
+    return;
+  }
+
+  let markers = [];
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=${floorNumber}`, {
+      cache: "no-store",
+    });
+    markers = response.ok ? await response.json() : [];
+  } catch (error) {
+    console.error("Error cargando marcadores para el mapa:", error);
+    return;
+  }
+
+  if (expectedRenderSequence !== renderSequence || !Array.isArray(markers)) {
+    return;
+  }
+
+  const allowedBuildingIds = await getAllowedBuildingIdsForFloor(floorNumber);
+  if (!allowedBuildingIds || expectedRenderSequence !== renderSequence) {
+    return;
+  }
+
+  let paintedCount = 0;
+
+  for (const marker of markers) {
+    if (!allowedBuildingIds.has(marker.buildingExternalId)) continue;
+    if (!Array.isArray(marker.latitude) && typeof marker.latitude !== "number") continue;
+    if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") continue;
+
+    const icon = L.icon({
+      iconUrl: staticIconUrl(marker.iconKey),
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -10],
+      className: "map-static-marker-icon",
+    });
+
+    L.marker([marker.latitude, marker.longitude], {
+      icon,
+      pane: "roomsPane",
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 400,
+    }).addTo(roomLayerGroup);
+
+    paintedCount += 1;
+  }
+
+  console.info(`[map-markers] ${paintedCount} marcador(es) en piso ${floorNumber}`);
+};
+
 const addFeatures = async (school, floorNumber, location, expectedRenderSequence) => {
   try {
     if (expectedRenderSequence !== renderSequence) {
@@ -512,6 +567,8 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
     await addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence);
 
     await addAnnotationsForFloor(floorNumber, expectedRenderSequence);
+
+    await addMapMarkersForFloor(floorNumber, expectedRenderSequence);
 
     updateEmptyCampusNotice(!hasSvgForFloor(location, floorNumber) && featuresToRender.length === 0);
   } finally {
