@@ -103,6 +103,26 @@
         .session-warning-card { border: 1px solid rgba(245, 158, 11, 0.25); }
         .btn-primary { background-color: var(--pi-primary); border-color: var(--pi-primary); }
         .btn-primary:hover, .btn-primary:focus { background-color: var(--pi-primary-hover); border-color: var(--pi-primary-hover); }
+        .side-map-cta { margin-top: 0.75rem; }
+        .side-map-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.9rem;
+            border-radius: 12px;
+            color: #fff;
+            text-decoration: none;
+            background: linear-gradient(135deg, #2dd4bf, #006d77 55%, var(--pi-primary));
+            box-shadow: 0 6px 18px rgba(45, 212, 191, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+        }
+        .side-map-link i { font-size: 1.5rem; line-height: 1; animation: pi-map-pulse 2.4s ease-in-out infinite; }
+        .side-map-link:hover { transform: translateY(-2px); box-shadow: 0 12px 28px rgba(45, 212, 191, 0.5); filter: brightness(1.08); }
+        .side-map-link:active { transform: scale(0.96); }
+        @@keyframes pi-map-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.16); }
+        }
         @@media (max-width: 767.98px) {
             .admin-shell { flex-wrap: wrap; }
             .admin-sidebar, .admin-main { width: 100%; flex-basis: 100%; }
@@ -208,9 +228,9 @@
                             <i class="bi bi-crosshair me-2"></i>Coincidencias inventario
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link text-info" href="@frontendMapUrl" target="syntro-map" onclick="window.open(this.href, 'syntro-map'); return false;">
-                            <i class="bi bi-map me-2"></i>Mapa
+                    <li class="nav-item side-map-cta">
+                        <a class="side-map-link" href="@frontendMapUrl" target="syntro-map" title="Abrir mapa" aria-label="Abrir mapa" onclick="window.open(this.href, 'syntro-map'); return false;">
+                            <i class="bi bi-geo-alt-fill" aria-hidden="true"></i>
                         </a>
                     </li>
                 </ul>
@@ -539,8 +559,7 @@
 
         if (reconnectBtn) {
             reconnectBtn.addEventListener("click", () => {
-                const returnUrl = encodeURIComponent(window.location.pathname + window.location.search);
-                window.location.href = `/Auth/Login?returnUrl=${returnUrl}`;
+                window.location.href = "/Auth/Login";
             });
         }
 
