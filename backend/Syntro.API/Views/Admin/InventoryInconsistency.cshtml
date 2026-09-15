@@ -125,7 +125,7 @@
                 </div>
             </div>
 
-            <form method="post" action="/admin/inventory/inconsistency/@Model.Item.Id/merge" onsubmit="return confirm('Se fusionaran los equipos seleccionados dentro de este registro principal. Deseas continuar?');">
+            <form method="post" action="/admin/inventory/inconsistency/@Model.Item.Id/merge" onsubmit="return SyntroUI.confirmForm(event, 'Se fusionaran los equipos seleccionados dentro de este registro principal. Deseas continuar?');">
                 @Html.AntiForgeryToken()
                 <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
 

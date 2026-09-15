@@ -1407,7 +1407,7 @@
             if (pageSizeSelect) pageSizeSelect.value = "10";
             loadDevices(1);
         });
-        scanButton?.addEventListener("click", () => {
+        scanButton?.addEventListener("click", async () => {
             if (scanFeedback) {
                 scanFeedback.textContent = "";
                 scanFeedback.className = "small text-muted mt-3";
@@ -1417,7 +1417,7 @@
                 return;
             }
 
-            alert("No fue posible abrir la ventana de escaneo. Recarga la pagina e intentalo de nuevo.");
+            await SyntroUI.alert("No fue posible abrir la ventana de escaneo. Recarga la pagina e intentalo de nuevo.");
         });
 
         scanCloseButton?.addEventListener("click", closeScanModal);
@@ -2199,9 +2199,10 @@
             });
 
             snapshotTable.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
-                button.addEventListener("click", () => {
+                button.addEventListener("click", async () => {
                     const snapshotId = button.getAttribute("data-delete-snapshot");
-                    if (!snapshotId || !confirm(`Â¿Esta seguro de eliminar ${item.runNumber != null && item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${snapshotId}`}? Los datos de observacion asociados tambien se eliminaran.`)) {
+                    if (!snapshotId) return;
+                    if (!(await SyntroUI.confirm(`¿Esta seguro de eliminar ${item.runNumber != null && item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${snapshotId}`}? Los datos de observacion asociados tambien se eliminaran.`))) {
                         return;
                     }
 
@@ -2229,7 +2230,7 @@
                         })
                         .catch((error) => {
                             console.error("Error eliminando snapshot:", error);
-                            alert("No se pudo eliminar la snapshot.");
+                            SyntroUI.alert("No se pudo eliminar la snapshot.");
                             button.disabled = false;
                             button.innerHTML = '<i class="bi bi-trash3"></i>';
                         });
@@ -2862,10 +2863,10 @@
         .catch(() => { schedulePreviewDiv.innerHTML = '<span class="text-danger">Error al previsualizar.</span>'; schedulePreviewDiv.classList.remove("d-none"); });
     });
 
-    scheduleSaveBtn?.addEventListener("click", () => {
+    scheduleSaveBtn?.addEventListener("click", async () => {
         const id = scheduleIdInput.value.trim();
         const slots = readSlotsFromModal();
-        if (slots.length === 0) { alert("Debe agregar al menos un horario con al menos un dia seleccionado."); return; }
+        if (slots.length === 0) { await SyntroUI.alert("Debe agregar al menos un horario con al menos un dia seleccionado."); return; }
         const payload = {
             label: scheduleLabelInput.value.trim(),
             slots,
@@ -2897,18 +2898,18 @@
             scheduleModal?.classList.remove("is-open");
             loadSchedules();
         })
-        .catch(err => alert("Error guardando horario: " + err.message))
+        .catch(err => SyntroUI.alert("Error guardando horario: " + err.message))
         .finally(() => { scheduleSaveBtn.disabled = false; });
     });
 
-    scheduleDeleteBtn?.addEventListener("click", () => {
+    scheduleDeleteBtn?.addEventListener("click", async () => {
         const id = scheduleIdInput.value.trim();
         if (!id) return;
-        if (!confirm("Eliminar este horario?")) return;
+        if (!(await SyntroUI.confirm("Eliminar este horario?"))) return;
         fetch(`/api/network-telemetry/schedule/${id}`, { method: "DELETE", credentials: "include" })
         .then(r => { if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`); })
         .then(() => { scheduleModal?.classList.remove("is-open"); loadSchedules(); })
-        .catch(err => alert("Error eliminando horario: " + err.message));
+        .catch(err => SyntroUI.alert("Error eliminando horario: " + err.message));
     });
 
     const loadSchedules = () => {

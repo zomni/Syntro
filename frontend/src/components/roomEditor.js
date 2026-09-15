@@ -15,6 +15,7 @@ import {
   generateContourRooms,
 } from "../utils/roomEditorGeometry.js";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel } from "../config/staticIconCatalog.js";
+import { appConfirm } from "../utils/appDialog.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -69,6 +70,7 @@ let copiedRoomData = null;
 let copiedFloorLayout = null;
 let copiedFloorNumber = null;
 let dropdownClickOutsideHandler = null;
+let isPaletteDragging = false;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5001";
@@ -517,8 +519,8 @@ const initPopupMap = (geometry) => {
   const container = popupMap.getContainer();
   container.addEventListener("dragover", (e) => {
     if (!currentEditorState) return;
-    const draggedKey = e.dataTransfer?.getData("text/plain");
-    if (STATIC_ICON_KEYS.includes(draggedKey)) {
+    const types = e.dataTransfer?.types;
+    if (types && Array.from(types).includes("text/plain")) {
       e.preventDefault();
       if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
     }
@@ -527,6 +529,7 @@ const initPopupMap = (geometry) => {
     const draggedKey = e.dataTransfer?.getData("text/plain");
     if (!currentEditorState || !popupMap || !STATIC_ICON_KEYS.includes(draggedKey)) return;
     e.preventDefault();
+    e.stopPropagation();
     const rect = container.getBoundingClientRect();
     const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
     const latlng = popupMap.containerPointToLatLng(point);
@@ -645,6 +648,7 @@ const updateTopBar = () => {
 
 const updateBottomBar = () => {
   if (!bottomBarEl || !currentEditorState) return;
+  if (isPaletteDragging) return;
 
   const { mode, selectedRoom, suggestions, snapEnabled } = currentEditorState;
   const hasSuggestions = suggestions && suggestions.length > 0;
@@ -722,11 +726,16 @@ const updateBottomBar = () => {
     nameTag.textContent = staticIconLabel(key);
     item.appendChild(nameTag);
     item.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", key);
-      e.dataTransfer.effectAllowed = "copy";
+      isPaletteDragging = true;
+      e.dataTransfer?.setData("text/plain", key);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = "copy";
+    });
+    item.addEventListener("dragend", () => {
+      isPaletteDragging = false;
     });
     item.addEventListener("click", (e) => {
       e.stopPropagation();
+      if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       toggleMarkerPlacement(key);
     });
     paletteGrid.appendChild(item);
@@ -1032,9 +1041,9 @@ const buildMarkerPanel = (marker) => {
 
   const deleteMarkerBtn = body.querySelector("[data-action='delete-marker']");
   if (deleteMarkerBtn) {
-    deleteMarkerBtn.addEventListener("click", () => {
+    deleteMarkerBtn.addEventListener("click", async () => {
       if (!currentEditorState?.selectedMarker) return;
-      if (!window.confirm("¿Eliminar este marcador?")) return;
+      if (!(await appConfirm("¿Eliminar este marcador?"))) return;
       deleteSelectedMarker();
       updateSidePanel();
     });
@@ -1164,9 +1173,9 @@ const buildPropertiesPanel = (room) => {
 
   const deleteRoomBtn = body.querySelector("[data-action='delete-room']");
   if (deleteRoomBtn) {
-    deleteRoomBtn.addEventListener("click", () => {
+    deleteRoomBtn.addEventListener("click", async () => {
       if (!currentEditorState?.selectedRoom) return;
-      if (!window.confirm("Â¿Eliminar esta sala?")) return;
+      if (!(await appConfirm("¿Eliminar esta sala?"))) return;
       deleteSelectedRoom();
       updateSidePanel();
     });
@@ -1647,6 +1656,7 @@ const renderMarkers = () => {
   if (!currentEditorState || !popupMap) return;
 
   const selectedId = currentEditorState.selectedMarker?.externalId;
+  currentEditorState._suppressMarkerClick = null;
 
   for (const marker of currentEditorState.markers) {
     const layer = L.marker([marker.latitude, marker.longitude], {
@@ -1662,15 +1672,67 @@ const renderMarkers = () => {
     }
     layer.on("click", (e) => {
       L.DomEvent.stop(e);
+      if (currentEditorState._suppressMarkerClick === marker.externalId) {
+        currentEditorState._suppressMarkerClick = null;
+        return;
+      }
       selectMarker(marker);
+    });
+    layer.on("mousedown", (e) => {
+      if (!(e.originalEvent?.ctrlKey || e.originalEvent?.metaKey)) return;
+      enableMarkerDragLayer(layer, marker, e);
     });
     layer.addTo(popupMap);
     currentEditorState.markerLayers.push(layer);
     const el = layer.getElement();
-    if (el && marker.externalId === selectedId) {
-      el.classList.add("is-selected");
+    if (el) {
+      el.querySelectorAll("img").forEach((img) => {
+        img.draggable = false;
+      });
+      if (marker.externalId === selectedId) {
+        el.classList.add("is-selected");
+      }
     }
   }
+};
+
+const enableMarkerDragLayer = (layer, marker, e) => {
+  if (!popupMap || !currentEditorState) return;
+  L.DomEvent.stop(e);
+  popupMap.dragging.disable();
+
+  const before = { latitude: marker.latitude, longitude: marker.longitude };
+  let dragging = true;
+
+  const onMove = (ev) => {
+    if (!dragging) return;
+    marker.latitude = ev.latlng.lat;
+    marker.longitude = ev.latlng.lng;
+    layer.setLatLng([marker.latitude, marker.longitude]);
+    currentEditorState.isDirty = true;
+    setAdminMapToolsStatus("Moviendo marcador. G para guardar.");
+  };
+
+  const onUp = () => {
+    dragging = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
+    popupMap.getContainer().style.cursor = "";
+    const after = { latitude: marker.latitude, longitude: marker.longitude };
+    if (before.latitude !== after.latitude || before.longitude !== after.longitude) {
+      pushUndo({ type: "move-marker", externalId: marker.externalId, before, after });
+      currentEditorState._suppressMarkerClick = marker.externalId;
+      setAdminMapToolsStatus("Marcador movido. G para guardar.");
+    } else {
+      currentEditorState._suppressDeselectClick = true;
+      setAdminMapToolsStatus("El marcador no se movio.");
+    }
+  };
+
+  popupMap.getContainer().style.cursor = "grabbing";
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
 };
 
 const selectMarker = (marker) => {
@@ -1748,6 +1810,8 @@ const startMarkerPlacement = (iconKey) => {
   currentEditorState.selectedRoomIds = [];
   removeMarkerPlaceClickHandler();
   const onClick = (e) => {
+    if (!currentEditorState) return;
+    if (e.originalEvent?.shiftKey || e.originalEvent?.ctrlKey || e.originalEvent?.metaKey || e.originalEvent?.altKey) return;
     L.DomEvent.stop(e);
     placeMarkerAt(e.latlng, currentEditorState?.pendingMarkerIcon || iconKey);
   };
@@ -2459,7 +2523,8 @@ const copySelectedRoom = () => {
   if (shapes.length === 0 && currentEditorState.selectedRoom) {
     shapes.push(currentEditorState.selectedRoom);
   }
-  if (shapes.length === 0) {
+  const selectedMarker = currentEditorState.selectedMarker;
+  if (shapes.length === 0 && !selectedMarker) {
     setAdminMapToolsStatus("Selecciona al menos un elemento para copiar.");
     return;
   }
@@ -2470,8 +2535,27 @@ const copySelectedRoom = () => {
       type: s.type,
       geometryJson: s.geometryJson,
     })),
+    markerItems: selectedMarker
+      ? [
+          {
+            kind: "marker",
+            iconKey: selectedMarker.iconKey,
+            label: selectedMarker.label,
+            notes: selectedMarker.notes,
+            latitude: selectedMarker.latitude,
+            longitude: selectedMarker.longitude,
+          },
+        ]
+      : [],
   };
-  setAdminMapToolsStatus(shapes.length > 1 ? `${shapes.length} elementos copiados. Ctrl+V para pegar.` : "Elemento copiado. Ctrl+V para pegar.");
+  const count = shapes.length + copiedRoomData.markerItems.length;
+  const message =
+    count > 1
+      ? `${count} elementos copiados. Ctrl+V para pegar.`
+      : copiedRoomData.markerItems.length > 0
+        ? "Marcador copiado. Ctrl+V para pegar."
+        : "Elemento copiado. Ctrl+V para pegar.";
+  setAdminMapToolsStatus(message);
 };
 
 const pasteRoom = () => {
@@ -2483,12 +2567,14 @@ const pasteRoom = () => {
   const items = Array.isArray(copiedRoomData.items) && copiedRoomData.items.length
     ? copiedRoomData.items
     : [{ kind: copiedRoomData.kind || "room", annotationType: copiedRoomData.annotationType, type: copiedRoomData.type, geometryJson: copiedRoomData.geometryJson }];
+  const markerItems = Array.isArray(copiedRoomData.markerItems) ? copiedRoomData.markerItems : [];
 
   const baseRoomsLen = currentEditorState.rooms.length;
   const baseAnnLen = (currentEditorState.annotations || []).length;
   const OFFSET = 0.0001;
   const createdRooms = [];
   const createdAnnotations = [];
+  const createdMarkers = [];
 
   items.forEach((src, idx) => {
     if (!src?.geometryJson) return;
@@ -2506,7 +2592,24 @@ const pasteRoom = () => {
     }
   });
 
-  if (createdRooms.length === 0 && createdAnnotations.length === 0) return;
+  markerItems.forEach((src, idx) => {
+    if (!src?.kind || src.kind !== "marker" || !src.iconKey) return;
+    createdMarkers.push({
+      externalId: `MKR-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      buildingExternalId: currentEditorState.buildingExternalId,
+      floor: currentEditorState.selectedFloor,
+      latitude: (src.latitude || 0) + OFFSET * (items.length + idx + 1),
+      longitude: (src.longitude || 0) + OFFSET * (items.length + idx + 1),
+      iconKey: src.iconKey,
+      label: src.label || staticIconLabel(src.iconKey),
+      notes: src.notes || "",
+      campus: "default",
+      source: "manual",
+      isNew: true,
+    });
+  });
+
+  if (createdRooms.length === 0 && createdAnnotations.length === 0 && createdMarkers.length === 0) return;
 
   if (createdRooms.length > 0) {
     pushUndo({ type: "create-rooms", rooms: createdRooms });
@@ -2516,13 +2619,22 @@ const pasteRoom = () => {
     pushUndo({ type: "create-annotations", annotations: createdAnnotations });
     currentEditorState.annotations.push(...createdAnnotations);
   }
+  for (const marker of createdMarkers) {
+    pushUndo({ type: "create-marker", marker });
+    currentEditorState.markers.push(marker);
+  }
   currentEditorState.selectedRoomIds = [...createdRooms, ...createdAnnotations].map((r) => r.externalId);
+  if (createdMarkers.length > 0) {
+    currentEditorState.selectedRoomIds = [];
+    currentEditorState.selectedRoom = null;
+    currentEditorState.selectedMarker = createdMarkers[0];
+  }
   syncSelectedRoomFromIds();
   currentEditorState.isDirty = true;
   renderRooms();
   updateSidePanel();
   updateBottomBar();
-  setAdminMapToolsStatus(`${createdRooms.length + createdAnnotations.length} elemento(s) pegados. Ctrl+drag para mover, G para guardar.`);
+  setAdminMapToolsStatus(`${createdRooms.length + createdAnnotations.length + createdMarkers.length} elemento(s) pegados. Ctrl+drag para mover, G para guardar.`);
 };
 
 const updateRoomProperty = (property, value) => {
@@ -2635,6 +2747,14 @@ const undoRoomEditor = () => {
         if (shape) shape.geometryJson = action.before[i];
       });
       break;
+    case "move-marker": {
+      const marker = (currentEditorState.markers || []).find((m) => m.externalId === action.externalId);
+      if (marker) {
+        marker.latitude = action.before.latitude;
+        marker.longitude = action.before.longitude;
+      }
+      break;
+    }
   }
 
   syncSelectedRoomFromIds();
@@ -2714,6 +2834,14 @@ const redoRoomEditor = () => {
         if (shape) shape.geometryJson = action.after[i];
       });
       break;
+    case "move-marker": {
+      const marker = (currentEditorState.markers || []).find((m) => m.externalId === action.externalId);
+      if (marker) {
+        marker.latitude = action.after.latitude;
+        marker.longitude = action.after.longitude;
+      }
+      break;
+    }
   }
 
   syncSelectedRoomFromIds();

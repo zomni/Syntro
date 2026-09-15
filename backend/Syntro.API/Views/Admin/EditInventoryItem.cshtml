@@ -240,7 +240,7 @@
                                                 formaction="/admin/removeinventoryformpdf/@item.Id"
                                                 formmethod="post"
                                                 formnovalidate
-                                                onclick="return confirm('Estas seguro de quitar el formulario PDF actual?');">
+                                                onclick="return SyntroUI.confirmForm(event, 'Estas seguro de quitar el formulario PDF actual?');">
                                             <i class="bi bi-x-circle me-1"></i> Quitar formulario
                                         </button>
                                     }
@@ -266,7 +266,7 @@
                             @Html.AntiForgeryToken()
                             <button type="submit" class="btn btn-outline-danger">Limpiar asignacion</button>
                         </form>
-                        <form method="post" action="/admin/deleteinventoryitem/@item.Id" onsubmit="return confirm('Estas seguro de eliminar este equipo?');">
+                        <form method="post" action="/admin/deleteinventoryitem/@item.Id" onsubmit="return SyntroUI.confirmForm(event, 'Estas seguro de eliminar este equipo?');">
                             @Html.AntiForgeryToken()
                             <button type="submit" class="btn btn-danger">
                                 <i class="bi bi-trash me-1"></i> Eliminar equipo

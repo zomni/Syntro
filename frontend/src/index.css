@@ -2570,6 +2570,38 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     color: var(--pi-primary-deep);
 }
 
+.app-dialog-backdrop {
+    z-index: 3000;
+}
+
+.app-dialog-body {
+    padding: 16px 18px 4px;
+    color: var(--pi-ink);
+    font: 500 14px/1.5 sans-serif;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.app-dialog-input {
+    width: calc(100% - 36px);
+    box-sizing: border-box;
+    margin: 8px 18px 0;
+    border: 1px solid rgba(var(--pi-primary-rgb), 0.28);
+    border-radius: 10px;
+    padding: 10px 11px;
+    color: var(--pi-ink);
+    font: 500 13px/1.25 sans-serif;
+}
+
+.app-dialog-input:focus {
+    outline: 2px solid rgba(var(--pi-primary-rgb), 0.18);
+    border-color: var(--pi-primary);
+}
+
+.app-dialog-actions {
+    padding: 14px 18px 18px;
+}
+
 .empty-campus-notice {
     position: absolute;
     z-index: 900;

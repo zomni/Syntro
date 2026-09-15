@@ -299,6 +299,133 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+    window.SyntroUI = (() => {
+        let modalEl = null;
+        let titleEl = null;
+        let bodyEl = null;
+        let inputEl = null;
+        let inputWrap = null;
+        let okBtn = null;
+        let cancelBtn = null;
+        let footerEl = null;
+        let bsModal = null;
+        let currentResolve = null;
+        let defaultTitle = "";
+
+        const ensureModal = () => {
+            if (modalEl) return;
+            modalEl = document.createElement("div");
+            modalEl.className = "modal fade";
+            modalEl.tabIndex = -1;
+            modalEl.setAttribute("aria-modal", "true");
+            modalEl.setAttribute("role", "dialog");
+            modalEl.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"></h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                        </div>
+                        <div class="modal-body"></div>
+                        <div class="modal-footer d-none">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn btn-primary">Aceptar</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modalEl);
+            titleEl = modalEl.querySelector(".modal-title");
+            bodyEl = modalEl.querySelector(".modal-body");
+            inputWrap = document.createElement("div");
+            inputWrap.className = "mt-2";
+            inputEl = document.createElement("input");
+            inputEl.type = "text";
+            inputEl.className = "form-control";
+            inputWrap.appendChild(inputEl);
+            bodyEl.appendChild(inputWrap);
+            footerEl = modalEl.querySelector(".modal-footer");
+            cancelBtn = footerEl.querySelector(".btn-secondary");
+            okBtn = footerEl.querySelector(".btn-primary");
+            inputEl.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") {
+                    event.preventDefault();
+                    okBtn.click();
+                }
+            });
+            modalEl.addEventListener("hidden.bs.modal", () => {
+                const resolve = currentResolve;
+                currentResolve = null;
+                if (resolve) resolve(null);
+            });
+            bsModal = new bootstrap.Modal(modalEl);
+            defaultTitle = titleEl.textContent;
+        };
+
+        const showModal = (opts) => {
+            ensureModal();
+            titleEl.textContent = opts.title || defaultTitle;
+            bodyEl.childNodes[0].textContent = opts.message || "";
+            inputWrap.classList.toggle("d-none", !opts.input);
+            if (opts.input) {
+                inputEl.value = opts.defaultValue || "";
+            }
+            footerEl.classList.toggle("d-none", opts.hideFooter || false);
+            if (opts.okLabel) okBtn.textContent = opts.okLabel;
+            else okBtn.textContent = "Aceptar";
+            if (opts.cancelLabel) cancelBtn.textContent = opts.cancelLabel;
+            else cancelBtn.textContent = "Cancelar";
+            footerEl.classList.toggle("d-none", opts.hideFooter || false);
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            return new Promise((resolve) => {
+                currentResolve = resolve;
+                okBtn.onclick = () => {
+                    const val = opts.input ? inputEl.value : true;
+                    currentResolve = null;
+                    bsModal.hide();
+                    resolve(val);
+                };
+                cancelBtn.onclick = () => {
+                    currentResolve = null;
+                    bsModal.hide();
+                    resolve(opts.input ? null : false);
+                };
+                bsModal.show();
+                setTimeout(() => {
+                    if (opts.input) { inputEl.focus(); inputEl.select(); }
+                    else okBtn.focus();
+                }, 50);
+            });
+        };
+
+        return {
+            confirm(message, title) {
+                return showModal({ title: title || "Confirmar", message, okLabel: "Aceptar" });
+            },
+            alert(message, title) {
+                return showModal({ title: title || "Aviso", message, okLabel: "Aceptar", hideFooter: false, cancelLabel: "Cerrar" }).then(() => {});
+            },
+            prompt(message, defaultValue, title) {
+                return showModal({ title: title || "Entrada", message, input: true, defaultValue: defaultValue || "", okLabel: "Aceptar" });
+            },
+            confirmForm(event, message) {
+                event.preventDefault();
+                const target = event.target;
+                const form = target.closest ? target.closest("form") : null;
+                const submitter = target.type === "submit" ? target : null;
+                showModal({ title: "Confirmar", message, okLabel: "Aceptar" }).then((ok) => {
+                    if (ok && form) {
+                        if (submitter) form.requestSubmit(submitter);
+                        else form.submit();
+                    }
+                });
+                return false;
+            }
+        };
+    })();
+    </script>
+    <script>
     window.addEventListener("DOMContentLoaded", () => {
         if (window.location.pathname.startsWith("/Auth")) {
             return;

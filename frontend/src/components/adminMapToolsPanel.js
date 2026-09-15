@@ -59,10 +59,35 @@ export const ensureAdminMapToolsPanel = () => {
   document.body.appendChild(panel);
   scheduleAdminMapToolsPanelPosition();
   window.addEventListener("resize", positionAdminMapToolsPanel);
-  window.addEventListener(identifiers.events.sessionChanged, () => {
+  window.addEventListener(identifiers.events.sessionChanged, (event) => {
+    const detail = event.detail || {};
+    if (detail?.isAuthenticated === false) {
+      collapseAdminMapToolsPanel();
+    }
     scheduleAdminMapToolsPanelPosition();
   });
   return panel;
+};
+
+const collapseAdminMapToolsPanel = () => {
+  const panel = document.getElementById(panelId);
+  const toggle = document.getElementById(toggleId);
+  const buttons = document.getElementById(buttonsId);
+
+  if (toggle) toggle.setAttribute("aria-expanded", "false");
+  if (buttons) buttons.hidden = true;
+  if (panel) panel.classList.remove("is-expanded");
+
+  buttons?.querySelectorAll(".admin-map-tool-section").forEach((section) => {
+    const itemToggle = section.querySelector(".admin-map-tool-section-toggle");
+    const itemBody = section.querySelector(".admin-map-tool-section-body");
+    itemToggle?.setAttribute("aria-expanded", "false");
+    if (itemBody) itemBody.hidden = true;
+    section.classList.remove("is-expanded");
+  });
+
+  requestAdminMapToolMode(null);
+  setAdminMapToolsStatus("");
 };
 
 const scheduleAdminMapToolsPanelPosition = () => {

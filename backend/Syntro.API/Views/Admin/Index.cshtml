@@ -549,7 +549,7 @@
                         <div class="col-lg-4">
                             <div class="fw-semibold mb-1">Nuevo paquete</div>
                             <div class="form-text mb-3">Guarda un respaldo y crea uno nuevo vacio.</div>
-                            <form method="post" action="/admin/database/new" onsubmit="return confirm('Se guardara un respaldo del paquete actual y se creara uno nuevo vacio. \u00bfContinuar?');">
+                            <form method="post" action="/admin/database/new" onsubmit="return SyntroUI.confirmForm(event, 'Se guardara un respaldo del paquete actual y se creara uno nuevo vacio. \u00bfContinuar?');">
                                 @Html.AntiForgeryToken()
                                 <button type="submit" class="btn btn-outline-dark">
                                     <i class="bi bi-plus-circle me-1"></i> Crear nuevo en blanco
@@ -619,7 +619,7 @@
                                                                 <a href="/dashboard/project-package/download" class="btn btn-sm btn-outline-secondary">
                                                                     Descargar
                                                                 </a>
-                                                                <form method="post" action="/admin/database/clear" onsubmit="return confirm('Se guardara un respaldo del paquete actual y se vaciaran todos los datos. \u00bfContinuar?');">
+                                                                <form method="post" action="/admin/database/clear" onsubmit="return SyntroUI.confirmForm(event, 'Se guardara un respaldo del paquete actual y se vaciaran todos los datos. \u00bfContinuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                                                         Eliminar
@@ -628,13 +628,13 @@
                                                             }
                                                             else
                                                             {
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return confirm('Se restaurara este respaldo y se reemplazara la base actual. \u00bfContinuar?');">
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/restore" onsubmit="return SyntroUI.confirmForm(event, 'Se restaurara este respaldo y se reemplazara la base actual. \u00bfContinuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-warning">
                                                                         Restaurar
                                                                     </button>
                                                                 </form>
-                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return confirm('Se eliminara este respaldo. Esta accion no se puede deshacer. \u00bfContinuar?');">
+                                                                <form method="post" action="/admin/database/backups/@backup.FileName/delete" onsubmit="return SyntroUI.confirmForm(event, 'Se eliminara este respaldo. Esta accion no se puede deshacer. \u00bfContinuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                                                         Eliminar
@@ -781,12 +781,7 @@
                 packageUploadButton.classList.toggle("btn-dark", hasPendingProjectPackageFile);
             };
 
-            const confirmPendingNavigation = () => {
-                if (!hasPendingProjectPackageFile) {
-                    return true;
-                }
-                return window.confirm("Tienes un paquete completo pendiente por subir. \u00bfDeseas continuar sin subirlo?");
-            };
+            const PENDING_PACKAGE_MESSAGE = "Tienes un paquete completo pendiente por subir. \u00bfDeseas continuar sin subirlo?";
 
             packageFileInput.addEventListener("change", updateUploadState);
 
@@ -884,7 +879,7 @@
                 xhr.send(formData);
             });
 
-            document.addEventListener("click", (event) => {
+            document.addEventListener("click", async (event) => {
                 const anchor = event.target.closest("a[href]");
                 if (!anchor) {
                     return;
@@ -902,28 +897,36 @@
                     return;
                 }
 
-                if (!confirmPendingNavigation()) {
-                    event.preventDefault();
-                    event.stopPropagation();
+                if (!hasPendingProjectPackageFile) {
                     return;
                 }
 
-                hasPendingProjectPackageFile = false;
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (await SyntroUI.confirm(PENDING_PACKAGE_MESSAGE)) {
+                    hasPendingProjectPackageFile = false;
+                    window.location.href = anchor.href;
+                }
             }, true);
 
-            document.addEventListener("submit", (event) => {
+            document.addEventListener("submit", async (event) => {
                 const form = event.target;
                 if (!(form instanceof HTMLFormElement) || form === packageUploadForm) {
                     return;
                 }
 
-                if (!confirmPendingNavigation()) {
-                    event.preventDefault();
-                    event.stopPropagation();
+                if (!hasPendingProjectPackageFile) {
                     return;
                 }
 
-                hasPendingProjectPackageFile = false;
+                event.preventDefault();
+                event.stopPropagation();
+
+                if (await SyntroUI.confirm(PENDING_PACKAGE_MESSAGE)) {
+                    hasPendingProjectPackageFile = false;
+                    form.requestSubmit();
+                }
             }, true);
 
             window.addEventListener("beforeunload", (event) => {
@@ -936,10 +939,10 @@
             });
 
             document.querySelectorAll(".js-map-link").forEach((link) => {
-                link.addEventListener("click", (event) => {
+                link.addEventListener("click", async (event) => {
                     event.preventDefault();
 
-                    if (!confirmPendingNavigation()) {
+                    if (hasPendingProjectPackageFile && !(await SyntroUI.confirm(PENDING_PACKAGE_MESSAGE))) {
                         return;
                     }
 

@@ -441,8 +441,8 @@ if (adminModal) {
         td.innerHTML = `<span class="badge ${bg} mfa-toggle" role="button" title="${title}"><i class="bi ${icon}"></i></span>`;
     };
 
-    const confirmMfaAction = (userId, username, action, actionLabel, td) => {
-        if (!confirm(`¿Esta seguro de ${actionLabel} MFA para ${username}?`)) return;
+    const confirmMfaAction = async (userId, username, action, actionLabel, td) => {
+        if (!(await SyntroUI.confirm(`¿Esta seguro de ${actionLabel} MFA para ${username}?`))) return;
 
         const badge = td.querySelector(".mfa-toggle");
         badge.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span>';
@@ -462,7 +462,7 @@ if (adminModal) {
                 updateMfaBadge(td, data.mfaState);
             })
             .catch((err) => {
-                alert("Error: " + err.message);
+                SyntroUI.alert("Error: " + err.message);
                 updateMfaBadge(td, state);
             });
     };
@@ -637,11 +637,11 @@ if (adminModal) {
                 });
 
                 tbody.querySelectorAll(".toggle-active-btn").forEach((btn) => {
-                    btn.addEventListener("click", () => {
+                    btn.addEventListener("click", async () => {
                         const userId = btn.getAttribute("data-user-id");
                         const username = btn.getAttribute("data-username");
                         const active = btn.getAttribute("data-active") === "true";
-                        if (!confirm(`¿${active ? "Dar de baja" : "Dar de alta"} al usuario ${username}?`)) return;
+                        if (!(await SyntroUI.confirm(`¿${active ? "Dar de baja" : "Dar de alta"} al usuario ${username}?`))) return;
                         btn.disabled = true;
                         fetch(`/api/admin/users/${userId}/set-active`, {
                             method: "POST",
@@ -658,13 +658,13 @@ if (adminModal) {
                                 loadUsers();
                             })
                             .catch((err) => {
-                                alert("Error: " + err.message);
+                                SyntroUI.alert("Error: " + err.message);
                                 btn.disabled = false;
                             });
                     });
                 });
 
-                tbody.addEventListener("click", (ev) => {
+                tbody.addEventListener("click", async (ev) => {
                     const badge = ev.target.closest(".mfa-toggle");
                     if (!badge) return;
 
@@ -678,32 +678,32 @@ if (adminModal) {
                     const isOrange = badge.classList.contains("bg-warning");
 
                     if (isGreen) {
-                        const action = prompt(
+                        const action = await SyntroUI.prompt(
                             `MFA de ${username} esta activo con clave enrolada.\n\n` +
                             `Escriba "desactivar" para desactivar MFA.\n` +
                             `Escriba "reenrolar" para desvincular la clave y solicitar una nueva.`,
                             ""
                         );
                         if (action === "desactivar") {
-                            confirmMfaAction(userId, username, "disable", "desactivar", mfaTd);
+                            await confirmMfaAction(userId, username, "disable", "desactivar", mfaTd);
                         } else if (action === "reenrolar") {
-                            confirmMfaAction(userId, username, "reenroll", "re-enrolar", mfaTd);
+                            await confirmMfaAction(userId, username, "reenroll", "re-enrolar", mfaTd);
                         }
                     } else if (isOrange) {
-                        const action2 = prompt(
+                        const action2 = await SyntroUI.prompt(
                             `MFA de ${username} esta pendiente de enrolar clave.\n\n` +
                             `Escriba "desactivar" para desactivar MFA.\n` +
                             `Escriba "activar" para activar MFA (conserva clave pendiente).`,
                             ""
                         );
                         if (action2 === "desactivar") {
-                            confirmMfaAction(userId, username, "disable", "desactivar", mfaTd);
+                            await confirmMfaAction(userId, username, "disable", "desactivar", mfaTd);
                         } else if (action2 === "activar") {
-                            confirmMfaAction(userId, username, "enable", "activar", mfaTd);
+                            await confirmMfaAction(userId, username, "enable", "activar", mfaTd);
                         }
                     } else {
-                        if (confirm(`¿Activar MFA para ${username}? Se le solicitara configurar MFA en su proximo inicio de sesion.`)) {
-                            confirmMfaAction(userId, username, "enable", "activar", mfaTd);
+                        if (await SyntroUI.confirm(`¿Activar MFA para ${username}? Se le solicitara configurar MFA en su proximo inicio de sesion.`)) {
+                            await confirmMfaAction(userId, username, "enable", "activar", mfaTd);
                         }
                     }
                 });
@@ -764,7 +764,7 @@ if (adminModal) {
                                     }
                                 })
                                 .catch((err) => {
-                                    alert("Error al guardar: " + err.message);
+                                    SyntroUI.alert("Error al guardar: " + err.message);
                                 })
                                 .finally(() => {
                                     newConfirmBtn.disabled = false;

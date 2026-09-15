@@ -223,13 +223,13 @@
         form?.addEventListener("submit", updateHiddenFloors);
         updateHiddenFloors();
 
-        document.querySelector("[data-delete-building-form]")?.addEventListener("submit", (event) => {
+        document.querySelector("[data-delete-building-form]")?.addEventListener("submit", async (event) => {
             const deleteForm = event.currentTarget;
             const buildingName = deleteForm?.dataset?.buildingName || "este edificio";
             const assignedCount = deleteForm?.dataset?.assignedCount || "0";
             const message = `Eliminar ${buildingName}?\n\nTiene ${assignedCount} equipo(s) asignado(s). El edificio se ocultara del mapa y de las listas, pero los equipos se conservaran.`;
 
-            if (!window.confirm(message)) {
+            if (!(await SyntroUI.confirm(message))) {
                 event.preventDefault();
             }
         });

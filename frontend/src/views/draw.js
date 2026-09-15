@@ -6,6 +6,7 @@ import "../lib/leaflet.draw/leaflet.draw.js";
 import { map } from "../views/map.js";
 import { downloadDrawData } from "../utils/downloadDrawData.js"
 import { getActiveCampusKey } from "../utils/campusConfig.js";
+import { appConfirm, appPrompt } from "../utils/appDialog.js";
 
 export var drawLayers = new L.FeatureGroup();
 
@@ -69,7 +70,7 @@ const extractCoord = (latlng) => {
   return [latlng.lng, latlng.lat]
 }
 
-map.on(L.Draw.Event.CREATED, function(e) {
+map.on(L.Draw.Event.CREATED, async function(e) {
   var type = e.layerType,
       layer = e.layer,
       geometry, coord;
@@ -87,14 +88,14 @@ map.on(L.Draw.Event.CREATED, function(e) {
     };
     coord = [coord];
   }
-  var featureName = prompt("Enter marker/room name:");
-  var placeType = prompt("Enter place type: \n (amusement_park, auditorium, bakery, break_room, building, bus_station, cafeteria, car_parking, casino, changing_room, cinema, class, classroom, computer_room, decoration, disabled_toilet, drinking_fountain, elevator, entranceexit, fast_food, fruits_and_vegetables, gym, hall, hotel, information_desk, library, liquor, meeting_area, meeting_available, meeting_point, meeting_room, men_restroom, menwomen_restroom, movie_rental, night_club, office-dark, office, park, pharmacy, printer, quiet_zone, ramp, reception, recycle, restaurant, restroom_2, room, school, seating_area, stairs, storage, studio_photo, technical_room, toilet_disabled, tv, university, welcome_house, wifi, women_restroom)");
+  var featureName = await appPrompt("Enter marker/room name:");
+  var placeType = await appPrompt("Enter place type: \n (amusement_park, auditorium, bakery, break_room, building, bus_station, cafeteria, car_parking, casino, changing_room, cinema, class, classroom, computer_room, decoration, disabled_toilet, drinking_fountain, elevator, entranceexit, fast_food, fruits_and_vegetables, gym, hall, hotel, information_desk, library, liquor, meeting_area, meeting_available, meeting_point, meeting_room, men_restroom, menwomen_restroom, movie_rental, night_club, office-dark, office, park, pharmacy, printer, quiet_zone, ramp, reception, recycle, restaurant, restroom_2, room, school, seating_area, stairs, storage, studio_photo, technical_room, toilet_disabled, tv, university, welcome_house, wifi, women_restroom)");
   layer.options.properties = new properties(
     geometry,
     coord,
     featureName,
     placeType,
-    prompt("Enter building: \n(rennes, metz, bouygues, eiffel, breguet)")
+    await appPrompt("Enter building: \n(rennes, metz, bouygues, eiffel, breguet)")
   )
   layer.bindPopup('Name: '+featureName+'; type: '+placeType);
   drawLayers.addLayer(layer);
@@ -115,8 +116,8 @@ if (url.searchParams.get("draw") == "true") {
     let btnDownload = document.createElement("button"); 
     btnDownload.style.cssText = style
     btnDownload.innerHTML = "Download drawnings";
-    btnDownload.addEventListener("click", function () {
-        var result = confirm("Confirm download");
+    btnDownload.addEventListener("click", async function () {
+        var result = await appConfirm("Confirm download");
         if (result) {
             var floorNumber = parseInt(document.getElementsByClassName("selectedFloorButton")[0].innerHTML);
             downloadDrawData(drawLayers, floorNumber, getActiveCampusKey());
@@ -127,8 +128,8 @@ if (url.searchParams.get("draw") == "true") {
     let btnClear = document.createElement("button"); 
     btnClear.style.cssText = style
     btnClear.innerHTML = "Clear drawnings";
-    btnClear.addEventListener("click", function () {
-        var result = confirm("Confirm clear drawings");
+    btnClear.addEventListener("click", async function () {
+        var result = await appConfirm("Confirm clear drawings");
         if (result) {
             drawLayers.clearLayers();
         }

@@ -362,7 +362,7 @@
 
             const ext = file.name.split(".").pop().toLowerCase();
             if (ext !== "xlsx" && ext !== "csv") {
-                alert("Formato no soportado. Use .xlsx o .csv.");
+                await SyntroUI.alert("Formato no soportado. Use .xlsx o .csv.");
                 return;
             }
 
@@ -886,7 +886,7 @@
                                         <form method="post"
                                               action="/admin/deleteinventoryitem/@item.Id"
                                               class="d-inline"
-                                              onsubmit="return confirm('Estas seguro de eliminar este equipo?');">
+                                              onsubmit="return SyntroUI.confirmForm(event, 'Estas seguro de eliminar este equipo?');">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn btn-sm btn-outline-danger" title="Eliminar equipo">
                                                 <i class="bi bi-trash"></i>

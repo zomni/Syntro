@@ -612,13 +612,13 @@ window.addEventListener("DOMContentLoaded", () => {
         loadMatches(1);
     };
 
-    const runRematch = () => {
+    const runRematch = async () => {
         if (!currentSnapshotId || currentSnapshotId === noSnapshotId) {
-            alert("Selecciona una snapshot primero.");
+            await SyntroUI.alert("Selecciona una snapshot primero.");
             return;
         }
 
-        if (!confirm("Se recalcularan las coincidencias de inventario de esta snapshot usando el motor heuristico. Continuar?")) {
+        if (!(await SyntroUI.confirm("Se recalcularan las coincidencias de inventario de esta snapshot usando el motor heuristico. Continuar?"))) {
             return;
         }
 
@@ -638,13 +638,13 @@ window.addEventListener("DOMContentLoaded", () => {
                 return response.json();
             })
             .then((result) => {
-                alert(`Recalculo completado: ${result.matchedCount} coincidencias, ${result.unmatchedCount} sin coincidir, ${result.changedCount} cambios.`);
+                SyntroUI.alert(`Recalculo completado: ${result.matchedCount} coincidencias, ${result.unmatchedCount} sin coincidir, ${result.changedCount} cambios.`);
                 loadSummary();
                 loadMatches(1);
             })
             .catch((error) => {
                 console.error("Error recalculando coincidencias:", error);
-                alert("No se pudo recalcular las coincidencias.");
+                SyntroUI.alert("No se pudo recalcular las coincidencias.");
             })
             .finally(() => {
                 rematchBtn.disabled = false;

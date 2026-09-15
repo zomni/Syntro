@@ -11,6 +11,7 @@ import { refreshWalkingRoutesLayer } from "@app/walkingRouteLayer";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { getActiveCampus } from "../utils/goToCampus.js";
 import { loadWalkingRouteNetwork } from "../utils/walkingRouteStorage.js?v=20260608b";
+import { appConfirm } from "../utils/appDialog.js";
 
 const controlsId = "walking-route-editor-controls";
 const editorButtonId = "walking-route-editor-toggle";
@@ -868,7 +869,7 @@ const deleteEdge = async (edgeExternalId) => {
 };
 
 const confirmDeleteEdge = async (edge) => {
-  if (!window.confirm("¿Estas seguro que quieres borrar esta ruta?")) return;
+  if (!(await appConfirm("¿Estas seguro que quieres borrar esta ruta?"))) return;
 
   try {
     await deleteEdge(edge.externalId);
