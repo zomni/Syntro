@@ -204,7 +204,7 @@ const openPalette = () => {
   closePalette();
 
   const dropdown = document.createElement("div");
-  dropdown.className = "room-editor-icon-dropdown campus-marker-icon-dropdown";
+  dropdown.className = "room-editor-icon-dropdown campus-marker-icon-dropdown is-open";
 
   const hint = document.createElement("div");
   hint.className = "room-editor-icon-dropdown-hint";
