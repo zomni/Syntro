@@ -21,6 +21,7 @@ let placementActive = false;
 let mapClickHandler = null;
 let mapDragCleanup = null;
 let dropClickOutsideHandler = null;
+let suppressClickUntil = 0;
 
 const getEditorControls = () => document.getElementById(controlsId);
 
@@ -36,7 +37,6 @@ const cleanupPlacement = () => {
     mapClickHandler = null;
   }
   removeDragHandlers();
-  closePalette();
   placementActive = false;
   pendingIconKey = null;
 };
@@ -53,7 +53,6 @@ const attachDragHandlers = () => {
   const container = map.getContainer();
 
   const handleDragOver = (e) => {
-    if (!paletteDragging) return;
     const types = e.dataTransfer?.types;
     if (types && Array.from(types).includes("text/plain")) {
       e.preventDefault();
@@ -62,11 +61,11 @@ const attachDragHandlers = () => {
   };
 
   const handleDrop = (e) => {
-    if (!paletteDragging) return;
     const draggedKey = e.dataTransfer?.getData("text/plain");
     if (!STATIC_ICON_KEYS.includes(draggedKey)) return;
     e.preventDefault();
     e.stopPropagation();
+    suppressClickUntil = Date.now() + 300;
     const rect = container.getBoundingClientRect();
     const point = L.point(e.clientX - rect.left, e.clientY - rect.top);
     const latlng = map.containerPointToLatLng(point);
@@ -88,6 +87,7 @@ const placeCampusMarker = async (latlng, iconKey) => {
   if (!getActiveCampus()) {
     requestAdminMapToolMode(null);
     cleanupPlacement();
+    closePalette();
     setAdminMapToolsStatus("No hay campus activo para colocar iconos.");
     return;
   }
@@ -159,6 +159,10 @@ const startCampusMarkerMode = (iconKey) => {
     return;
   }
 
+  if (placementActive && pendingIconKey === iconKey) {
+    return;
+  }
+
   cleanupPlacement();
   placementActive = true;
   pendingIconKey = iconKey;
@@ -166,13 +170,14 @@ const startCampusMarkerMode = (iconKey) => {
 
   mapClickHandler = (e) => {
     if (!placementActive) return;
+    if (paletteDragging) return;
+    if (Date.now() < suppressClickUntil) return;
     if (e.originalEvent?.shiftKey || e.originalEvent?.ctrlKey || e.originalEvent?.metaKey || e.originalEvent?.altKey) return;
     L.DomEvent.stop(e);
     void placeCampusMarker(e.latlng, pendingIconKey);
   };
   map.on("click", mapClickHandler);
   attachDragHandlers();
-  closePalette();
 
   setAdminMapToolsStatus(
     `Coloca '${staticIconLabel(iconKey)}': click sobre el mapa general o arrastra el icono. Click en el boton para salir.`
@@ -184,6 +189,7 @@ const closePalette = () => {
     document.removeEventListener("click", dropClickOutsideHandler);
     dropClickOutsideHandler = null;
   }
+  removeDragHandlers();
   paletteEl?.remove();
   paletteEl = null;
   paletteOpen = false;
@@ -247,9 +253,11 @@ const openPalette = () => {
   document.body.appendChild(paletteEl);
   positionPalette();
   paletteOpen = true;
+  attachDragHandlers();
 
   dropClickOutsideHandler = (e) => {
     if (!paletteEl) return;
+    if (placementActive) return;
     if (paletteEl.contains(e.target)) return;
     const button = document.getElementById(buttonId);
     if (button && button.contains(e.target)) return;
@@ -262,14 +270,17 @@ const toggleCampusMarkerMode = () => {
   if (placementActive) {
     requestAdminMapToolMode(null);
     cleanupPlacement();
+    closePalette();
     setAdminMapToolsStatus("Colocacion de iconos detenida.");
     return;
   }
   if (paletteOpen) {
+    requestAdminMapToolMode(null);
     closePalette();
     setAdminMapToolsStatus("");
     return;
   }
+  requestAdminMapToolMode("campus-marker");
   openPalette();
 };
 
@@ -302,6 +313,7 @@ const removeEditorControls = () => {
   if (placementActive || paletteOpen) {
     requestAdminMapToolMode(null);
     cleanupPlacement();
+    closePalette();
   }
   getEditorControls()?.remove();
 };
@@ -341,5 +353,6 @@ window.addEventListener(identifiers.events.mapDataRefreshed, () => {
 window.addEventListener(identifiers.events.adminMapToolMode, (event) => {
   if (event.detail?.mode !== "campus-marker" && (placementActive || paletteOpen)) {
     cleanupPlacement();
+    closePalette();
   }
 });
