@@ -18,7 +18,6 @@ import {
 
 const controlsId = "campus-marker-editor-controls";
 const buttonId = "campus-marker-editor-toggle";
-const editBarId = "campus-marker-edit-bar";
 const generalFloor = -1;
 
 let paletteOpen = false;
@@ -33,7 +32,6 @@ let suppressClickUntil = 0;
 
 let editorActive = false;
 let editorMarkerGroup = null;
-let editBarEl = null;
 let selectedExternalId = null;
 let editorMarkers = new Map();
 let editorUndoStack = [];
@@ -42,6 +40,8 @@ let editorKeyboardHandler = null;
 let editorZoomHandler = null;
 let editorDeselectHandler = null;
 let lastFetchedCampusMarkers = [];
+let baseCampusMarkerLayers = new Map();
+let baseRenderFrameId = null;
 
 const getEditorControls = () => document.getElementById(controlsId);
 
@@ -203,7 +203,6 @@ const attachEditorMarkerDrag = (layer, markerData) => {
       after: { latitude: after.lat, longitude: after.lng },
     });
     editorRedoStack = [];
-    updateEditBar();
     setAdminMapToolsStatus("Marcador movido.");
   });
 };
@@ -241,7 +240,6 @@ const addEditorInteractiveMarker = (marker) => {
   lastFetchedCampusMarkers.push(marker);
   buildEditorLayer(marker);
   selectEditorMarker(marker.externalId);
-  updateEditBar();
 };
 
 // ─── Editor activation / deactivation ───────────────────────────────────────
@@ -269,16 +267,19 @@ const renderAllEditorMarkers = () => {
   for (const marker of lastFetchedCampusMarkers) {
     buildEditorLayer(marker);
   }
-  updateEditBar();
 };
 
 const activateEditor = async () => {
   if (editorActive) return;
+  if (baseRenderFrameId) {
+    cancelAnimationFrame(baseRenderFrameId);
+    baseRenderFrameId = null;
+  }
+  clearBaseCampusMarkers();
   editorActive = true;
   editorMarkerGroup = L.layerGroup().addTo(map);
   setCampusMarkersManagedByEditor(true);
   await fetchAndRenderEditorMarkers();
-  installEditBar();
   installEditorKeyboard();
 
   editorDeselectHandler = () => {
@@ -310,15 +311,26 @@ const deactivateEditor = () => {
   selectedExternalId = null;
   editorUndoStack = [];
   editorRedoStack = [];
-  editBarEl?.remove();
-  editBarEl = null;
   setCampusMarkersManagedByEditor(false);
-  reRenderBaseCampusMarkers();
+  if (baseRenderFrameId) cancelAnimationFrame(baseRenderFrameId);
+  baseRenderFrameId = requestAnimationFrame(() => {
+    baseRenderFrameId = null;
+    renderBaseCampusMarkers();
+  });
 };
 
-const reRenderBaseCampusMarkers = () => {
+const clearBaseCampusMarkers = () => {
+  baseCampusMarkerLayers.forEach((layer) => {
+    layer.remove();
+  });
+  baseCampusMarkerLayers.clear();
+};
+
+const renderBaseCampusMarkers = () => {
+  clearBaseCampusMarkers();
   for (const marker of lastFetchedCampusMarkers) {
-    renderMapMarkerLayer(marker);
+    const layer = renderMapMarkerLayer(marker);
+    if (layer) baseCampusMarkerLayers.set(String(marker.externalId), layer);
   }
 };
 
@@ -331,7 +343,6 @@ const selectEditorMarker = (externalId) => {
   if (info) {
     info.layer.getElement()?.classList.add("is-selected");
   }
-  updateEditBar();
   const label = info?.marker ? staticIconLabel(info.marker.iconKey) : "";
   setAdminMapToolsStatus(`Marcador seleccionado (${label}). Supr para borrar, arrastralo para mover.`);
 };
@@ -341,7 +352,6 @@ const deselectAllEditorMarkers = () => {
   editorMarkers.forEach(({ layer }) => {
     layer.getElement()?.classList.remove("is-selected");
   });
-  updateEditBar();
 };
 
 const deleteSelectedEditorMarker = async () => {
@@ -357,7 +367,6 @@ const deleteSelectedEditorMarker = async () => {
   lastFetchedCampusMarkers = lastFetchedCampusMarkers.filter((m) => m.externalId !== markerSnapshot.externalId);
   editorUndoStack.push({ type: "delete", marker: markerSnapshot });
   editorRedoStack = [];
-  updateEditBar();
   setAdminMapToolsStatus(`Marcador '${staticIconLabel(markerSnapshot.iconKey)}' eliminado.`);
 };
 
@@ -371,7 +380,7 @@ const editorUndo = async () => {
   switch (action.type) {
     case "create": {
       const ok = await deleteMarkerBackend(action.marker.externalId);
-      if (!ok) { editorRedoStack.pop(); editorUndoStack.push(action); updateEditBar(); return; }
+      if (!ok) { editorRedoStack.pop(); editorUndoStack.push(action); return; }
       const info = editorMarkers.get(action.marker.externalId);
       info?.layer.remove();
       editorMarkers.delete(action.marker.externalId);
@@ -393,13 +402,12 @@ const editorUndo = async () => {
     }
     case "delete": {
       const ok = await postMarkerBackend(action.marker);
-      if (!ok) { editorRedoStack.pop(); editorUndoStack.push(action); updateEditBar(); return; }
+      if (!ok) { editorRedoStack.pop(); editorUndoStack.push(action); return; }
       addEditorInteractiveMarker(action.marker);
       setAdminMapToolsStatus(`Deshacer: marcador '${staticIconLabel(action.marker.iconKey)}' restaurado.`);
       break;
     }
   }
-  updateEditBar();
 };
 
 const editorRedo = async () => {
@@ -410,7 +418,7 @@ const editorRedo = async () => {
   switch (action.type) {
     case "create": {
       const ok = await postMarkerBackend(action.marker);
-      if (!ok) { editorUndoStack.pop(); editorRedoStack.push(action); updateEditBar(); return; }
+      if (!ok) { editorUndoStack.pop(); editorRedoStack.push(action); return; }
       addEditorInteractiveMarker(action.marker);
       setAdminMapToolsStatus(`Rehacer: marcador '${staticIconLabel(action.marker.iconKey)}' restaurado.`);
       break;
@@ -428,7 +436,7 @@ const editorRedo = async () => {
     }
     case "delete": {
       const ok = await deleteMarkerBackend(action.marker.externalId);
-      if (!ok) { editorUndoStack.pop(); editorRedoStack.push(action); updateEditBar(); return; }
+      if (!ok) { editorUndoStack.pop(); editorRedoStack.push(action); return; }
       const info = editorMarkers.get(action.marker.externalId);
       info?.layer.remove();
       editorMarkers.delete(action.marker.externalId);
@@ -438,41 +446,6 @@ const editorRedo = async () => {
       break;
     }
   }
-  updateEditBar();
-};
-
-// ─── Edit bar (undo / redo / delete buttons) ────────────────────────────────
-
-const installEditBar = () => {
-  if (editBarEl) return;
-  const bar = document.createElement("div");
-  bar.id = editBarId;
-  bar.className = "campus-marker-edit-bar is-hidden";
-  bar.innerHTML = `
-    <span class="campus-marker-edit-bar-label"></span>
-    <button class="campus-marker-edit-undo" type="button" title="Deshacer (Ctrl+Z)">Deshacer</button>
-    <button class="campus-marker-edit-redo" type="button" title="Rehacer (Ctrl+Shift+Z)">Rehacer</button>
-    <button class="campus-marker-edit-delete is-danger" type="button" title="Eliminar (Supr)">Eliminar</button>
-  `;
-  bar.querySelector(".campus-marker-edit-undo").addEventListener("click", (e) => { e.stopPropagation(); void editorUndo(); });
-  bar.querySelector(".campus-marker-edit-redo").addEventListener("click", (e) => { e.stopPropagation(); void editorRedo(); });
-  bar.querySelector(".campus-marker-edit-delete").addEventListener("click", (e) => { e.stopPropagation(); void deleteSelectedEditorMarker(); });
-  editBarEl = bar;
-  document.body.appendChild(bar);
-  updateEditBar();
-};
-
-const updateEditBar = () => {
-  if (!editBarEl) return;
-  const hasSelected = !!selectedExternalId;
-  const info = hasSelected ? editorMarkers.get(selectedExternalId) : null;
-  const label = info ? staticIconLabel(info.marker?.iconKey || "") : "";
-  editBarEl.querySelector(".campus-marker-edit-bar-label").textContent =
-    label || (editorActive ? "Selecciona un icono" : "");
-  editBarEl.querySelector(".campus-marker-edit-undo").disabled = editorUndoStack.length === 0;
-  editBarEl.querySelector(".campus-marker-edit-redo").disabled = editorRedoStack.length === 0;
-  editBarEl.querySelector(".campus-marker-edit-delete").disabled = !hasSelected;
-  editBarEl.classList.toggle("is-hidden", !editorActive);
 };
 
 // ─── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -565,7 +538,6 @@ const placeCampusMarker = async (latlng, iconKey) => {
     addEditorInteractiveMarker(marker);
     editorUndoStack.push({ type: "create", marker: { ...marker } });
     editorRedoStack = [];
-    updateEditBar();
     setAdminMapToolsStatus(
       `Marcador '${staticIconLabel(iconKey)}' guardado. Seleccionado para mover o editar.`
     );

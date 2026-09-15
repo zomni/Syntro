@@ -465,6 +465,11 @@ let campusMarkersManagedByEditor = false;
 
 export const setCampusMarkersManagedByEditor = (value) => {
   campusMarkersManagedByEditor = Boolean(value);
+  if (campusMarkersManagedByEditor) {
+    staticMarkerLayers.forEach(({ layer, isCampus }) => {
+      if (isCampus) layer.remove();
+    });
+  }
 };
 
 export const buildStaticMarkerIcon = (iconKey, size = STATIC_MARKER_ICON_SIZE, className = "map-static-marker-icon") =>
@@ -505,7 +510,11 @@ export const renderMapMarkerLayer = (marker) => {
 
   const keyed = String(marker.externalId || "");
   if (keyed) {
-    staticMarkerLayers.set(keyed, { layer, iconKey: marker.iconKey });
+    staticMarkerLayers.set(keyed, {
+      layer,
+      iconKey: marker.iconKey,
+      isCampus: String(marker.buildingExternalId) === CAMPUS_MARKER_BUILDING_ID,
+    });
     layer.on("remove", () => {
       staticMarkerLayers.delete(keyed);
     });
