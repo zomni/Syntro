@@ -561,7 +561,8 @@ const buildBuildingRingsForCampus = async () => {
 
   const rings = [];
   const site = getSite(campus);
-  const floors = Array.isArray(site?.floors) ? site.floors.map(Number) : [];
+  const siteFloors = Array.isArray(site?.floors) ? site.floors.map(Number) : [];
+  const floors = [...new Set([0, ...siteFloors])];
   const school = site?.school;
 
   if (school) {
@@ -604,8 +605,10 @@ const buildBuildingRingsForCampus = async () => {
     // Edificios manuales sin backend disponible.
   }
 
-  buildingRingsCache = rings;
-  buildingRingsCampus = campus;
+  if (rings.length > 0) {
+    buildingRingsCache = rings;
+    buildingRingsCampus = campus;
+  }
   return rings;
 };
 

@@ -244,8 +244,7 @@ const addEditorInteractiveMarker = (marker) => {
 
 // ─── Editor activation / deactivation ───────────────────────────────────────
 
-const fetchAndRenderEditorMarkers = async () => {
-  lastFetchedCampusMarkers = [];
+const fetchCampusMarkers = async () => {
   let allGlobal = [];
   try {
     const resp = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=-1`, { cache: "no-store" });
@@ -256,6 +255,10 @@ const fetchAndRenderEditorMarkers = async () => {
   lastFetchedCampusMarkers = allGlobal.filter(
     (m) => String(m.buildingExternalId) === CAMPUS_MARKER_BUILDING_ID
   );
+};
+
+const fetchAndRenderEditorMarkers = async () => {
+  await fetchCampusMarkers();
   renderAllEditorMarkers();
 };
 
@@ -313,8 +316,9 @@ const deactivateEditor = () => {
   editorRedoStack = [];
   setCampusMarkersManagedByEditor(false);
   if (baseRenderFrameId) cancelAnimationFrame(baseRenderFrameId);
-  baseRenderFrameId = requestAnimationFrame(() => {
+  baseRenderFrameId = requestAnimationFrame(async () => {
     baseRenderFrameId = null;
+    await fetchCampusMarkers();
     renderBaseCampusMarkers();
   });
 };

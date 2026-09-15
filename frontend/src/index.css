@@ -1563,8 +1563,6 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .map-static-marker-icon {
-    width: 28px !important;
-    height: 28px !important;
     background: transparent;
     border: none;
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
@@ -1584,8 +1582,6 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .campus-editor-marker-icon {
-    width: 28px !important;
-    height: 28px !important;
     background: transparent;
     border: none;
     filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
