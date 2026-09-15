@@ -1544,8 +1544,8 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .room-editor-icon-item img {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     object-fit: contain;
     pointer-events: none;
     user-select: none;

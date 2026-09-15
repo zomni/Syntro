@@ -11,6 +11,8 @@ namespace Syntro.API.Controllers;
 [Route("api/map-markers")]
 public class MapMarkersController : ControllerBase
 {
+    public const string GeneralMapMarkerBuildingId = "map-general";
+
     private readonly AppDbContext _context;
     private readonly AuditLogService _auditLogService;
 
@@ -78,8 +80,10 @@ public class MapMarkersController : ControllerBase
         if (exists)
             return Conflict(new { message = $"Ya existe un marcador con ExternalId '{request.ExternalId}'." });
 
-        var buildingExists = await _context.SyncedBuildings
-            .AnyAsync(b => b.ExternalId == request.BuildingExternalId && b.IsActive, cancellationToken);
+        var isCampusMarker = request.BuildingExternalId == GeneralMapMarkerBuildingId;
+        var buildingExists = isCampusMarker
+            || await _context.SyncedBuildings
+                .AnyAsync(b => b.ExternalId == request.BuildingExternalId && b.IsActive, cancellationToken);
         if (!buildingExists)
             return BadRequest(new { message = $"No se encontro el edificio '{request.BuildingExternalId}'." });
 
@@ -94,7 +98,7 @@ public class MapMarkersController : ControllerBase
             IconKey = request.IconKey.Trim(),
             Label = (request.Label ?? string.Empty).Trim(),
             Notes = (request.Notes ?? string.Empty).Trim(),
-            Source = "manual",
+            Source = isCampusMarker ? "campus" : "manual",
             CreatedBy = User.Identity?.Name ?? "admin",
             UpdatedBy = User.Identity?.Name ?? "admin"
         };

@@ -34,6 +34,7 @@ module.exports = {
       "@app/manualBuildingEditor": src("components", "manualBuildingEditor.js"),
       "@app/sessionModeBadge": src("components", "sessionModeBadge.js"),
       "@app/buildingGeometryEditor": src("components", "buildingGeometryEditor.js"),
+      "@app/campusMarkerEditor": src("components", "campusMarkerEditor.js"),
       "@app/walkingRouteEditor": src("components", "walkingRouteEditor.js"),
       "@app/adminMapToolsPanel": src("components", "adminMapToolsPanel.js"),
       "@app/networkTelemetryPanel": src("components", "networkTelemetryPanel.js"),

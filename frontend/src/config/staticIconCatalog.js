@@ -147,3 +147,7 @@ export const STATIC_ICON_LABELS = {
 export const staticIconUrl = (key) => `data/assets/static_icons/${key}.png`;
 
 export const staticIconLabel = (key) => STATIC_ICON_LABELS[key] || key;
+
+// Tamano fijo de los iconos de marcador en pantalla (px). No escala con el zoom:
+// tanto el mapa general como el editor de salas usan L.marker con este mismo pixel.
+export const STATIC_MARKER_ICON_SIZE = 28;

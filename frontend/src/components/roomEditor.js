@@ -14,7 +14,7 @@ import {
   distanceMeters,
   generateContourRooms,
 } from "../utils/roomEditorGeometry.js";
-import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel } from "../config/staticIconCatalog.js";
+import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
 import { appConfirm } from "../utils/appDialog.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
@@ -1645,8 +1645,8 @@ const clearMarkerLayers = () => {
 const buildMarkerLeafletIcon = (marker) =>
   L.icon({
     iconUrl: staticIconUrl(marker.iconKey),
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    iconSize: [STATIC_MARKER_ICON_SIZE, STATIC_MARKER_ICON_SIZE],
+    iconAnchor: [STATIC_MARKER_ICON_SIZE / 2, STATIC_MARKER_ICON_SIZE / 2],
     popupAnchor: [0, -12],
     className: "room-editor-marker-icon",
   });

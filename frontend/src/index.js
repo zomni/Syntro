@@ -26,6 +26,9 @@ import { initManualBuildingEditor } from "@app/manualBuildingEditor";
 // Existing building geometry editor for admins
 import { initBuildingGeometryEditor } from "@app/buildingGeometryEditor";
 
+// Campus-wide icon markers editor for admins
+import { initCampusMarkerEditor } from "@app/campusMarkerEditor";
+
 // Walking route network editor for admins
 import { initWalkingRouteEditor } from "@app/walkingRouteEditor";
 
@@ -121,6 +124,7 @@ initWalkingRouteLayer();
 initNetworkTelemetryPanel();
 initManualBuildingEditor();
 initBuildingGeometryEditor();
+initCampusMarkerEditor();
 initRoomEditor();
 initWalkingRouteEditor();
 initSiteViewportPanel();

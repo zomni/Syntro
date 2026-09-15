@@ -1,4 +1,5 @@
 import { identifiers } from "../utils/identifiers.js";
+import { BACKEND_API_URL } from "../views/map.js";
 
 const panelId = "admin-map-tools-panel";
 const buttonsId = "admin-map-tools-buttons";
@@ -15,6 +16,7 @@ const activeModes = new Map([
   ["manual-building", "manual-building-editor-toggle"],
   ["geometry-shape", "building-shape-editor-button"],
   ["geometry-move", "building-move-editor-button"],
+  ["campus-marker", "campus-marker-editor-toggle"],
   ["room-edit", "room-editor-toggle"],
   ["walking-routes", "walking-route-editor-toggle"],
   ["walking-route-delete", "walking-route-delete-toggle"],
@@ -57,6 +59,7 @@ export const ensureAdminMapToolsPanel = () => {
   });
 
   document.body.appendChild(panel);
+  bindSessionRecheck();
   scheduleAdminMapToolsPanelPosition();
   window.addEventListener("resize", positionAdminMapToolsPanel);
   window.addEventListener(identifiers.events.sessionChanged, (event) => {
@@ -88,6 +91,45 @@ const collapseAdminMapToolsPanel = () => {
 
   requestAdminMapToolMode(null);
   setAdminMapToolsStatus("");
+};
+
+let sessionRecheckBound = false;
+let sessionRecheckHandle = null;
+
+const scheduleSessionRecheck = () => {
+  if (sessionRecheckHandle) return;
+  sessionRecheckHandle = window.setTimeout(() => {
+    sessionRecheckHandle = null;
+    void recheckSessionAndCollapse();
+  }, 300);
+};
+
+const recheckSessionAndCollapse = async () => {
+  const buttons = document.getElementById(buttonsId);
+  if (!buttons || buttons.hidden) return;
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) return;
+    const session = await response.json();
+    if (session?.isAuthenticated === false) {
+      collapseAdminMapToolsPanel();
+    }
+  } catch {
+    // Sin respuesta del backend: no se fuerza el colapso.
+  }
+};
+
+const bindSessionRecheck = () => {
+  if (sessionRecheckBound) return;
+  sessionRecheckBound = true;
+  window.addEventListener("focus", scheduleSessionRecheck);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") scheduleSessionRecheck();
+  });
+  window.addEventListener("pageshow", scheduleSessionRecheck);
 };
 
 const scheduleAdminMapToolsPanelPosition = () => {

@@ -27,7 +27,10 @@ import {
   mergeCatalogWithSearch,
   mergeGeoJsonWithSearch,
 } from "@app/searchMetadata";
-import { staticIconUrl } from "../config/staticIconCatalog.js";
+import { staticIconUrl, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
+import { pointInRing } from "../utils/geometry.js";
+import { getActiveCampus } from "./goToCampus.js";
+import { getSite } from "../config/siteConfig.js";
 
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
@@ -449,6 +452,122 @@ const addAnnotationsForFloor = async (floorNumber, expectedRenderSequence) => {
   console.info(`[annotations] ${paintedCount} marca(s) en piso ${floorNumber}`);
 };
 
+export const CAMPUS_MARKER_BUILDING_ID = "map-general";
+
+export const renderMapMarkerLayer = (marker) => {
+  if (!Array.isArray(marker.latitude) && typeof marker.latitude !== "number") return null;
+  if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") return null;
+
+  const icon = L.icon({
+    iconUrl: staticIconUrl(marker.iconKey),
+    iconSize: [STATIC_MARKER_ICON_SIZE, STATIC_MARKER_ICON_SIZE],
+    iconAnchor: [STATIC_MARKER_ICON_SIZE / 2, STATIC_MARKER_ICON_SIZE / 2],
+    popupAnchor: [0, -10],
+    className: "map-static-marker-icon",
+  });
+
+  return L.marker([marker.latitude, marker.longitude], {
+    icon,
+    pane: "roomsPane",
+    interactive: false,
+    keyboard: false,
+    zIndexOffset: 400,
+  }).addTo(roomLayerGroup);
+};
+
+const extractPolygonRings = (features) => {
+  const rings = [];
+  const pushRings = (coords) => {
+    if (!Array.isArray(coords) || coords.length === 0) return;
+    const outer = coords[0];
+    if (!Array.isArray(outer) || outer.length < 3) return;
+    rings.push(outer.map(([lng, lat]) => [lat, lng]));
+  };
+
+  for (const feature of features || []) {
+    const geometry = feature?.geometry;
+    if (!geometry?.coordinates) continue;
+    if (geometry.type === "Polygon") {
+      pushRings(geometry.coordinates);
+    } else if (geometry.type === "MultiPolygon") {
+      for (const polygon of geometry.coordinates) {
+        pushRings(polygon);
+      }
+    }
+  }
+  return rings;
+};
+
+let buildingRingsCache = null;
+let buildingRingsCampus = "";
+
+const buildBuildingRingsForCampus = async () => {
+  const { getActiveCampus } = await import("./goToCampus.js");
+  const campus = getActiveCampus();
+  if (!campus) return [];
+
+  if (buildingRingsCampus === campus && Array.isArray(buildingRingsCache)) {
+    return buildingRingsCache;
+  }
+
+  const rings = [];
+  const site = getSite(campus);
+  const floors = Array.isArray(site?.floors) ? site.floors.map(Number) : [];
+  const school = site?.school;
+
+  if (school) {
+    for (const floorNumber of floors) {
+      if (!Number.isFinite(floorNumber)) continue;
+      try {
+        const json = await loadFloorGeoJson(school, campus, floorNumber);
+        const enriched = await mergeGeoJsonWithSearch(json, campus);
+        rings.push(...extractPolygonRings(Array.isArray(enriched?.features) ? enriched.features : []));
+      } catch (error) {
+        // Piso sin plano: se ignora para la validacion.
+      }
+    }
+  }
+
+  try {
+    const manualBuildings = await loadManualBuildings();
+    for (const building of manualBuildings || []) {
+      let floorsParsed = [];
+      try {
+        floorsParsed = JSON.parse(building.floorsJson || "[]");
+      } catch {
+        floorsParsed = [];
+      }
+      const buildingFloors =
+        Array.isArray(floorsParsed) && floorsParsed.length > 0 ? floorsParsed.map(Number) : [0];
+      if (!buildingFloors.some((floorNumber) => floors.includes(floorNumber))) continue;
+
+      let geometry = null;
+      try {
+        geometry = JSON.parse(building.geometryJson || "{}");
+      } catch {
+        geometry = null;
+      }
+      if (geometry?.coordinates) {
+        rings.push(...extractPolygonRings([{ geometry }]));
+      }
+    }
+  } catch (error) {
+    // Edificios manuales sin backend disponible.
+  }
+
+  buildingRingsCache = rings;
+  buildingRingsCampus = campus;
+  return rings;
+};
+
+export const isPointOverBuilding = async (latlng) => {
+  const rings = await buildBuildingRingsForCampus();
+  for (const ring of rings) {
+    if (pointInRing(latlng, ring)) return true;
+  }
+  return false;
+};
+
 const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
   if (!BACKEND_API_URL || expectedRenderSequence !== renderSequence) {
     return;
@@ -469,35 +588,35 @@ const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
     return;
   }
 
-  const allowedBuildingIds = await getAllowedBuildingIdsForFloor(floorNumber);
-  if (!allowedBuildingIds || expectedRenderSequence !== renderSequence) {
+  let globalMarkers = [];
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=-1`, {
+      cache: "no-store",
+    });
+    globalMarkers = response.ok ? await response.json() : [];
+  } catch (error) {
+    console.error("Error cargando marcadores de campus:", error);
+  }
+
+  if (expectedRenderSequence !== renderSequence || !Array.isArray(globalMarkers)) {
     return;
   }
 
   let paintedCount = 0;
 
+  for (const marker of globalMarkers) {
+    if (String(marker.buildingExternalId) !== CAMPUS_MARKER_BUILDING_ID) continue;
+    if (renderMapMarkerLayer(marker)) paintedCount += 1;
+  }
+
+  const allowedBuildingIds = await getAllowedBuildingIdsForFloor(floorNumber);
+  if (!allowedBuildingIds || expectedRenderSequence !== renderSequence) {
+    return;
+  }
+
   for (const marker of markers) {
     if (!allowedBuildingIds.has(marker.buildingExternalId)) continue;
-    if (!Array.isArray(marker.latitude) && typeof marker.latitude !== "number") continue;
-    if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") continue;
-
-    const icon = L.icon({
-      iconUrl: staticIconUrl(marker.iconKey),
-      iconSize: [26, 26],
-      iconAnchor: [13, 13],
-      popupAnchor: [0, -10],
-      className: "map-static-marker-icon",
-    });
-
-    L.marker([marker.latitude, marker.longitude], {
-      icon,
-      pane: "roomsPane",
-      interactive: false,
-      keyboard: false,
-      zIndexOffset: 400,
-    }).addTo(roomLayerGroup);
-
-    paintedCount += 1;
+    if (renderMapMarkerLayer(marker)) paintedCount += 1;
   }
 
   console.info(`[map-markers] ${paintedCount} marcador(es) en piso ${floorNumber}`);
