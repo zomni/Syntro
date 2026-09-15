@@ -1583,6 +1583,74 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     box-shadow: 0 0 0 3px #f59e0b, 0 1px 8px rgba(0, 0, 0, 0.45);
 }
 
+.campus-editor-marker-icon {
+    width: 28px !important;
+    height: 28px !important;
+    background: transparent;
+    border: none;
+    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+    cursor: grab;
+}
+
+.campus-editor-marker-icon.is-selected {
+    filter: drop-shadow(0 0 0 3px #f59e0b) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+
+.campus-marker-edit-bar {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    font-size: 13px;
+    color: #1f2937;
+}
+
+.campus-marker-edit-bar.is-hidden {
+    display: none;
+}
+
+.campus-marker-edit-bar-label {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+}
+
+.campus-marker-edit-bar button {
+    border: 1px solid rgba(15, 23, 42, 0.18);
+    background: #fff;
+    color: #1f2937;
+    border-radius: 7px;
+    padding: 4px 9px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+}
+
+.campus-marker-edit-bar button:hover:not(:disabled) {
+    background: #f1f5f9;
+}
+
+.campus-marker-edit-bar button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.campus-marker-edit-bar button.is-danger {
+    color: #b91c1c;
+    border-color: rgba(185, 28, 28, 0.35);
+}
+
 .room-editor-marker-preview {
     display: flex;
     align-items: center;

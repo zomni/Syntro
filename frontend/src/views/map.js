@@ -28,8 +28,6 @@ export const map = L.map("map", {
   attributionControl: false,
   maxBounds: firstCampus.bounds ? firstCampus.bounds.pad(0.02) : undefined,
   maxBoundsViscosity: 1.0,
-  zoomAnimation: false,
-  markerZoomAnimation: false,
 }).setView(firstCampus.center, firstCampus.zoom);
 
 export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {

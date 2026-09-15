@@ -487,8 +487,6 @@ const initPopupMap = (geometry) => {
     scrollWheelZoom: false,
     doubleClickZoom: false,
     touchZoom: false,
-    zoomAnimation: false,
-    markerZoomAnimation: false,
     minZoom: 12,
     maxZoom: 22,
   });

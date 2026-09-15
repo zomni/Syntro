@@ -87,6 +87,51 @@ public class MapMarkersController : ControllerBase
         if (!buildingExists)
             return BadRequest(new { message = $"No se encontro el edificio '{request.BuildingExternalId}'." });
 
+        var softDeleted = await _context.MapMarkers
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.ExternalId == request.ExternalId.Trim() && m.DeletedAtUtc != null, cancellationToken);
+        if (softDeleted != null)
+        {
+            var isCampusRestore = request.BuildingExternalId == GeneralMapMarkerBuildingId;
+            var buildingRestoreExists = isCampusRestore
+                || await _context.SyncedBuildings
+                    .AnyAsync(b => b.ExternalId == request.BuildingExternalId && b.IsActive, cancellationToken);
+            if (!buildingRestoreExists)
+                return BadRequest(new { message = $"No se encontro el edificio '{request.BuildingExternalId}'." });
+
+            softDeleted.BuildingExternalId = request.BuildingExternalId.Trim();
+            softDeleted.Campus = string.IsNullOrWhiteSpace(request.Campus) ? "default" : request.Campus.Trim();
+            softDeleted.Floor = request.Floor;
+            softDeleted.Latitude = request.Latitude;
+            softDeleted.Longitude = request.Longitude;
+            softDeleted.IconKey = request.IconKey.Trim();
+            softDeleted.Label = (request.Label ?? string.Empty).Trim();
+            softDeleted.Notes = (request.Notes ?? string.Empty).Trim();
+            softDeleted.Source = isCampusRestore ? "campus" : "manual";
+            softDeleted.Restore(User.Identity?.Name ?? "admin");
+            softDeleted.Version++;
+            softDeleted.UpdatedAtUtc = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            await _auditLogService.LogSecurityEventAsync(
+                actionType: "map-marker-create",
+                resource: "map-marker",
+                summary: $"Marcador restaurado: {softDeleted.Label}",
+                details: $"Edificio: {softDeleted.BuildingExternalId}, Piso: {softDeleted.Floor}, Icono: {softDeleted.IconKey}",
+                result: "success",
+                severity: "info",
+                changedByUsername: User.Identity?.Name ?? "admin",
+                cancellationToken: cancellationToken);
+
+            return CreatedAtAction(nameof(GetAll), new { buildingExternalId = softDeleted.BuildingExternalId, floor = softDeleted.Floor }, new
+            {
+                softDeleted.ExternalId,
+                softDeleted.Label,
+                softDeleted.IconKey
+            });
+        }
+
         var marker = new MapMarker
         {
             ExternalId = request.ExternalId.Trim(),

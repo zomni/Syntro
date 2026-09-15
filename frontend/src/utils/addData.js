@@ -454,25 +454,65 @@ const addAnnotationsForFloor = async (floorNumber, expectedRenderSequence) => {
 
 export const CAMPUS_MARKER_BUILDING_ID = "map-general";
 
+// Los iconos estaticos mantienen un tamano fijo relativo al mapa: se reescalan
+// con el zoom (zoom de referencia = 18 => 28px) acotado a un rango legible.
+const STATIC_MARKER_ZOOM_REF = 18;
+const STATIC_MARKER_MIN_SIZE = 14;
+const STATIC_MARKER_MAX_SIZE = 56;
+
+let staticMarkerLayers = new Map();
+let campusMarkersManagedByEditor = false;
+
+export const setCampusMarkersManagedByEditor = (value) => {
+  campusMarkersManagedByEditor = Boolean(value);
+};
+
+export const buildStaticMarkerIcon = (iconKey, size = STATIC_MARKER_ICON_SIZE, className = "map-static-marker-icon") =>
+  L.icon({
+    iconUrl: staticIconUrl(iconKey),
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -10],
+    className,
+  });
+
+export const staticMarkerSizeForZoom = (zoom, baseSize = STATIC_MARKER_ICON_SIZE) => {
+  const scale = map.getZoomScale(zoom, STATIC_MARKER_ZOOM_REF);
+  return Math.round(Math.min(STATIC_MARKER_MAX_SIZE, Math.max(STATIC_MARKER_MIN_SIZE, baseSize * scale)));
+};
+
+export const rescaleStaticMarkers = () => {
+  const size = staticMarkerSizeForZoom(map.getZoom());
+  staticMarkerLayers.forEach(({ layer, iconKey }) => {
+    layer.setIcon(buildStaticMarkerIcon(iconKey, size));
+  });
+};
+
+map.on("zoomend", rescaleStaticMarkers);
+rescaleStaticMarkers();
+
 export const renderMapMarkerLayer = (marker) => {
   if (!Array.isArray(marker.latitude) && typeof marker.latitude !== "number") return null;
   if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") return null;
 
-  const icon = L.icon({
-    iconUrl: staticIconUrl(marker.iconKey),
-    iconSize: [STATIC_MARKER_ICON_SIZE, STATIC_MARKER_ICON_SIZE],
-    iconAnchor: [STATIC_MARKER_ICON_SIZE / 2, STATIC_MARKER_ICON_SIZE / 2],
-    popupAnchor: [0, -10],
-    className: "map-static-marker-icon",
-  });
-
-  return L.marker([marker.latitude, marker.longitude], {
-    icon,
+  const layer = L.marker([marker.latitude, marker.longitude], {
+    icon: buildStaticMarkerIcon(marker.iconKey),
     pane: "roomsPane",
     interactive: false,
     keyboard: false,
     zIndexOffset: 400,
-  }).addTo(roomLayerGroup);
+  });
+
+  const keyed = String(marker.externalId || "");
+  if (keyed) {
+    staticMarkerLayers.set(keyed, { layer, iconKey: marker.iconKey });
+    layer.on("remove", () => {
+      staticMarkerLayers.delete(keyed);
+    });
+  }
+
+  layer.addTo(roomLayerGroup);
+  return layer;
 };
 
 const extractPolygonRings = (features) => {
@@ -606,6 +646,7 @@ const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
 
   for (const marker of globalMarkers) {
     if (String(marker.buildingExternalId) !== CAMPUS_MARKER_BUILDING_ID) continue;
+    if (campusMarkersManagedByEditor) continue;
     if (renderMapMarkerLayer(marker)) paintedCount += 1;
   }
 
