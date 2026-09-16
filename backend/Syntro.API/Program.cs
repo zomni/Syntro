@@ -156,8 +156,11 @@ builder.Services
 
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseSqlite(resolvedSqliteConnectionString)
-        .AddInterceptors(sp.GetRequiredService<AuditSaveChangesInterceptor>()));
+        .AddInterceptors(
+            sp.GetRequiredService<AuditSaveChangesInterceptor>(),
+            sp.GetRequiredService<SqliteConnectionInterceptor>()));
 builder.Services.AddSingleton<AuditSaveChangesInterceptor>();
+builder.Services.AddSingleton<SqliteConnectionInterceptor>();
 builder.Services.AddScoped<IPasswordHasher<AuthUser>, PasswordHasher<AuthUser>>();
 builder.Services.AddScoped<LdapAuthenticationService>();
 builder.Services.AddScoped<MfaService>();

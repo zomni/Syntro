@@ -230,6 +230,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       removedSyncedRoomExternalIds: [],
       removedAnnotationExternalIds: [],
       removedMarkerExternalIds: [],
+      roomSignatures: {},
       pendingMarkerIcon: null,
       paletteOpen: false,
       dragging: null,
@@ -409,6 +410,12 @@ const fetchMarkersForFloor = async (buildingExternalId, floor) => {
 
 const loadRoomsForFloor = async (buildingExternalId, floor) => {
   currentEditorState.rooms = await fetchRoomsForFloor(buildingExternalId, floor);
+  currentEditorState.roomSignatures = {};
+  for (const room of currentEditorState.rooms) {
+    if (room.isManual === true) {
+      currentEditorState.roomSignatures[room.externalId] = buildRoomSaveSignature(room);
+    }
+  }
   currentEditorState.annotations = await loadAnnotationsForFloor(buildingExternalId, floor);
   currentEditorState.markers = await fetchMarkersForFloor(buildingExternalId, floor);
 };
@@ -2949,6 +2956,7 @@ const saveRoomEditor = async () => {
 
   const savedBuildingId = currentEditorState.buildingExternalId;
   setAdminMapToolsStatus("Guardando salas y marcas...");
+  showSaveToast("Guardando...");
 
   const errors = [];
 
@@ -2963,7 +2971,7 @@ const saveRoomEditor = async () => {
         method: "DELETE",
         credentials: "include",
       });
-      if (!res.ok) {
+      if (!res.ok && res.status !== 404) {
         let msg = `Error al eliminar la sala '${externalId}'.`;
         try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
         pushError(msg);
@@ -3010,8 +3018,15 @@ const saveRoomEditor = async () => {
           pushError(msg);
         } else {
           room.isNew = false;
+          if (currentEditorState.roomSignatures) {
+            currentEditorState.roomSignatures[room.externalId] = buildRoomSaveSignature(room);
+          }
         }
       } else if (room.isManual === true) {
+        const previousSignature = (currentEditorState.roomSignatures || {})[room.externalId];
+        if (previousSignature && buildRoomSaveSignature(room) === previousSignature) {
+          continue;
+        }
         const coordinates = parseGeometryToCoordinates(room.geometryJson);
         const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
           method: "PUT",
@@ -3034,6 +3049,8 @@ const saveRoomEditor = async () => {
           let msg = `Error al actualizar sala '${room.displayName}'.`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
           pushError(msg);
+        } else if (currentEditorState.roomSignatures) {
+          currentEditorState.roomSignatures[room.externalId] = buildRoomSaveSignature(room);
         }
       }
     }
@@ -3226,6 +3243,27 @@ const parseGeometryToCoordinates = (geometryJson) => {
   } catch {
     return [];
   }
+};
+
+const buildRoomSaveSignature = (room) => {
+  const coords = parseGeometryToCoordinates(room.geometryJson).map((c) => [
+    Number(c[0].toFixed(7)),
+    Number(c[1].toFixed(7)),
+  ]);
+  return JSON.stringify({
+    externalId: room.externalId,
+    buildingExternalId: room.buildingExternalId,
+    floor: room.floor,
+    displayName: room.displayName,
+    shortName: room.shortName,
+    type: room.type,
+    unit: room.unit,
+    service: room.service,
+    status: room.status,
+    capacity: room.capacity ?? null,
+    notes: room.notes || "",
+    coordinates: coords,
+  });
 };
 
 const METERS_PER_DEG_LAT = 111_320;
