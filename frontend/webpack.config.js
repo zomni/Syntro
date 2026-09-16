@@ -33,6 +33,7 @@ module.exports = {
       "@app/webPublicControls": src("components", "webPublicControls.js"),
       "@app/manualBuildingEditor": src("components", "manualBuildingEditor.js"),
       "@app/sessionModeBadge": src("components", "sessionModeBadge.js"),
+"@app/sessionExpiryOverlay": src("components", "sessionExpiryOverlay.js"),
       "@app/buildingGeometryEditor": src("components", "buildingGeometryEditor.js"),
       "@app/campusMarkerEditor": src("components", "campusMarkerEditor.js"),
       "@app/walkingRouteEditor": src("components", "walkingRouteEditor.js"),

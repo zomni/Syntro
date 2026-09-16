@@ -18,6 +18,8 @@ import {
 
 const controlsId = "campus-marker-editor-controls";
 const buttonId = "campus-marker-editor-toggle";
+const deleteButtonId = "campus-marker-delete-button";
+const undoButtonId = "campus-marker-undo-button";
 const generalFloor = -1;
 
 let paletteOpen = false;
@@ -44,6 +46,29 @@ let baseCampusMarkerLayers = new Map();
 let baseRenderFrameId = null;
 
 const getEditorControls = () => document.getElementById(controlsId);
+
+const updateCampusMarkerToolButtons = () => {
+  const deleteButton = document.getElementById(deleteButtonId);
+  const undoButton = document.getElementById(undoButtonId);
+  if (!deleteButton || !undoButton) return;
+  const canDelete = Boolean(selectedExternalId);
+  const canUndo = editorUndoStack.length > 0;
+  deleteButton.disabled = !canDelete;
+  undoButton.disabled = !canUndo;
+  deleteButton.title = canDelete
+    ? "Eliminar marcador seleccionado"
+    : "Selecciona un marcador para eliminarlo";
+  undoButton.title = canUndo
+    ? "Deshacer ultima accion"
+    : "No hay acciones para deshacer";
+};
+
+const setCampusMarkerToolButtonsVisible = (visible) => {
+  const wrapper = getEditorControls();
+  if (!wrapper) return;
+  wrapper.classList.toggle("is-active", visible);
+  if (visible) updateCampusMarkerToolButtons();
+};
 
 const setToolButtonContent = (button, icon, label = "") => {
   const labelMarkup = label ? `<span class="map-tool-button-label">${label}</span>` : "";
@@ -293,6 +318,7 @@ const activateEditor = async () => {
 
   editorZoomHandler = onEditorZoom;
   map.on("zoomend", editorZoomHandler);
+  setCampusMarkerToolButtonsVisible(true);
 };
 
 const deactivateEditor = () => {
@@ -315,6 +341,7 @@ const deactivateEditor = () => {
   editorUndoStack = [];
   editorRedoStack = [];
   setCampusMarkersManagedByEditor(false);
+  setCampusMarkerToolButtonsVisible(false);
   if (baseRenderFrameId) cancelAnimationFrame(baseRenderFrameId);
   baseRenderFrameId = requestAnimationFrame(async () => {
     baseRenderFrameId = null;
@@ -349,6 +376,7 @@ const selectEditorMarker = (externalId) => {
   }
   const label = info?.marker ? staticIconLabel(info.marker.iconKey) : "";
   setAdminMapToolsStatus(`Marcador seleccionado (${label}). Supr para borrar, arrastralo para mover.`);
+  updateCampusMarkerToolButtons();
 };
 
 const deselectAllEditorMarkers = () => {
@@ -356,6 +384,7 @@ const deselectAllEditorMarkers = () => {
   editorMarkers.forEach(({ layer }) => {
     layer.getElement()?.classList.remove("is-selected");
   });
+  updateCampusMarkerToolButtons();
 };
 
 const deleteSelectedEditorMarker = async () => {
@@ -372,6 +401,7 @@ const deleteSelectedEditorMarker = async () => {
   editorUndoStack.push({ type: "delete", marker: markerSnapshot });
   editorRedoStack = [];
   setAdminMapToolsStatus(`Marcador '${staticIconLabel(markerSnapshot.iconKey)}' eliminado.`);
+  updateCampusMarkerToolButtons();
 };
 
 // ─── Undo / Redo ────────────────────────────────────────────────────────────
@@ -412,6 +442,7 @@ const editorUndo = async () => {
       break;
     }
   }
+  updateCampusMarkerToolButtons();
 };
 
 const editorRedo = async () => {
@@ -450,6 +481,7 @@ const editorRedo = async () => {
       break;
     }
   }
+  updateCampusMarkerToolButtons();
 };
 
 // ─── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -545,6 +577,7 @@ const placeCampusMarker = async (latlng, iconKey) => {
     setAdminMapToolsStatus(
       `Marcador '${staticIconLabel(iconKey)}' guardado. Seleccionado para mover o editar.`
     );
+    updateCampusMarkerToolButtons();
   } else {
     renderMapMarkerLayer(marker);
     setAdminMapToolsStatus(
@@ -723,6 +756,36 @@ const createEditorControls = () => {
   });
 
   wrapper.appendChild(button);
+
+  const deleteButton = document.createElement("button");
+  deleteButton.id = deleteButtonId;
+  deleteButton.className = "dashboard-link manual-building-editor-button building-tool-button";
+  deleteButton.type = "button";
+  setToolButtonContent(deleteButton, "&#128465;");
+  deleteButton.title = "Eliminar marcador seleccionado";
+  deleteButton.setAttribute("aria-label", deleteButton.title);
+  deleteButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void deleteSelectedEditorMarker();
+  });
+
+  const undoButton = document.createElement("button");
+  undoButton.id = undoButtonId;
+  undoButton.className = "dashboard-link manual-building-editor-button building-tool-button";
+  undoButton.type = "button";
+  setToolButtonContent(undoButton, "&#8634;");
+  undoButton.title = "Deshacer ultima accion";
+  undoButton.setAttribute("aria-label", undoButton.title);
+  undoButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    void editorUndo();
+  });
+
+  wrapper.appendChild(deleteButton);
+  wrapper.appendChild(undoButton);
+  setCampusMarkerToolButtonsVisible(false);
   sectionBody.appendChild(wrapper);
 };
 

@@ -471,10 +471,26 @@ public class AuthController : Controller
     [HttpGet]
     public async Task<IActionResult> KeepAlive()
     {
+        return await RenewSessionCookieAsync()
+            ? NoContent()
+            : Unauthorized();
+    }
+
+    [Authorize]
+    [HttpGet("/api/auth/keep-alive")]
+    public async Task<IActionResult> KeepAliveApi()
+    {
+        return await RenewSessionCookieAsync()
+            ? NoContent()
+            : Unauthorized();
+    }
+
+    private async Task<bool> RenewSessionCookieAsync()
+    {
         var authResult = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
         if (!authResult.Succeeded || authResult.Principal is null)
         {
-            return Unauthorized();
+            return false;
         }
 
         var properties = authResult.Properties ?? new AuthenticationProperties();
@@ -488,8 +504,14 @@ public class AuthController : Controller
             authResult.Principal,
             properties);
 
-        return NoContent();
+        return true;
     }
+
+    private double GetSessionIdleMinutes() =>
+        _configuration.GetValue<double?>("SessionSettings:IdleMinutes") ?? 15;
+
+    private double GetSessionWarningMinutes() =>
+        _configuration.GetValue<double?>("SessionSettings:WarningMinutes") ?? 14;
 
     [HttpGet]
     public IActionResult AccessDenied()
@@ -502,7 +524,16 @@ public class AuthController : Controller
     {
         if (User.Identity?.IsAuthenticated != true)
         {
-            return Ok(new { isAuthenticated = false, username = "", role = "", isAdmin = false, sites = Array.Empty<object>() });
+            return Ok(new
+            {
+                isAuthenticated = false,
+                username = "",
+                role = "",
+                isAdmin = false,
+                sites = Array.Empty<object>(),
+                idleMinutes = GetSessionIdleMinutes(),
+                warningMinutes = GetSessionWarningMinutes()
+            });
         }
 
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
@@ -518,7 +549,9 @@ public class AuthController : Controller
             username = User.FindFirstValue(ClaimTypes.Name) ?? string.Empty,
             role,
             isAdmin = string.Equals(role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase),
-            sites
+            sites,
+            idleMinutes = GetSessionIdleMinutes(),
+            warningMinutes = GetSessionWarningMinutes()
         });
     }
 

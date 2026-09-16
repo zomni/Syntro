@@ -27,6 +27,7 @@ const activeModes = new Map([
 export const ensureAdminMapToolsPanel = () => {
   let panel = document.getElementById(panelId);
   if (panel) {
+    panel.hidden = false;
     positionAdminMapToolsPanel();
     return panel;
   }
@@ -66,6 +67,9 @@ export const ensureAdminMapToolsPanel = () => {
     const detail = event.detail || {};
     if (detail?.isAuthenticated === false) {
       collapseAdminMapToolsPanel();
+      panel.hidden = true;
+    } else if (detail?.isAuthenticated === true) {
+      panel.hidden = false;
     }
     scheduleAdminMapToolsPanelPosition();
   });
@@ -116,6 +120,8 @@ const recheckSessionAndCollapse = async () => {
     const session = await response.json();
     if (session?.isAuthenticated === false) {
       collapseAdminMapToolsPanel();
+      const panel = document.getElementById(panelId);
+      if (panel) panel.hidden = true;
     }
   } catch {
     // Sin respuesta del backend: no se fuerza el colapso.

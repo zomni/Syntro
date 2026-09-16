@@ -20,6 +20,9 @@ import "@app/routePlanner";
 // Backend session mode indicator
 import { initSessionModeBadge } from "@app/sessionModeBadge";
 
+// Session expiry warning overlay with automatic renewal on activity
+import { initSessionExpiryOverlay } from "@app/sessionExpiryOverlay";
+
 // Manual building polygon editor for admins
 import { initManualBuildingEditor } from "@app/manualBuildingEditor";
 
@@ -120,6 +123,7 @@ const applyInitialCampus = () => {
 window.addEventListener(identifiers.events.sitesLoaded, applyInitialCampus);
 
 initSessionModeBadge();
+initSessionExpiryOverlay();
 initWalkingRouteLayer();
 initNetworkTelemetryPanel();
 initManualBuildingEditor();
