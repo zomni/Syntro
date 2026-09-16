@@ -454,11 +454,8 @@ const addAnnotationsForFloor = async (floorNumber, expectedRenderSequence) => {
 
 export const CAMPUS_MARKER_BUILDING_ID = "map-general";
 
-// Los iconos estaticos mantienen un tamano fijo relativo al mapa: se reescalan
-// con el zoom (zoom de referencia = 18 => 28px) acotado a un rango legible.
-const STATIC_MARKER_ZOOM_REF = 18;
-const STATIC_MARKER_MIN_SIZE = 14;
-const STATIC_MARKER_MAX_SIZE = 56;
+// Los iconos estaticos mantienen un tamano fijo por zoom (lookup manual).
+const ZOOM_ICON_SIZE = { 15: 14, 16: 14, 17: 20, 18: 20, 19: 24 };
 
 let staticMarkerLayers = new Map();
 let campusMarkersManagedByEditor = false;
@@ -481,9 +478,9 @@ export const buildStaticMarkerIcon = (iconKey, size = STATIC_MARKER_ICON_SIZE, c
     className,
   });
 
-export const staticMarkerSizeForZoom = (zoom, baseSize = STATIC_MARKER_ICON_SIZE) => {
-  const scale = map.getZoomScale(zoom, STATIC_MARKER_ZOOM_REF);
-  return Math.round(Math.min(STATIC_MARKER_MAX_SIZE, Math.max(STATIC_MARKER_MIN_SIZE, baseSize * scale)));
+export const staticMarkerSizeForZoom = (zoom) => {
+  const z = Math.round(zoom);
+  return ZOOM_ICON_SIZE[z] ?? (z < 15 ? 14 : 24);
 };
 
 export const rescaleStaticMarkers = () => {
@@ -501,7 +498,7 @@ export const renderMapMarkerLayer = (marker) => {
   if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") return null;
 
   const layer = L.marker([marker.latitude, marker.longitude], {
-    icon: buildStaticMarkerIcon(marker.iconKey),
+    icon: buildStaticMarkerIcon(marker.iconKey, staticMarkerSizeForZoom(map.getZoom())),
     pane: "roomsPane",
     interactive: false,
     keyboard: false,
