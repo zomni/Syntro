@@ -1607,6 +1607,26 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
     margin: 4px 0;
 }
 
+.room-editor-toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100000;
+    background: #065f46;
+    color: #ffffff;
+    padding: 10px 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font-size: 13px;
+    max-width: 80%;
+    cursor: pointer;
+}
+
+.room-editor-toast.is-error {
+    background: #b91c1c;
+}
+
 .room-editor-icon-wrapper {
     position: relative;
     display: inline-flex;

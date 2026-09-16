@@ -811,7 +811,7 @@ const updateBottomBar = () => {
   const sugItem = document.createElement("div");
   sugItem.className = "room-editor-dropdown-item";
   sugItem.innerHTML = `${ICONS.suggest} Sugerir salas automaticamente`;
-  sugItem.addEventListener("click", () => { closeDropdown(); runQuickSuggestion(); });
+  sugItem.addEventListener("click", () => { runQuickSuggestion(); });
   dropdown.appendChild(sugItem);
 
   if (hasSuggestions) {
@@ -2397,6 +2397,7 @@ const buildNewRoomObject = (geoJsonCoords, extra = {}) => ({
   capacity: null,
   geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
   source: "manual",
+  isManual: true,
   notes: "",
   isNew: true,
   rotation: 0,
@@ -2929,6 +2930,20 @@ const saveRoomEditorMarkers = async (state, pushError) => {
   }
 };
 
+const showSaveToast = (message, isError = false) => {
+  const container = popupContainer || document.body;
+  const existing = container.querySelector(".room-editor-toast");
+  if (existing) existing.remove();
+
+  const toast = document.createElement("div");
+  toast.className = `room-editor-toast${isError ? " is-error" : ""}`;
+  toast.textContent = message;
+  toast.addEventListener("click", () => toast.remove());
+  container.appendChild(toast);
+
+  window.setTimeout(() => toast.remove(), isError ? 6000 : 2500);
+};
+
 const saveRoomEditor = async () => {
   if (!currentEditorState) return;
 
@@ -3079,7 +3094,9 @@ const saveRoomEditor = async () => {
     await saveRoomEditorMarkers(currentEditorState, pushError);
 
     if (errors.length > 0) {
-      setAdminMapToolsStatus(`${errors[0]}${errors.length > 1 ? ` (+${errors.length - 1} mas)` : ""} `);
+      const message = `${errors[0]}${errors.length > 1 ? ` (+${errors.length - 1} mas)` : ""}`;
+      setAdminMapToolsStatus(message + " ");
+      showSaveToast(message, true);
       return;
     }
 
@@ -3095,12 +3112,15 @@ const saveRoomEditor = async () => {
     requestAdminMapToolMode(null);
     setAdminMapToolsStatus("");
 
+    showSaveToast("Salas, marcas y marcadores guardados correctamente.");
+
     refreshCurrentMapData();
 
     window.dispatchEvent(new CustomEvent("syntro-rooms-changed", { detail: { buildingExternalId: savedBuildingId } }));
   } catch (error) {
     console.error("Error saving rooms:", error);
     setAdminMapToolsStatus("Error al guardar: " + (error.message || "error inesperado"));
+    showSaveToast("Error al guardar: " + (error.message || "error inesperado"), true);
   }
 };
 
