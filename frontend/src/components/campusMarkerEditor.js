@@ -528,6 +528,9 @@ const onEditorZoom = () => {
   const size = staticMarkerSizeForZoom(map.getZoom());
   editorMarkers.forEach(({ layer, marker }) => {
     layer.setIcon(buildStaticMarkerIcon(marker.iconKey, size, editorIconClass));
+    if (String(marker.externalId) === String(selectedExternalId)) {
+      layer.getElement()?.classList.add("is-selected");
+    }
   });
 };
 
@@ -783,8 +786,12 @@ const createEditorControls = () => {
     void editorUndo();
   });
 
-  wrapper.appendChild(deleteButton);
-  wrapper.appendChild(undoButton);
+  const actions = document.createElement("div");
+  actions.className = "campus-marker-tool-actions";
+  actions.appendChild(deleteButton);
+  actions.appendChild(undoButton);
+
+  wrapper.appendChild(actions);
   setCampusMarkerToolButtonsVisible(false);
   sectionBody.appendChild(wrapper);
 };

@@ -435,14 +435,30 @@
     content: none;
 }
 
-#campus-marker-delete-button,
-#campus-marker-undo-button {
+.campus-marker-tool-actions {
+    grid-column: 1 / -1;
     display: none;
+    width: 100%;
+    gap: 6px;
 }
 
-#campus-marker-editor-controls.is-active #campus-marker-delete-button,
-#campus-marker-editor-controls.is-active #campus-marker-undo-button {
-    display: inline-flex;
+#campus-marker-editor-controls.is-active .campus-marker-tool-actions {
+    display: flex;
+}
+
+.campus-marker-tool-actions .building-tool-button {
+    flex: 1 1 0;
+}
+
+#campus-marker-delete-button {
+    border-color: var(--pi-danger);
+    background: var(--pi-danger);
+}
+
+#campus-marker-delete-button:hover,
+#campus-marker-delete-button.is-active {
+    border-color: var(--pi-danger-dark);
+    background: var(--pi-danger-dark);
 }
 
 #campus-marker-editor-controls .building-tool-button:disabled {
@@ -1700,7 +1716,7 @@ html[data-walking-route-free-draw="true"] .walking-route-vertex-marker {
 }
 
 .campus-editor-marker-icon.is-selected {
-    outline: 2px solid #0b6bcb;
+    outline: 2px solid #7c3aed;
     outline-offset: 1px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.9);

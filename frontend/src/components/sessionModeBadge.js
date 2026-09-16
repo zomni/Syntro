@@ -201,7 +201,7 @@ const ensureInventoryLink = (session) => {
   link = document.createElement("a");
   link.id = inventoryLinkId;
   link.className = "dashboard-link session-inventory-link";
-  link.href = `${BACKEND_API_URL}/dashboard/inventory`;
+  link.href = `${BACKEND_API_URL}/dashboard`;
   link.target = identifiers.windowName;
   link.rel = "noreferrer";
   link.textContent = "Inventario";
