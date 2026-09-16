@@ -62,6 +62,37 @@ public class BackendAuthService
         await NormalizeLegacyRolesAsync(cancellationToken);
     }
 
+    // Tras importar un paquete (que sustituye toda la DB), la identidad del
+    // administrador debe volver a ser unicamente la del .env: se descartan
+    // todos los usuarios admin de la DB restaurada y se crea el configurado.
+    public async Task RecreateConfiguredAdminOnlyAsync(CancellationToken cancellationToken = default)
+    {
+        var admins = await _context.AuthUsers
+            .Where(user => user.Role == AppRoles.Admin)
+            .ToListAsync(cancellationToken);
+
+        if (admins.Count > 0)
+        {
+            _context.AuthUsers.RemoveRange(admins);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        var username = GetString("AuthSettings:AdminUsername", "ADMIN_EMAIL")
+                       ?? _configuration["SeedUsers:Admin:Username"];
+        var password = GetString("AuthSettings:AdminPassword", "ADMIN_PASSWORD")
+                       ?? _configuration["SeedUsers:Admin:Password"];
+
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
+        {
+            throw new InvalidOperationException(
+                "Tras restaurar el paquete no hay administrador configurado: faltan las variables " +
+                "ADMIN_EMAIL / ADMIN_PASSWORD requeridas para recrear el acceso inicial.");
+        }
+
+        await EnsureUserAsync(username, password, AppRoles.Admin, cancellationToken);
+        await NormalizeLegacyRolesAsync(cancellationToken);
+    }
+
     public async Task<LoginResult> AuthenticateAsync(
         string username,
         string password,

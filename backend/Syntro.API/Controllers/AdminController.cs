@@ -32,6 +32,7 @@ public class AdminController : Controller
     private readonly NetworkTelemetryService _networkTelemetryService;
     private readonly SiteViewportOverridesService _viewportOverridesService;
     private readonly IPasswordHasher<AuthUser> _passwordHasher;
+    private readonly BackendAuthService _authService;
     private const string ManualInventorySourceFile = "manual-admin";
     private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
     private const string DefaultPdfAllowedMimeTypes = "application/pdf,application/x-pdf";
@@ -45,7 +46,8 @@ public class AdminController : Controller
         EquipmentDeliveryDocumentService equipmentDeliveryDocumentService,
         NetworkTelemetryService networkTelemetryService,
         SiteViewportOverridesService viewportOverridesService,
-        IPasswordHasher<AuthUser> passwordHasher)
+        IPasswordHasher<AuthUser> passwordHasher,
+        BackendAuthService authService)
     {
         _context = context;
         _auditLogService = auditLogService;
@@ -56,6 +58,7 @@ public class AdminController : Controller
         _networkTelemetryService = networkTelemetryService;
         _viewportOverridesService = viewportOverridesService;
         _passwordHasher = passwordHasher;
+        _authService = authService;
     }
 
     public async Task<IActionResult> Index(
@@ -1265,7 +1268,10 @@ public class AdminController : Controller
             Directory.CreateDirectory(backendStaging);
             Directory.CreateDirectory(frontendStaging);
 
-            CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
+            await CreateConsistentDatabaseCopyAsync(
+                GetDatabaseFilePath(),
+                Path.Combine(backendStaging, "syntro.db"),
+                cancellationToken);
             CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
             CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
             CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
@@ -4900,10 +4906,13 @@ public class AdminController : Controller
             Directory.CreateDirectory(backendStaging);
             Directory.CreateDirectory(frontendStaging);
 
-            CopyFileIfExists(GetDatabaseFilePath(), Path.Combine(backendStaging, "syntro.db"));
+            await CreateConsistentDatabaseCopyAsync(
+                GetDatabaseFilePath(),
+                Path.Combine(backendStaging, "syntro.db"),
+                CancellationToken.None);
             CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
             CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
-            CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
+            CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));;
 
             var frontendDataDirectory = ResolveFrontendDataDirectory();
             if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendDataDirectory))
@@ -5036,6 +5045,11 @@ public class AdminController : Controller
         ValidateSqliteFile(dbSource);
         await RestoreDatabaseFromFileAsync(dbSource);
 
+        // El paquete sustituyo toda la DB (incluidos los usuarios). La identidad
+        // del administrador debe reconstruirse unicamente desde el .env actual:
+        // se descartan los admins venidos del paquete.
+        await _authService.RecreateConfiguredAdminOnlyAsync(cancellationToken);
+
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-forms"), GetInventoryFormPdfDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-documents"), GetInventoryDocumentsDirectory(), overwrite: true);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
@@ -5070,6 +5084,35 @@ public class AdminController : Controller
         }
 
         System.IO.File.Copy(sourcePath, destinationPath, overwrite: true);
+    }
+
+    private static async Task CreateConsistentDatabaseCopyAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        if (!System.IO.File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        // SQLite online backup produce una copia consistente aunque la DB
+        // este en WAL con transacciones pendientes en el sidecar -wal.
+        var source = new SqliteConnection($"Data Source={sourcePath}");
+        await source.OpenAsync(cancellationToken);
+
+        var destination = new SqliteConnection($"Data Source={destinationPath}");
+        await destination.OpenAsync(cancellationToken);
+
+        source.BackupDatabase(destination);
+        destination.Close();
+        source.Close();
     }
 
     private static void CopyDirectoryIfExists(string sourceDirectory, string destinationDirectory, bool overwrite = false)

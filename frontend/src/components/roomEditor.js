@@ -525,6 +525,7 @@ const initPopupMap = (geometry) => {
   popupMap.on("click", handleMapDeselectClick);
 
   const container = popupMap.getContainer();
+  container.addEventListener("mousedown", handleBoxSelectStart);
   container.addEventListener("dragover", (e) => {
     if (!currentEditorState) return;
     const types = e.dataTransfer?.types;
@@ -544,6 +545,94 @@ const initPopupMap = (geometry) => {
     stopMarkerPlacement();
     placeMarkerAt(latlng, draggedKey);
   });
+};
+
+const handleBoxSelectStart = (e) => {
+  if (!currentEditorState || !popupMap || currentEditorState.mode !== "select") return;
+  if (e.button !== 0) return;
+  if (e.target?.closest?.(".room-editor-marker-icon")) return;
+
+  const container = popupMap.getContainer();
+  const rect = container.getBoundingClientRect();
+  const toPoint = (ev) => L.point(ev.clientX - rect.left, ev.clientY - rect.top);
+  const startPoint = toPoint(e);
+  const startLatLng = popupMap.containerPointToLatLng(startPoint);
+
+  const box = L.rectangle(L.latLngBounds(startLatLng, startLatLng), {
+    color: "#7c3aed",
+    weight: 1.5,
+    dashArray: "6 6",
+    fillColor: "#7c3aed",
+    fillOpacity: 0.1,
+    interactive: false,
+  }).addTo(popupMap);
+
+  popupMap.dragging.disable();
+  container.style.cursor = "crosshair";
+  let active = true;
+
+  const onMove = (ev) => {
+    if (!active) return;
+    const latlng = popupMap.containerPointToLatLng(toPoint(ev));
+    box.setBounds(L.latLngBounds(startLatLng, latlng));
+  };
+
+  const onUp = (ev) => {
+    if (!active) return;
+    active = false;
+    popupMap.off("mousemove", onMove);
+    popupMap.off("mouseup", onUp);
+    popupMap.dragging.enable();
+    container.style.cursor = "";
+    const endPoint = toPoint(ev);
+    const dx = Math.abs(endPoint.x - startPoint.x);
+    const dy = Math.abs(endPoint.y - startPoint.y);
+    const bounds = box.getBounds();
+    popupMap.removeLayer(box);
+    if (dx < 5 && dy < 5) return;
+    applyBoxSelection(bounds, !!(ev.ctrlKey || ev.metaKey));
+  };
+
+  popupMap.on("mousemove", onMove);
+  popupMap.on("mouseup", onUp);
+};
+
+const applyBoxSelection = (bounds, ctrlAdd) => {
+  const rooms = currentEditorState.rooms || [];
+  const hitRooms = rooms.filter((room) => {
+    const layer = currentEditorState.roomLayers.find((l) => l.roomData === room);
+    return layer && layer.getBounds().intersects(bounds);
+  });
+  const hitIds = hitRooms.map((r) => r.externalId);
+  currentEditorState.selectedRoomIds = ctrlAdd
+    ? Array.from(new Set([...getSelectedRoomIds(), ...hitIds]))
+    : hitIds;
+  syncSelectedRoomFromIds();
+  currentEditorState.isDirty = true;
+
+  const annotations = currentEditorState.annotations || [];
+  const boxedAnnotations = annotations.filter((a) => {
+    const layer = currentEditorState.roomLayers.find((l) => l.roomData === a);
+    return layer && layer.getBounds().intersects(bounds);
+  });
+
+  if (boxedAnnotations.length) {
+    pushUndo({ type: "delete-annotations", annotations: boxedAnnotations });
+    currentEditorState.annotations = annotations.filter((a) => !boxedAnnotations.some((del) => del.externalId === a.externalId));
+    for (const annotation of boxedAnnotations) {
+      if (!annotation.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(annotation.externalId)) {
+        currentEditorState.removedAnnotationExternalIds.push(annotation.externalId);
+      }
+    }
+  }
+
+  currentEditorState._suppressDeselectClick = true;
+  renderRooms();
+  updatePopupContent();
+  const msg = boxedAnnotations.length
+    ? `${hitIds.length} sala(s) seleccionadas. ${boxedAnnotations.length} nota(s) de puerta/escalera eliminadas del marco. G para guardar.`
+    : `${hitIds.length} sala(s) seleccionadas. Ctrl+drag agrega al marco, G para guardar.`;
+  setAdminMapToolsStatus(msg);
 };
 
 const handleMapDeselectClick = (e) => {
@@ -1277,8 +1366,6 @@ const renderRooms = () => {
         const isSelectedShape = ids.includes(shape.externalId);
         if (isSelectedShape && e.originalEvent.shiftKey) {
           ids.length > 1 ? enableMultiRotateLayer(e) : enableRotateLayer(layer, shape, e);
-        } else if (isSelectedShape && e.originalEvent.ctrlKey) {
-          ids.length > 1 ? enableMultiDragLayer(e) : enableDragLayer(layer, shape, e);
         } else {
           beginMultiSelectInteraction(layer, shape, e);
         }
@@ -1483,7 +1570,11 @@ const beginMultiSelectInteraction = (layer, room, e) => {
     popupMap.off("mouseup", onMapUp);
     if (moved) return;
     popupMap.dragging.enable();
-    toggleRoomSelection(room);
+    if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+      toggleRoomSelection(room);
+    } else {
+      selectOnlyRoom(room);
+    }
   };
 
   popupMap.on("mousemove", onMapMove);
@@ -1915,6 +2006,16 @@ const toggleRoomSelection = (room) => {
   if (getSelectedRoomIds().length > 0) {
     setAdminMapToolsStatus(`${getSelectedRoomIds().length} elemento(s) seleccionado(s). Ctrl+arrastrar para mover, Shift+arrastrar para rotar, G para guardar.`);
   }
+};
+
+const selectOnlyRoom = (room) => {
+  if (!currentEditorState) return;
+  currentEditorState.selectedRoomIds = [room.externalId];
+  syncSelectedRoomFromIds();
+  renderRooms();
+  updateSidePanel();
+  updateBottomBar();
+  setAdminMapToolsStatus(`1 sala seleccionada. Ctrl+click para agregar/quitar mas, Ctrl+arrastrar para mover, Shift+arrastrar para rotar, G para guardar.`);
 };
 
 const clearRoomSelection = () => {
