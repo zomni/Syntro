@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Syntro.API.Data;
+using Syntro.API.Models;
 
 namespace Syntro.API.Controllers;
 
@@ -24,7 +25,9 @@ public class SyncedRoomsController : ControllerBase
         [FromQuery] int? floor,
         CancellationToken cancellationToken)
     {
-        var query = _context.SyncedRooms.AsNoTracking().AsQueryable();
+        var query = _context.SyncedRooms
+            .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null);
 
         if (!string.IsNullOrWhiteSpace(buildingExternalId))
         {
@@ -60,5 +63,26 @@ public class SyncedRoomsController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(rooms);
+    }
+
+    [HttpDelete("{externalId}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
+    public async Task<IActionResult> Delete(
+        string externalId,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(externalId))
+            return BadRequest(new { message = "externalId es requerido." });
+
+        var room = await _context.SyncedRooms
+            .FirstOrDefaultAsync(r => r.ExternalId == externalId && r.DeletedAtUtc == null, cancellationToken);
+
+        if (room == null)
+            return NotFound(new { message = $"No se encontro la sala sincronizada '{externalId}'." });
+
+        room.SoftDelete(User.Identity?.Name ?? "admin");
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
     }
 }

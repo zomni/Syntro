@@ -18,7 +18,7 @@ public class RoomLayoutService
     {
         var syncedRooms = await _context.SyncedRooms
             .AsNoTracking()
-            .Where(r => r.BuildingExternalId == buildingExternalId && r.Floor == floor)
+            .Where(r => r.DeletedAtUtc == null && r.BuildingExternalId == buildingExternalId && r.Floor == floor)
             .ToListAsync(ct);
 
         var overrides = await _context.RoomGeometryOverrides
@@ -100,7 +100,7 @@ public class RoomLayoutService
     {
         var syncedFloors = await _context.SyncedRooms
             .AsNoTracking()
-            .Where(r => r.BuildingExternalId == buildingExternalId)
+            .Where(r => r.DeletedAtUtc == null && r.BuildingExternalId == buildingExternalId)
             .GroupBy(r => r.Floor)
             .Select(g => new FloorSummaryDto
             {

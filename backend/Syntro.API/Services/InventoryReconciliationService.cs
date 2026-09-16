@@ -18,7 +18,7 @@ public class InventoryReconciliationService
     public async Task<InventoryReconciliationResult> RunAsync(CancellationToken cancellationToken = default)
     {
         var buildings = await _context.SyncedBuildings.AsNoTracking().ToListAsync(cancellationToken);
-        var rooms = await _context.SyncedRooms.AsNoTracking().ToListAsync(cancellationToken);
+        var rooms = await _context.SyncedRooms.AsNoTracking().Where(r => r.DeletedAtUtc == null).ToListAsync(cancellationToken);
         var aliases = await _context.InventoryAliasRules.AsNoTracking().Where(a => a.IsEnabled).ToListAsync(cancellationToken);
         var items = await _context.ImportedInventoryItems.ToListAsync(cancellationToken);
 

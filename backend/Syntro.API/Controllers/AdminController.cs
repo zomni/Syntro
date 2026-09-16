@@ -68,7 +68,7 @@ public class AdminController : Controller
         var activeSourceFileName = await GetActivePackageSourceAsync();
 
         var buildingsQuery = _context.SyncedBuildings.AsNoTracking();
-        var roomsQuery = _context.SyncedRooms.AsNoTracking();
+        var roomsQuery = _context.SyncedRooms.AsNoTracking().Where(r => r.DeletedAtUtc == null);
         var inventoryQuery = _context.ImportedInventoryItems.AsNoTracking();
         var hasNoPackage = await HasNoPackageDataAsync(cancellationToken);
 
@@ -2007,7 +2007,7 @@ public class AdminController : Controller
 
         var roomsByBuilding = await _context.SyncedRooms
             .AsNoTracking()
-            .Where(r => filteredBuildingIds.Contains(r.SyncedBuildingId))
+            .Where(r => r.DeletedAtUtc == null && filteredBuildingIds.Contains(r.SyncedBuildingId))
             .GroupBy(r => r.BuildingExternalId)
             .Select(g => new
             {
@@ -2143,7 +2143,7 @@ public class AdminController : Controller
                 .CountAsync(item => item.AssignedBuildingExternalId == externalId),
             Rooms = await _context.SyncedRooms
                 .AsNoTracking()
-                .Where(r => r.BuildingExternalId == externalId)
+                .Where(r => r.DeletedAtUtc == null && r.BuildingExternalId == externalId)
                 .OrderBy(r => r.ManualFloor ?? r.Floor)
                 .ThenBy(r => r.ManualName != "" ? r.ManualName : r.Name)
                 .ToListAsync()
@@ -2230,7 +2230,7 @@ public class AdminController : Controller
     [HttpGet("/admin/editsyncedroom/{externalId}")]
     public async Task<IActionResult> EditSyncedRoom(string externalId)
     {
-        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId);
+        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId && r.DeletedAtUtc == null);
         if (room is null)
             return NotFound();
 
@@ -2252,7 +2252,7 @@ public class AdminController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EditSyncedRoom(string externalId, string? manualName, int? manualFloor)
     {
-        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId);
+        var room = await _context.SyncedRooms.FirstOrDefaultAsync(r => r.ExternalId == externalId && r.DeletedAtUtc == null);
         if (room is null)
             return NotFound();
 
@@ -2677,7 +2677,7 @@ public class AdminController : Controller
         {
             assignedRoom = await _context.SyncedRooms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(room => room.ExternalId == assignedRoomExternalId, cancellationToken);
+                .FirstOrDefaultAsync(room => room.ExternalId == assignedRoomExternalId && room.DeletedAtUtc == null, cancellationToken);
 
             if (assignedRoom == null)
             {
@@ -2877,7 +2877,7 @@ public class AdminController : Controller
         {
             var room = await _context.SyncedRooms
                 .AsNoTracking()
-                .FirstOrDefaultAsync(candidate => candidate.ExternalId == resolvedRoomExternalId, cancellationToken);
+                .FirstOrDefaultAsync(candidate => candidate.ExternalId == resolvedRoomExternalId && candidate.DeletedAtUtc == null, cancellationToken);
 
             if (room != null)
             {
@@ -4292,6 +4292,7 @@ public class AdminController : Controller
     {
         var syncedRooms = await _context.SyncedRooms
             .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null)
             .OrderBy(room => room.ManualFloor ?? room.Floor)
             .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
             .ToListAsync();
@@ -4340,6 +4341,7 @@ public class AdminController : Controller
     {
         var syncedRooms = await _context.SyncedRooms
             .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null)
             .OrderBy(room => room.ManualFloor ?? room.Floor)
             .ThenBy(room => room.ManualName != "" ? room.ManualName : room.Name)
             .ToListAsync();
@@ -4878,7 +4880,7 @@ public class AdminController : Controller
     {
         var hasRealData = await _context.ImportedInventoryItems.AnyAsync(ct)
             || await _context.SyncedBuildings.AnyAsync(b => b.IsActive && b.ExternalId != "default-building", ct)
-            || await _context.SyncedRooms.AnyAsync(r => r.ExternalId != "default-room", ct);
+            || await _context.SyncedRooms.AnyAsync(r => r.DeletedAtUtc == null && r.ExternalId != "default-room", ct);
 
         if (!hasRealData || GetDatabaseBackupFiles().Count > 0)
             return null;

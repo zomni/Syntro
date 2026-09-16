@@ -227,6 +227,7 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       suggestionPreviewLayers: [],
       removedExternalIds: [],
       removedManualRoomExternalIds: [],
+      removedSyncedRoomExternalIds: [],
       removedAnnotationExternalIds: [],
       removedMarkerExternalIds: [],
       pendingMarkerIcon: null,
@@ -2486,8 +2487,10 @@ const deleteSelectedRoom = () => {
     for (const room of rooms) {
       if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
         currentEditorState.removedExternalIds.push(room.externalId);
-        if ((room.source || "manual") === "manual") {
+        if (room.isManual === true) {
           currentEditorState.removedManualRoomExternalIds.push(room.externalId);
+        } else {
+          currentEditorState.removedSyncedRoomExternalIds.push(room.externalId);
         }
       }
     }
@@ -2713,9 +2716,13 @@ const undoRoomEditor = () => {
           const idx = currentEditorState.removedExternalIds.indexOf(room.externalId);
           if (idx !== -1) currentEditorState.removedExternalIds.splice(idx, 1);
         }
-        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && (room.source || "manual") === "manual") {
+        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && room.isManual === true) {
           const idx = currentEditorState.removedManualRoomExternalIds.indexOf(room.externalId);
           if (idx !== -1) currentEditorState.removedManualRoomExternalIds.splice(idx, 1);
+        }
+        if (!room.isNew && currentEditorState.removedSyncedRoomExternalIds && room.isManual !== true) {
+          const idx = currentEditorState.removedSyncedRoomExternalIds.indexOf(room.externalId);
+          if (idx !== -1) currentEditorState.removedSyncedRoomExternalIds.splice(idx, 1);
         }
       }
       break;
@@ -2801,8 +2808,11 @@ const redoRoomEditor = () => {
         if (!room.isNew && currentEditorState.removedExternalIds && !currentEditorState.removedExternalIds.includes(room.externalId)) {
           currentEditorState.removedExternalIds.push(room.externalId);
         }
-        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && (room.source || "manual") === "manual" && !currentEditorState.removedManualRoomExternalIds.includes(room.externalId)) {
+        if (!room.isNew && currentEditorState.removedManualRoomExternalIds && room.isManual === true && !currentEditorState.removedManualRoomExternalIds.includes(room.externalId)) {
           currentEditorState.removedManualRoomExternalIds.push(room.externalId);
+        }
+        if (!room.isNew && currentEditorState.removedSyncedRoomExternalIds && room.isManual !== true && !currentEditorState.removedSyncedRoomExternalIds.includes(room.externalId)) {
+          currentEditorState.removedSyncedRoomExternalIds.push(room.externalId);
         }
       }
       break;
@@ -2945,6 +2955,18 @@ const saveRoomEditor = async () => {
       }
     }
 
+    for (const externalId of currentEditorState.removedSyncedRoomExternalIds || []) {
+      const res = await fetch(`${getApiUrl()}/api/synced-rooms/${encodeURIComponent(externalId)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok && res.status !== 404) {
+        let msg = `Error al eliminar la sala '${externalId}'.`;
+        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
+        pushError(msg);
+      }
+    }
+
     for (const room of currentEditorState.rooms) {
       if (room.isNew) {
         const coordinates = parseGeometryToCoordinates(room.geometryJson);
@@ -2974,7 +2996,7 @@ const saveRoomEditor = async () => {
         } else {
           room.isNew = false;
         }
-      } else if ((room.source || "manual") === "manual") {
+      } else if (room.isManual === true) {
         const coordinates = parseGeometryToCoordinates(room.geometryJson);
         const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
           method: "PUT",
@@ -3063,6 +3085,7 @@ const saveRoomEditor = async () => {
 
     currentEditorState.removedExternalIds = [];
     currentEditorState.removedManualRoomExternalIds = [];
+    currentEditorState.removedSyncedRoomExternalIds = [];
     currentEditorState.removedAnnotationExternalIds = [];
 
     setAdminMapToolsStatus("Salas, marcas y marcadores guardados correctamente.");

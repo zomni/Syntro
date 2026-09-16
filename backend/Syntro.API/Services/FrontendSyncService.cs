@@ -65,6 +65,15 @@ public class FrontendSyncService
                 StringComparer.OrdinalIgnoreCase,
                 cancellationToken);
 
+        var tombstonedRooms = await _context.SyncedRooms
+            .AsNoTracking()
+            .Where(r => r.DeletedAtUtc != null)
+            .ToListAsync(cancellationToken);
+
+        var tombstonedRoomExternalIds = tombstonedRooms
+            .Select(r => r.ExternalId)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         _logger.LogInformation("Iniciando sincronización desde frontend data root: {DataRoot}", dataRoot);
 
         await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
@@ -153,6 +162,11 @@ public class FrontendSyncService
 
                 foreach (var room in roomDocument.Rooms)
                 {
+                    if (tombstonedRoomExternalIds.Contains(room.RoomId ?? string.Empty))
+                    {
+                        continue;
+                    }
+
                     syncedRooms.Add(new SyncedRoom
                     {
                         ExternalId = room.RoomId ?? string.Empty,
@@ -182,6 +196,43 @@ public class FrontendSyncService
         }
 
         _context.SyncedRooms.AddRange(syncedRooms);
+
+        foreach (var tombstone in tombstonedRooms)
+        {
+            if (!buildingMap.TryGetValue(tombstone.BuildingExternalId, out var syncedBuilding))
+            {
+                continue;
+            }
+
+            _context.SyncedRooms.Add(new SyncedRoom
+            {
+                ExternalId = tombstone.ExternalId,
+                SyncedBuildingId = syncedBuilding.Id,
+                BuildingExternalId = tombstone.BuildingExternalId,
+                Floor = tombstone.Floor,
+                ManualFloor = tombstone.ManualFloor,
+                Name = tombstone.Name,
+                ManualName = tombstone.ManualName,
+                ShortName = tombstone.ShortName,
+                Type = tombstone.Type,
+                Sector = tombstone.Sector,
+                Unit = tombstone.Unit,
+                Service = tombstone.Service,
+                IsMapped = tombstone.IsMapped,
+                GeometryJson = tombstone.GeometryJson,
+                Status = tombstone.Status,
+                Capacity = tombstone.Capacity,
+                DevicesCount = tombstone.DevicesCount,
+                ResponsibleArea = tombstone.ResponsibleArea,
+                ResponsiblePerson = tombstone.ResponsiblePerson,
+                Notes = tombstone.Notes,
+                SyncedAtUtc = syncedAt,
+                DeletedAtUtc = tombstone.DeletedAtUtc,
+                DeletedBy = tombstone.DeletedBy,
+                IsActive = false
+            });
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         var roomMap = syncedRooms.ToDictionary(r => r.ExternalId, StringComparer.OrdinalIgnoreCase);
@@ -257,7 +308,7 @@ public class FrontendSyncService
     public async Task<FrontendSyncStatus> GetStatusAsync(CancellationToken cancellationToken = default)
     {
         var buildings = await _context.SyncedBuildings.CountAsync(cancellationToken);
-        var rooms = await _context.SyncedRooms.CountAsync(cancellationToken);
+        var rooms = await _context.SyncedRooms.CountAsync(r => r.DeletedAtUtc == null, cancellationToken);
         var equipments = await _context.SyncedEquipments.CountAsync(cancellationToken);
         var latestSync = await _context.SyncedBuildings
             .OrderByDescending(b => b.SyncedAtUtc)

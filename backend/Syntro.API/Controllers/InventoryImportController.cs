@@ -76,6 +76,7 @@ public class InventoryImportController : ControllerBase
 
         var latestRoomChangeUtc = await _context.SyncedRooms
             .AsNoTracking()
+            .Where(r => r.DeletedAtUtc == null)
             .OrderByDescending(x => x.SyncedAtUtc)
             .Select(x => (DateTime?)x.SyncedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
