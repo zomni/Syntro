@@ -178,6 +178,7 @@ builder.Services.AddScoped<TelemetryScanScheduleService>();
 builder.Services.AddScoped<NetworkTelemetryAgentBridgeService>();
 builder.Services.AddSingleton<MlSettingsService>();
 builder.Services.AddSingleton<SiteViewportOverridesService>();
+builder.Services.AddSingleton<PackageRestoreProgressStore>();
 builder.Services.AddSingleton<ItemClassificationService>();
 builder.Services.AddSingleton<RiskPredictionService>();
 builder.Services.AddScoped<MlAutoTrainService>();

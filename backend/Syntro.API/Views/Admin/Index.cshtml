@@ -820,17 +820,52 @@
 
                 xhr.upload.addEventListener("progress", (e) => {
                     if (e.lengthComputable) {
-                        var pct = Math.round((e.loaded / e.total) * 100);
+                        var uploadPct = e.total > 0 ? Math.min(100, Math.round((e.loaded / e.total) * 100)) : 0;
+                        var pct = Math.round(uploadPct * 0.35);
                         if (progressBar) progressBar.style.width = pct + "%";
                         if (percentLabel) {
                             var loadedMB = (e.loaded / 1048576).toFixed(1);
                             var totalMB = (e.total / 1048576).toFixed(1);
-                            percentLabel.textContent = pct + "% \u2014 " + loadedMB + " MB / " + totalMB + " MB";
+                            percentLabel.textContent = uploadPct + "% \u2014 " + loadedMB + " MB / " + totalMB + " MB (subiendo)";
                         }
                     }
                 });
 
+                var packageProgressPoll = null;
+                var stopPackageProgressPoll = () => {
+                    if (packageProgressPoll) {
+                        clearInterval(packageProgressPoll);
+                        packageProgressPoll = null;
+                    }
+                };
+
+                var startPackageProgressPoll = () => {
+                    stopPackageProgressPoll();
+                    packageProgressPoll = setInterval(async () => {
+                        try {
+                            var r = await fetch(packageUploadForm.action.replace("/upload", "/upload-progress"), { headers: { "X-Requested-With": "XMLHttpRequest" } });
+                            var data = await r.json();
+                            if (!data || !data.active) return;
+                            if (progressBar) {
+                                var current = parseFloat(progressBar.style.width) || 0;
+                                if (data.percent > current) progressBar.style.width = data.percent + "%";
+                            }
+                            if (percentLabel && data.percent) percentLabel.textContent = data.percent + "%";
+                            if (titleEl) titleEl.textContent = "Restaurando paquete completo";
+                            if (subtitleEl && data.message) subtitleEl.textContent = data.message;
+                            if (data.failed || data.done) stopPackageProgressPoll();
+                        } catch (err) { }
+                    }, 700);
+                };
+
+                xhr.upload.addEventListener("load", () => {
+                    if (progressBar) progressBar.style.width = "35%";
+                    if (subtitleEl) subtitleEl.textContent = "Restaurando paquete...";
+                    startPackageProgressPoll();
+                });
+
                 xhr.addEventListener("load", () => {
+                    stopPackageProgressPoll();
                     if (xhr.status >= 200 && xhr.status < 300) {
                         var resp;
                         try { resp = JSON.parse(xhr.responseText); } catch { resp = null; }
@@ -855,6 +890,7 @@
                 });
 
                 xhr.addEventListener("error", () => {
+                    stopPackageProgressPoll();
                     if (titleEl) titleEl.textContent = "\u274c Error de conexion";
                     if (subtitleEl) subtitleEl.textContent = "No se pudo conectar con el servidor. Verifica tu conexion.";
                     if (progressBar) progressBar.classList.add("bg-danger");
@@ -865,6 +901,7 @@
                 });
 
                 xhr.addEventListener("abort", () => {
+                    stopPackageProgressPoll();
                     if (titleEl) titleEl.textContent = "Carga cancelada";
                     if (subtitleEl) subtitleEl.textContent = "La restauracion fue interrumpida por el usuario.";
                     if (progressBar) progressBar.classList.add("bg-danger");

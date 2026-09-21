@@ -33,6 +33,7 @@ public class AdminController : Controller
     private readonly SiteViewportOverridesService _viewportOverridesService;
     private readonly IPasswordHasher<AuthUser> _passwordHasher;
     private readonly BackendAuthService _authService;
+    private readonly PackageRestoreProgressStore _packageProgress;
     private const string ManualInventorySourceFile = "manual-admin";
     private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
     private const string DefaultPdfAllowedMimeTypes = "application/pdf,application/x-pdf";
@@ -47,7 +48,8 @@ public class AdminController : Controller
         NetworkTelemetryService networkTelemetryService,
         SiteViewportOverridesService viewportOverridesService,
         IPasswordHasher<AuthUser> passwordHasher,
-        BackendAuthService authService)
+        BackendAuthService authService,
+        PackageRestoreProgressStore packageProgress)
     {
         _context = context;
         _auditLogService = auditLogService;
@@ -59,6 +61,7 @@ public class AdminController : Controller
         _viewportOverridesService = viewportOverridesService;
         _passwordHasher = passwordHasher;
         _authService = authService;
+        _packageProgress = packageProgress;
     }
 
     public async Task<IActionResult> Index(
@@ -1349,6 +1352,9 @@ public class AdminController : Controller
         var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-data-import-{Guid.NewGuid():N}");
         var tempZipPath = Path.Combine(tempRoot, Path.GetFileName(packageFile.FileName));
         var extractRoot = Path.Combine(tempRoot, "extract");
+        var progressKey = User.Identity?.Name ?? "anonymous";
+
+        _packageProgress.Begin(progressKey);
 
         try
         {
@@ -1359,8 +1365,9 @@ public class AdminController : Controller
                 await packageFile.CopyToAsync(stream, cancellationToken);
             }
 
+            _packageProgress.Report(progressKey, "extract", "Extrayendo paquete...", 40);
             ZipFile.ExtractToDirectory(tempZipPath, extractRoot, overwriteFiles: true);
-            await RestoreProjectPackageAsync(extractRoot, cancellationToken);
+            await RestoreProjectPackageAsync(extractRoot, cancellationToken, progressKey);
 
             var backupDirectory = GetDatabaseBackupDirectory();
             Directory.CreateDirectory(backupDirectory);
@@ -1368,6 +1375,8 @@ public class AdminController : Controller
             var savedPath = Path.Combine(backupDirectory, savedFileName);
             System.IO.File.Copy(tempZipPath, savedPath, overwrite: true);
             await SetActivePackageSourceAsync(savedFileName);
+
+            _packageProgress.Report(progressKey, "finish", "Finalizando restauracion...", 95);
 
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "project-package-import",
@@ -1381,6 +1390,7 @@ public class AdminController : Controller
 
             if (isAjax)
             {
+                _packageProgress.Complete(progressKey);
                 return Ok(new { success = true, message = "Paquete del proyecto restaurado correctamente. Si tienes otras sesiones abiertas, recarga la pagina." });
             }
 
@@ -1400,6 +1410,7 @@ public class AdminController : Controller
 
             if (isAjax)
             {
+                _packageProgress.Fail(progressKey, ex.Message);
                 return StatusCode(500, new { success = false, message = $"No fue posible restaurar el paquete del proyecto: {ex.Message}" });
             }
 
@@ -1411,6 +1422,28 @@ public class AdminController : Controller
         }
 
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet("/admin/project-package/upload-progress")]
+    [HttpGet("/dashboard/project-package/upload-progress")]
+    public IActionResult GetProjectPackageUploadProgress()
+    {
+        var progressKey = User.Identity?.Name ?? "anonymous";
+        var entry = _packageProgress.Get(progressKey);
+        if (entry is null)
+        {
+            return Ok(new { active = false });
+        }
+
+        return Ok(new
+        {
+            active = true,
+            stage = entry.Stage,
+            message = entry.Message,
+            percent = entry.Percent,
+            done = entry.Done,
+            failed = entry.Failed
+        });
     }
 
     [HttpGet("/admin/activity")]
@@ -5024,7 +5057,7 @@ public class AdminController : Controller
         return null;
     }
 
-    private async Task RestoreProjectPackageAsync(string extractRoot, CancellationToken cancellationToken)
+    private async Task RestoreProjectPackageAsync(string extractRoot, CancellationToken cancellationToken, string progressKey = "")
     {
         var backendPackageRoot = Path.Combine(extractRoot, "backend-data");
         var frontendPackageRoot = Path.Combine(extractRoot, "frontend-data");
@@ -5040,18 +5073,26 @@ public class AdminController : Controller
             throw new InvalidOperationException("El paquete no contiene syntro.db.");
         }
 
+        _packageProgress.Report(progressKey, "db", "Restaurando base de datos...", 50);
         ValidateSqliteFile(dbSource);
         await RestoreDatabaseFromFileAsync(dbSource);
 
+        _packageProgress.Report(progressKey, "admin", "Reconstruyendo cuenta de administrador...", 60);
         // El paquete sustituyo toda la DB (incluidos los usuarios). La identidad
         // del administrador debe reconstruirse unicamente desde el .env actual:
         // se descartan los admins venidos del paquete.
         await _authService.RecreateConfiguredAdminOnlyAsync(cancellationToken);
 
+        _packageProgress.Report(progressKey, "forms", "Copiando formularios PDF...", 65);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-forms"), GetInventoryFormPdfDirectory(), overwrite: true);
+
+        _packageProgress.Report(progressKey, "documents", "Copiando documentos...", 70);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "inventory-documents"), GetInventoryDocumentsDirectory(), overwrite: true);
+
+        _packageProgress.Report(progressKey, "keys", "Copiando claves de sesion...", 75);
         CopyDirectoryIfExists(Path.Combine(backendPackageRoot, "data-protection-keys"), GetDataProtectionKeysDirectory(), overwrite: true);
 
+        _packageProgress.Report(progressKey, "viewport", "Restaurando configuracion del mapa...", 85);
         var viewportOverridesSource = Path.Combine(backendPackageRoot, "site-viewport-overrides.json");
         if (System.IO.File.Exists(viewportOverridesSource))
         {
@@ -5063,6 +5104,7 @@ public class AdminController : Controller
         var frontendDataDirectory = ResolveFrontendDataDirectory();
         if (!string.IsNullOrWhiteSpace(frontendDataDirectory) && Directory.Exists(frontendPackageRoot))
         {
+            _packageProgress.Report(progressKey, "frontend", "Copiando datos del frontend...", 90);
             Directory.CreateDirectory(frontendDataDirectory);
             CopyDirectoryContents(frontendPackageRoot, frontendDataDirectory);
         }
