@@ -24,9 +24,9 @@
 - Points of interest (SPEC 09). (DONE)
 - Administrative map editors (SPEC 20). (DONE)
 - Audit and backups (SPEC 23). (DONE)
-- Room & annotation editor: manual rooms, door/stair marks, unified multi-selection,
-  conformal pixel-space rotation, backend `ManualRoom`/`BuildingAnnotation` +
-  `/api/manual-rooms` + `/api/annotations`, main-map per-floor rendering. (DONE,
+- Room editor: manual rooms, unified multi-selection (Ctrl+click toggle, marquee),
+  conformal pixel-space rotation, backend `ManualRoom` +
+  `/api/manual-rooms`, main-map per-floor rendering. (DONE,
   SPEC 13/14/17/20; pendiente revisión del usuario en vivo)
 
 ## Phase 5 — Hardening

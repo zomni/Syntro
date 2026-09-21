@@ -385,73 +385,6 @@ const addManualRoomPolygonsForFloor = async (floorNumber, expectedRenderSequence
   console.info(`[rooms] ${paintedCount} sala(s) en piso ${floorNumber}`);
 };
 
-const addAnnotationsForFloor = async (floorNumber, expectedRenderSequence) => {
-  if (!BACKEND_API_URL || expectedRenderSequence !== renderSequence) {
-    return;
-  }
-
-  let annotations = [];
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/annotations`, {
-      cache: "no-store",
-    });
-    annotations = response.ok ? await response.json() : [];
-  } catch (error) {
-    console.error("Error cargando marcas para el mapa:", error);
-    return;
-  }
-
-  if (expectedRenderSequence !== renderSequence || !Array.isArray(annotations)) {
-    return;
-  }
-
-  const allowedBuildingIds = await getAllowedBuildingIdsForFloor(floorNumber);
-  if (!allowedBuildingIds || expectedRenderSequence !== renderSequence) {
-    return;
-  }
-
-  let paintedCount = 0;
-
-  for (const annotation of annotations) {
-    if (!allowedBuildingIds.has(annotation.buildingExternalId)) continue;
-
-    let geometry;
-    try {
-      geometry =
-        typeof annotation.geometryJson === "string"
-          ? JSON.parse(annotation.geometryJson)
-          : annotation.geometryJson;
-    } catch (error) {
-      console.warn("Marca sin geometría válida:", annotation.externalId);
-      continue;
-    }
-
-    const ring = geometry?.coordinates?.[0];
-    if (!Array.isArray(ring) || ring.length < 3) continue;
-
-    const latLngs = ring
-      .filter((point) => Array.isArray(point) && point.length >= 2)
-      .map((point) => [point[1], point[0]]);
-
-    if (latLngs.length < 3) continue;
-
-    const isStair = annotation.annotationType === "stair";
-    L.polygon(latLngs, {
-      pane: "roomsPane",
-      color: isStair ? "#7c3aed" : "#0ea5e9",
-      weight: 1.5,
-      fillColor: isStair ? "#7c3aed" : "#0ea5e9",
-      fillOpacity: 0.25,
-      interactive: false,
-      className: "annotation-polygon",
-    }).addTo(roomLayerGroup);
-
-    paintedCount += 1;
-  }
-
-  console.info(`[annotations] ${paintedCount} marca(s) en piso ${floorNumber}`);
-};
-
 export const CAMPUS_MARKER_BUILDING_ID = "map-general";
 
 // Los iconos estaticos mantienen un tamano fijo por zoom (lookup manual).
@@ -734,8 +667,6 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
     );
 
     await addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence);
-
-    await addAnnotationsForFloor(floorNumber, expectedRenderSequence);
 
     await addMapMarkersForFloor(floorNumber, expectedRenderSequence);
 

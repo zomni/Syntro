@@ -7,8 +7,8 @@ Refundido de los repositorios `sotero_map` (frontend) y `sotero_map_api`
 (backend) en un proyecto único, adaptado a un despliegue de cliente único.
 
 - **Frontend**: mapa interactivo (JavaScript vanilla + Leaflet + Webpack) con búsqueda,
-  rutas entre edificios, inventario, telemetría de red, POIs, editor de salas y marcas
-  (puertas/escaleras) y herramientas de edición de mapa (campus `sotero`, pisos -1 a 5; el
+  rutas entre edificios, inventario, telemetría de red, POIs, editor de salas
+  y herramientas de edición de mapa (campus `sotero`, pisos -1 a 5; el
   mapa resuelve sus sitios desde la sesión — multi-tenant).
 - **Backend**: API ASP.NET Core 8 + EF Core + SQLite + panel de administración Razor,
   con autenticación local/LDAP, MFA, multi-tenant (organizaciones/sitios, rol `superadmin`),

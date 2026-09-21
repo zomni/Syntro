@@ -29,14 +29,12 @@ is_active
 - PointOfInterest: belongs to one Campus (and optionally one Floor).
 - WalkingRouteEdge: connects two WalkingRouteNodes.
 - ManualRoom: unique `ExternalId`, index `(BuildingExternalId, Floor)`.
-- BuildingAnnotation: unique `ExternalId`, index `(BuildingExternalId, Floor)`, `AnnotationType` in {door, stair}.
 - RoomGeometryOverride: unique `RoomExternalId` (one geometry override per room).
 
 ## Naming / id conventions
 
-- Rooms and annotations use a globally unique `ExternalId`; the editor emits
-  `MAN-*` for manual rooms and `ANN-*` for door/stair annotations. Legacy rooms
-  synced from the source keep their source `ExternalId`.
+- Rooms use a globally unique `ExternalId`; the editor emits
+  `MAN-*` for manual rooms. Legacy rooms synced from the source keep their source `ExternalId`.
 - `GeometryJson` stores a GeoJSON `Polygon` (`coordinates[0]` = closed ring of
   `[lng, lat]` pairs) for both entities.
 

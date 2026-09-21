@@ -1080,7 +1080,6 @@ public class AdminController : Controller
             DELETE FROM Equipments;
             DELETE FROM MlTrainingRuns;
             DELETE FROM ManualRooms;
-            DELETE FROM BuildingAnnotations;
             DELETE FROM MapMarkers;
             DELETE FROM RoomGeometryOverrides;
             DELETE FROM TelemetryScanSchedules;
@@ -1134,7 +1133,6 @@ public class AdminController : Controller
             DELETE FROM Equipments;
             DELETE FROM MlTrainingRuns;
             DELETE FROM ManualRooms;
-            DELETE FROM BuildingAnnotations;
             DELETE FROM MapMarkers;
             DELETE FROM RoomGeometryOverrides;
             DELETE FROM TelemetryScanSchedules;

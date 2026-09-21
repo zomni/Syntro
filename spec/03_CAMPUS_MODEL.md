@@ -50,6 +50,6 @@ Backend:
   y fuente de verdad de datos estáticos por campus.
 - Los edificios de la instalación actual (hospital, campus `sotero`) siguen el dominio
   `Campus → Building → Floor → Room`; la sala manual actual puede tener `Floor` único y
-  `BuildingExternalId`; las marcas (puertas/escaleras) se asocian al mismo par edificio+piso.
+  `BuildingExternalId` para el par edificio+piso.
 - El backend no asume ningún nombre de campus por defecto: los escritores exigen `campus`/`CampusKey`
-  explícito (los manual rooms y annotations usan `BuildingExternalId`).
+  explícito (los manual rooms usan `BuildingExternalId`).

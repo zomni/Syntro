@@ -36,10 +36,6 @@ GET    /api/manual-rooms?buildingExternalId={id}&floor={n}
 POST   /api/manual-rooms
 PUT    /api/manual-rooms/{externalId}
 DELETE /api/manual-rooms/{externalId}
-GET    /api/annotations?buildingExternalId={id}&floor={n}
-POST   /api/annotations
-PUT    /api/annotations/{externalId}
-DELETE /api/annotations/{externalId}
 GET    /api/network-telemetry/schedule
 POST   /api/network-telemetry/schedule/preview
 POST   /api/network-telemetry/schedule

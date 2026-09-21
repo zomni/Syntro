@@ -30,13 +30,6 @@ and a `Floor`, identified by `ExternalId` (`MAN-*` prefix in the editor, unique)
 geometry in `GeometryJson`, plus display metadata (ShortName, Type, Unit, Service, Status,
 Capacity, Notes). SERVER entity: `ManualRoom` (auditable, soft delete).
 
-## BuildingAnnotation
-A visual-only map mark for the building's entrance/exit doors or stairs, created from
-`roomEditor.js`. Belongs to a building (`BuildingExternalId`) and a `Floor`,
-`AnnotationType` is `door` or `stair`, geometry in `GeometryJson`, `ExternalId` unique
-(`ANN-*` prefix in the editor). Renders per floor on the main map for all users.
-SERVER entity: `BuildingAnnotation` (auditable, soft delete).
-
 ## Organization / CampusSite
 Multi-tenant containers: an `Organization` owns `CampusSite` records (each with a
 `CampusKey`, name, school, floors, defaultFloor, center/zoom/bounds); a site maps to a

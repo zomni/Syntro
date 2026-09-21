@@ -42,8 +42,6 @@ const ICONS = {
   circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
   free: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12,2 22,8.5 19,20 5,20 2,8.5"/></svg>',
   hand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
-  door: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5"/><path d="M9 2v20"/><path d="M16 10h.01"/><rect x="7" y="6" width="2" height="4" rx="0.5"/></svg>',
-  stair: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4v-4h4v-4h4v-4h4"/></svg>',
   delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
   undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>',
   suggest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.09 6.26L20.18 10l-6.09 1.74L12 18l-2.09-6.26L3.82 10l6.09-1.74L12 2z"/></svg>',
@@ -210,7 +208,6 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       floors,
       selectedFloor,
       rooms: [],
-      annotations: [],
       markers: [],
       selectedRoom: null,
       selectedMarker: null,
@@ -228,7 +225,6 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       removedExternalIds: [],
       removedManualRoomExternalIds: [],
       removedSyncedRoomExternalIds: [],
-      removedAnnotationExternalIds: [],
       removedMarkerExternalIds: [],
       roomSignatures: {},
       pendingMarkerIcon: null,
@@ -390,15 +386,6 @@ const fetchRoomsForFloor = async (buildingExternalId, floor) => {
   return response.json();
 };
 
-const fetchAnnotationsForFloor = async (buildingExternalId, floor) => {
-  const response = await fetch(
-    `${getApiUrl()}/api/annotations?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
-    { credentials: "include", cache: "no-store" }
-  );
-  if (!response.ok) return [];
-  return response.json();
-};
-
 const fetchMarkersForFloor = async (buildingExternalId, floor) => {
   const response = await fetch(
     `${getApiUrl()}/api/map-markers?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
@@ -416,13 +403,7 @@ const loadRoomsForFloor = async (buildingExternalId, floor) => {
       currentEditorState.roomSignatures[room.externalId] = buildRoomSaveSignature(room);
     }
   }
-  currentEditorState.annotations = await loadAnnotationsForFloor(buildingExternalId, floor);
   currentEditorState.markers = await fetchMarkersForFloor(buildingExternalId, floor);
-};
-
-const loadAnnotationsForFloor = async (buildingExternalId, floor) => {
-  const annotations = await fetchAnnotationsForFloor(buildingExternalId, floor);
-  return annotations.map((a) => ({ ...a, kind: "annotation", rotation: a.rotation || 0, scaleX: a.scaleX || 1, scaleY: a.scaleY || 1 }));
 };
 
 const createPopup = () => {
@@ -552,10 +533,10 @@ const handleBoxSelectStart = (e) => {
   if (e.button !== 0) return;
   if (e.target?.closest?.(".room-editor-marker-icon")) return;
 
+  e.preventDefault();
   const container = popupMap.getContainer();
   const rect = container.getBoundingClientRect();
-  const toPoint = (ev) => L.point(ev.clientX - rect.left, ev.clientY - rect.top);
-  const startPoint = toPoint(e);
+  const startPoint = L.point(e.clientX - rect.left, e.clientY - rect.top);
   const startLatLng = popupMap.containerPointToLatLng(startPoint);
 
   const box = L.rectangle(L.latLngBounds(startLatLng, startLatLng), {
@@ -573,8 +554,7 @@ const handleBoxSelectStart = (e) => {
 
   const onMove = (ev) => {
     if (!active) return;
-    const latlng = popupMap.containerPointToLatLng(toPoint(ev));
-    box.setBounds(L.latLngBounds(startLatLng, latlng));
+    box.setBounds(L.latLngBounds(startLatLng, ev.latlng));
   };
 
   const onUp = (ev) => {
@@ -582,15 +562,15 @@ const handleBoxSelectStart = (e) => {
     active = false;
     popupMap.off("mousemove", onMove);
     popupMap.off("mouseup", onUp);
-    popupMap.dragging.enable();
-    container.style.cursor = "";
-    const endPoint = toPoint(ev);
+    const endPoint = popupMap.latLngToContainerPoint(ev.latlng);
     const dx = Math.abs(endPoint.x - startPoint.x);
     const dy = Math.abs(endPoint.y - startPoint.y);
     const bounds = box.getBounds();
     popupMap.removeLayer(box);
+    popupMap.dragging.enable();
+    container.style.cursor = "";
     if (dx < 5 && dy < 5) return;
-    applyBoxSelection(bounds, !!(ev.ctrlKey || ev.metaKey));
+    applyBoxSelection(bounds, !!(ev.originalEvent?.ctrlKey || ev.originalEvent?.metaKey));
   };
 
   popupMap.on("mousemove", onMove);
@@ -610,29 +590,10 @@ const applyBoxSelection = (bounds, ctrlAdd) => {
   syncSelectedRoomFromIds();
   currentEditorState.isDirty = true;
 
-  const annotations = currentEditorState.annotations || [];
-  const boxedAnnotations = annotations.filter((a) => {
-    const layer = currentEditorState.roomLayers.find((l) => l.roomData === a);
-    return layer && layer.getBounds().intersects(bounds);
-  });
-
-  if (boxedAnnotations.length) {
-    pushUndo({ type: "delete-annotations", annotations: boxedAnnotations });
-    currentEditorState.annotations = annotations.filter((a) => !boxedAnnotations.some((del) => del.externalId === a.externalId));
-    for (const annotation of boxedAnnotations) {
-      if (!annotation.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(annotation.externalId)) {
-        currentEditorState.removedAnnotationExternalIds.push(annotation.externalId);
-      }
-    }
-  }
-
   currentEditorState._suppressDeselectClick = true;
   renderRooms();
   updatePopupContent();
-  const msg = boxedAnnotations.length
-    ? `${hitIds.length} sala(s) seleccionadas. ${boxedAnnotations.length} nota(s) de puerta/escalera eliminadas del marco. G para guardar.`
-    : `${hitIds.length} sala(s) seleccionadas. Ctrl+drag agrega al marco, G para guardar.`;
-  setAdminMapToolsStatus(msg);
+  setAdminMapToolsStatus(`${hitIds.length} sala(s) seleccionadas. Ctrl+drag agrega al marco, G para guardar.`);
 };
 
 const handleMapDeselectClick = (e) => {
@@ -985,8 +946,6 @@ const getHintForMode = (mode, snapEnabled) => {
     case "draw-free": return "Libre: click para vertices, Enter/dblclick cerrar. Shift=ortogonal. Esc cancelar.";
     case "draw-hand": return "Mano alzada: click+arrastra para dibujar. Shift=rectos. Esc cancelar.";
     case "marker-place": return "Icono: click en el mapa para colocarlo (o arrastra el icono). Click en el boton del icono para salir.";
-    case "draw-door": return "Puerta: dibuja el contorno de la puerta. Enter/dblclick cerrar. Esc cancelar.";
-    case "draw-stair": return "Escalera: dibuja el contorno de la escalera. Enter/dblclick cerrar. Esc cancelar.";
     default: return "";
   }
 };
@@ -1029,53 +988,11 @@ const updateSidePanel = () => {
   } else if (selectedRoom) {
     sidePanelEl.className = "room-editor-side-panel is-visible";
     sidePanelEl.innerHTML = "";
-    if (selectedRoom.kind === "annotation") {
-      sidePanelEl.appendChild(buildAnnotationPanel(selectedRoom));
-    } else {
-      sidePanelEl.appendChild(buildPropertiesPanel(selectedRoom));
-    }
+    sidePanelEl.appendChild(buildPropertiesPanel(selectedRoom));
   } else {
     sidePanelEl.className = "room-editor-side-panel";
     sidePanelEl.innerHTML = "";
   }
-};
-
-const buildAnnotationPanel = (annotation) => {
-  const container = document.createElement("div");
-
-  const header = document.createElement("div");
-  header.className = "room-editor-side-panel-header";
-  const label = annotation.annotationType === "stair" ? "Escalera" : "Puerta";
-  header.innerHTML = `<span class="room-editor-side-panel-title">${label}</span>`;
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "room-editor-side-panel-close";
-  closeBtn.innerHTML = "&times;";
-  closeBtn.addEventListener("click", () => {
-    currentEditorState.selectedRoom = null;
-    currentEditorState.selectedRoomIds = [];
-    renderRooms();
-    updateSidePanel();
-    updateBottomBar();
-  });
-  header.appendChild(closeBtn);
-  container.appendChild(header);
-
-  const body = document.createElement("div");
-  body.className = "room-editor-side-panel-body";
-  body.innerHTML = `
-    <p class="room-editor-annotation-hint">Marca de ${label.toLowerCase()} (solo visual). Ctrl+arrastrar para mover, Shift+arrastrar para rotar.</p>
-  `;
-  container.appendChild(body);
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.type = "button";
-  deleteBtn.className = "room-editor-delete-room-btn";
-  deleteBtn.textContent = "Eliminar marca";
-  deleteBtn.addEventListener("click", () => deleteSelectedRoom());
-  container.appendChild(deleteBtn);
-
-  return container;
 };
 
 const buildMarkerPanel = (marker) => {
@@ -1346,11 +1263,7 @@ const renderRooms = () => {
         ? selectedIds.includes(shape.externalId)
         : currentEditorState.selectedRoom?.externalId === shape.externalId;
 
-      const style = shape.kind === "annotation"
-        ? (shape.annotationType === "stair"
-            ? { color: "#7c3aed", weight: 2, fillColor: isSelected ? "#f59e0b" : "#7c3aed", fillOpacity: isSelected ? 0.3 : 0.25 }
-            : { color: "#0ea5e9", weight: 2, fillColor: isSelected ? "#f59e0b" : "#0ea5e9", fillOpacity: isSelected ? 0.3 : 0.25 })
-        : { color: isSelected ? "#f59e0b" : "#059669", weight: isSelected ? 3 : 2, fillColor: isSelected ? "#f59e0b" : "#059669", fillOpacity: isSelected ? 0.3 : 0.2 };
+      const style = { color: isSelected ? "#f59e0b" : "#059669", weight: isSelected ? 3 : 2, fillColor: isSelected ? "#f59e0b" : "#059669", fillOpacity: isSelected ? 0.3 : 0.2 };
 
       const layer = L.polygon(latLngs, {
         ...style,
@@ -1362,6 +1275,7 @@ const renderRooms = () => {
 
       layer.on("mousedown", (e) => {
         L.DomEvent.stop(e);
+        if (e.originalEvent?.button !== 0) return;
         const ids = getSelectedRoomIds();
         const isSelectedShape = ids.includes(shape.externalId);
         if (isSelectedShape && e.originalEvent.shiftKey) {
@@ -1376,7 +1290,6 @@ const renderRooms = () => {
   };
 
   for (const room of currentEditorState.rooms) renderShape(room);
-  for (const annotation of currentEditorState.annotations || []) renderShape(annotation);
 
   renderMarkers();
 };
@@ -1535,6 +1448,7 @@ const getMultiSelectItems = () => {
 
 const beginMultiSelectInteraction = (layer, room, e) => {
   if (!popupMap) return;
+  if (e.originalEvent?.button !== 0) return;
   L.DomEvent.stop(e);
   popupMap.dragging.disable();
   const startClientX = e.originalEvent.clientX;
@@ -1565,12 +1479,13 @@ const beginMultiSelectInteraction = (layer, room, e) => {
     }
   };
 
-  const onMapUp = () => {
+  const onMapUp = (ev) => {
     popupMap.off("mousemove", onMapMove);
     popupMap.off("mouseup", onMapUp);
     if (moved) return;
     popupMap.dragging.enable();
-    if (e.originalEvent.ctrlKey || e.originalEvent.metaKey) {
+    currentEditorState._suppressDeselectClick = true;
+    if (ev.originalEvent?.ctrlKey || ev.originalEvent?.metaKey) {
       toggleRoomSelection(room);
     } else {
       selectOnlyRoom(room);
@@ -1962,7 +1877,6 @@ const getSelectedRoomIds = () => {
   const ids = currentEditorState.selectedRoomIds || [];
   const valid = new Set([
     ...currentEditorState.rooms.map((r) => r.externalId),
-    ...(currentEditorState.annotations || []).map((a) => a.externalId),
   ]);
   return ids.filter((id) => valid.has(id));
 };
@@ -1984,12 +1898,10 @@ const syncSelectedRoomFromIds = () => {
 
 const findShapeById = (id) => {
   if (!currentEditorState) return null;
-  const room = currentEditorState.rooms.find((r) => r.externalId === id);
-  if (room) return room;
-  return (currentEditorState.annotations || []).find((a) => a.externalId === id) || null;
+  return currentEditorState.rooms.find((r) => r.externalId === id) || null;
 };
 
-const allShapes = () => [...(currentEditorState?.rooms || []), ...(currentEditorState?.annotations || [])];
+const allShapes = () => [...(currentEditorState?.rooms || [])];
 
 const toggleRoomSelection = (room) => {
   if (!currentEditorState) return;
@@ -2031,7 +1943,6 @@ const selectRoomEditorFloor = async (floor) => {
   currentEditorState.selectedMarker = null;
   currentEditorState.selectedRoomIds = [];
   currentEditorState.removedExternalIds = [];
-  currentEditorState.removedAnnotationExternalIds = [];
   currentEditorState.removedMarkerExternalIds = [];
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
@@ -2086,12 +1997,9 @@ const selectRoomMode = (mode) => {
       }
       break;
     case "draw-door":
-      setAdminMapToolsStatus("Puerta: dibuja el contorno de la puerta (click para vertices, Enter/dblclick cerrar).");
-      startDrawAnnotation("door");
-      break;
     case "draw-stair":
-      setAdminMapToolsStatus("Escalera: dibuja el contorno de la escalera (click para vertices, Enter/dblclick cerrar).");
-      startDrawAnnotation("stair");
+      setAdminMapToolsStatus("Modo seleccion. Click para sumar/quitar, Ctrl+arrastrar para mover, Shift+arrastrar para rotar. Ctrl+Z deshacer, G guardar.");
+      selectRoomMode("select");
       break;
     default:
       setAdminMapToolsStatus("Modo seleccion. Click para sumar/quitar, Ctrl+arrastrar para mover, Shift+arrastrar para rotar. Ctrl+Z deshacer, G guardar.");
@@ -2307,12 +2215,6 @@ const startDrawFree = (mode = "draw-free") => {
   popupMap.on("dblclick", onDblClick);
 };
 
-const startDrawAnnotation = (type) => {
-  if (!currentEditorState || !popupMap) return;
-  currentEditorState.pendingDrawType = type || "door";
-  startDrawFree(type === "stair" ? "draw-stair" : "draw-door");
-};
-
 const startDrawHand = () => {
   if (!currentEditorState || !popupMap) return;
   clearDrawState();
@@ -2516,14 +2418,6 @@ const buildNewRoomObject = (geoJsonCoords, extra = {}) => ({
 const createNewRoom = (geoJsonCoords) => {
   if (!currentEditorState) return;
 
-  const drawMode = currentEditorState.mode;
-  if (drawMode === "draw-door" || drawMode === "draw-stair" || currentEditorState.pendingDrawType) {
-    const type = currentEditorState.pendingDrawType || (drawMode === "draw-stair" ? "stair" : "door");
-    delete currentEditorState.pendingDrawType;
-    createNewAnnotation(geoJsonCoords, type);
-    return;
-  }
-
   const newRoom = buildNewRoomObject(geoJsonCoords);
 
   pushUndo({ type: "create-room", room: newRoom });
@@ -2539,78 +2433,30 @@ const createNewRoom = (geoJsonCoords) => {
   setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
 };
 
-const buildNewAnnotationObject = (geoJsonCoords, type) => ({
-  externalId: `ANN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-  buildingExternalId: currentEditorState.buildingExternalId,
-  floor: currentEditorState.selectedFloor,
-  annotationType: type,
-  geometryJson: JSON.stringify({ type: "Polygon", coordinates: [geoJsonCoords] }),
-  kind: "annotation",
-  rotation: 0,
-  scaleX: 1,
-  scaleY: 1,
-  isNew: true,
-});
-
-const createNewAnnotation = (geoJsonCoords, type) => {
-  if (!currentEditorState) return;
-  if (!currentEditorState.annotations) currentEditorState.annotations = [];
-
-  const newAnnotation = buildNewAnnotationObject(geoJsonCoords, type);
-
-  pushUndo({ type: "create-annotation", annotation: newAnnotation });
-
-  currentEditorState.annotations.push(newAnnotation);
-  currentEditorState.selectedRoom = newAnnotation;
-  currentEditorState.selectedRoomIds = [newAnnotation.externalId];
-  currentEditorState.isDirty = true;
-  clearDrawState();
-  currentEditorState.mode = "select";
-  renderRooms();
-  updatePopupContent();
-  const label = type === "stair" ? "Escalera" : "Puerta";
-  setAdminMapToolsStatus(`${label} creada. Ctrl+arrastrar para mover, G para guardar.`);
-};
-
 const deleteSelectedRoom = () => {
   if (!currentEditorState) return;
 
   const ids = getSelectedRoomIds();
   let rooms = currentEditorState.rooms.filter((r) => ids.includes(r.externalId));
-  let annotations = (currentEditorState.annotations || []).filter((a) => ids.includes(a.externalId));
 
-  if (rooms.length === 0 && annotations.length === 0 && currentEditorState.selectedRoom) {
-    const shape = currentEditorState.selectedRoom;
-    if (shape.kind === "annotation") annotations = [shape];
-    else rooms = [shape];
+  if (rooms.length === 0 && currentEditorState.selectedRoom) {
+    rooms = [currentEditorState.selectedRoom];
   }
 
-  if (rooms.length === 0 && annotations.length === 0) {
+  if (rooms.length === 0) {
     setAdminMapToolsStatus("No hay elementos seleccionados para eliminar.");
     return;
   }
 
-  if (rooms.length > 0) {
-    pushUndo({ type: rooms.length > 1 ? "delete-rooms" : "delete-room", rooms });
-    currentEditorState.rooms = currentEditorState.rooms.filter((r) => !rooms.some((del) => del.externalId === r.externalId));
-    for (const room of rooms) {
-      if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
-        currentEditorState.removedExternalIds.push(room.externalId);
-        if (room.isManual === true) {
-          currentEditorState.removedManualRoomExternalIds.push(room.externalId);
-        } else {
-          currentEditorState.removedSyncedRoomExternalIds.push(room.externalId);
-        }
-      }
-    }
-  }
-
-  if (annotations.length > 0) {
-    pushUndo({ type: "delete-annotations", annotations });
-    currentEditorState.annotations = currentEditorState.annotations.filter((a) => !annotations.some((del) => del.externalId === a.externalId));
-    for (const annotation of annotations) {
-      if (!annotation.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(annotation.externalId)) {
-        currentEditorState.removedAnnotationExternalIds.push(annotation.externalId);
+  pushUndo({ type: rooms.length > 1 ? "delete-rooms" : "delete-room", rooms });
+  currentEditorState.rooms = currentEditorState.rooms.filter((r) => !rooms.some((del) => del.externalId === r.externalId));
+  for (const room of rooms) {
+    if (!room.isNew && !currentEditorState.removedExternalIds.includes(room.externalId)) {
+      currentEditorState.removedExternalIds.push(room.externalId);
+      if (room.isManual === true) {
+        currentEditorState.removedManualRoomExternalIds.push(room.externalId);
+      } else {
+        currentEditorState.removedSyncedRoomExternalIds.push(room.externalId);
       }
     }
   }
@@ -2624,7 +2470,7 @@ const deleteSelectedRoom = () => {
   }
   renderRooms();
   updatePopupContent();
-  const total = rooms.length + annotations.length;
+  const total = rooms.length;
   setAdminMapToolsStatus(total > 1 ? `${total} elementos eliminados. G para guardar.` : "Elemento eliminado. G para guardar.");
 };
 
@@ -2642,8 +2488,6 @@ const copySelectedRoom = () => {
   }
   copiedRoomData = {
     items: shapes.map((s) => ({
-      kind: s.kind || "room",
-      annotationType: s.annotationType,
       type: s.type,
       geometryJson: s.geometryJson,
     })),
@@ -2678,14 +2522,12 @@ const pasteRoom = () => {
 
   const items = Array.isArray(copiedRoomData.items) && copiedRoomData.items.length
     ? copiedRoomData.items
-    : [{ kind: copiedRoomData.kind || "room", annotationType: copiedRoomData.annotationType, type: copiedRoomData.type, geometryJson: copiedRoomData.geometryJson }];
+    : [{ kind: "room", type: copiedRoomData.type, geometryJson: copiedRoomData.geometryJson }];
   const markerItems = Array.isArray(copiedRoomData.markerItems) ? copiedRoomData.markerItems : [];
 
   const baseRoomsLen = currentEditorState.rooms.length;
-  const baseAnnLen = (currentEditorState.annotations || []).length;
   const OFFSET = 0.0001;
   const createdRooms = [];
-  const createdAnnotations = [];
   const createdMarkers = [];
 
   items.forEach((src, idx) => {
@@ -2694,14 +2536,10 @@ const pasteRoom = () => {
     if (!geom?.coordinates?.[0]) return;
     const newCoords = geom.coordinates[0].map((c) => [c[0] + OFFSET * (idx + 1), c[1] + OFFSET * (idx + 1)]);
     newCoords.push(newCoords[0]);
-    if (src.kind === "annotation") {
-      createdAnnotations.push(buildNewAnnotationObject(newCoords, src.annotationType || "door"));
-    } else {
-      createdRooms.push(buildNewRoomObject(newCoords, {
-        displayName: `Sala ${baseRoomsLen + 1 + idx}`,
-        type: src.type || "sala",
-      }));
-    }
+    createdRooms.push(buildNewRoomObject(newCoords, {
+      displayName: `Sala ${baseRoomsLen + 1 + idx}`,
+      type: src.type || "sala",
+    }));
   });
 
   markerItems.forEach((src, idx) => {
@@ -2721,21 +2559,17 @@ const pasteRoom = () => {
     });
   });
 
-  if (createdRooms.length === 0 && createdAnnotations.length === 0 && createdMarkers.length === 0) return;
+  if (createdRooms.length === 0 && createdMarkers.length === 0) return;
 
   if (createdRooms.length > 0) {
     pushUndo({ type: "create-rooms", rooms: createdRooms });
     currentEditorState.rooms.push(...createdRooms);
   }
-  if (createdAnnotations.length > 0) {
-    pushUndo({ type: "create-annotations", annotations: createdAnnotations });
-    currentEditorState.annotations.push(...createdAnnotations);
-  }
   for (const marker of createdMarkers) {
     pushUndo({ type: "create-marker", marker });
     currentEditorState.markers.push(marker);
   }
-  currentEditorState.selectedRoomIds = [...createdRooms, ...createdAnnotations].map((r) => r.externalId);
+  currentEditorState.selectedRoomIds = createdRooms.map((r) => r.externalId);
   if (createdMarkers.length > 0) {
     currentEditorState.selectedRoomIds = [];
     currentEditorState.selectedRoom = null;
@@ -2746,7 +2580,7 @@ const pasteRoom = () => {
   renderRooms();
   updateSidePanel();
   updateBottomBar();
-  setAdminMapToolsStatus(`${createdRooms.length + createdAnnotations.length + createdMarkers.length} elemento(s) pegados. Ctrl+drag para mover, G para guardar.`);
+  setAdminMapToolsStatus(`${createdRooms.length + createdMarkers.length} elemento(s) pegados. Ctrl+drag para mover, G para guardar.`);
 };
 
 const updateRoomProperty = (property, value) => {
@@ -2789,20 +2623,6 @@ const undoRoomEditor = () => {
         currentEditorState.selectedRoom = null;
       }
       break;
-    case "create-annotation":
-      currentEditorState.annotations = (currentEditorState.annotations || []).filter((a) => a.externalId !== action.annotation.externalId);
-      if (currentEditorState.selectedRoom?.externalId === action.annotation.externalId) {
-        currentEditorState.selectedRoom = null;
-      }
-      break;
-    case "create-annotations":
-      for (const a of action.annotations) {
-        currentEditorState.annotations = (currentEditorState.annotations || []).filter((x) => x.externalId !== a.externalId);
-      }
-      if (action.annotations.some((a) => currentEditorState.selectedRoom?.externalId === a.externalId)) {
-        currentEditorState.selectedRoom = null;
-      }
-      break;
     case "create-marker":
       currentEditorState.markers = (currentEditorState.markers || []).filter((m) => m.externalId !== action.marker.externalId);
       if (currentEditorState.selectedMarker?.externalId === action.marker.externalId) {
@@ -2832,16 +2652,6 @@ const undoRoomEditor = () => {
         if (!room.isNew && currentEditorState.removedSyncedRoomExternalIds && room.isManual !== true) {
           const idx = currentEditorState.removedSyncedRoomExternalIds.indexOf(room.externalId);
           if (idx !== -1) currentEditorState.removedSyncedRoomExternalIds.splice(idx, 1);
-        }
-      }
-      break;
-    }
-    case "delete-annotations": {
-      currentEditorState.annotations = [...(currentEditorState.annotations || []), ...action.annotations];
-      for (const a of action.annotations) {
-        if (!a.isNew && currentEditorState.removedAnnotationExternalIds) {
-          const idx = currentEditorState.removedAnnotationExternalIds.indexOf(a.externalId);
-          if (idx !== -1) currentEditorState.removedAnnotationExternalIds.splice(idx, 1);
         }
       }
       break;
@@ -2890,12 +2700,6 @@ const redoRoomEditor = () => {
     case "create-rooms":
       currentEditorState.rooms.push(...action.rooms);
       break;
-    case "create-annotation":
-      currentEditorState.annotations = [...(currentEditorState.annotations || []), action.annotation];
-      break;
-    case "create-annotations":
-      currentEditorState.annotations = [...(currentEditorState.annotations || []), ...action.annotations];
-      break;
     case "create-marker":
       currentEditorState.markers.push(action.marker);
       currentEditorState.selectedMarker = action.marker;
@@ -2922,16 +2726,6 @@ const redoRoomEditor = () => {
         }
         if (!room.isNew && currentEditorState.removedSyncedRoomExternalIds && room.isManual !== true && !currentEditorState.removedSyncedRoomExternalIds.includes(room.externalId)) {
           currentEditorState.removedSyncedRoomExternalIds.push(room.externalId);
-        }
-      }
-      break;
-    }
-    case "delete-annotations": {
-      const deleted = action.annotations || [];
-      currentEditorState.annotations = (currentEditorState.annotations || []).filter((a) => !deleted.some((d) => d.externalId === a.externalId));
-      for (const a of deleted) {
-        if (!a.isNew && currentEditorState.removedAnnotationExternalIds && !currentEditorState.removedAnnotationExternalIds.includes(a.externalId)) {
-          currentEditorState.removedAnnotationExternalIds.push(a.externalId);
         }
       }
       break;
@@ -3156,59 +2950,6 @@ const saveRoomEditor = async () => {
       }
     }
 
-    for (const externalId of currentEditorState.removedAnnotationExternalIds || []) {
-      const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(externalId)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        let msg = `Error al eliminar la marca '${externalId}'.`;
-        try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-        pushError(msg);
-      }
-    }
-
-    for (const annotation of currentEditorState.annotations || []) {
-      const coordinates = parseGeometryToCoordinates(annotation.geometryJson);
-      if (annotation.isNew) {
-        const res = await fetch(`${getApiUrl()}/api/annotations`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            externalId: annotation.externalId,
-            buildingExternalId: annotation.buildingExternalId,
-            floor: annotation.floor,
-            annotationType: annotation.annotationType,
-            coordinates,
-          }),
-        });
-        if (!res.ok) {
-          let msg = `Error al crear la marca (${annotation.annotationType}).`;
-          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          pushError(msg);
-        } else {
-          annotation.isNew = false;
-        }
-      } else {
-        const res = await fetch(`${getApiUrl()}/api/annotations/${encodeURIComponent(annotation.externalId)}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            floor: annotation.floor,
-            annotationType: annotation.annotationType,
-            coordinates,
-          }),
-        });
-        if (!res.ok) {
-          let msg = `Error al actualizar la marca (${annotation.annotationType}).`;
-          try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
-          pushError(msg);
-        }
-      }
-    }
-
     await saveRoomEditorMarkers(currentEditorState, pushError);
 
     if (errors.length > 0) {
@@ -3221,9 +2962,8 @@ const saveRoomEditor = async () => {
     currentEditorState.removedExternalIds = [];
     currentEditorState.removedManualRoomExternalIds = [];
     currentEditorState.removedSyncedRoomExternalIds = [];
-    currentEditorState.removedAnnotationExternalIds = [];
 
-    setAdminMapToolsStatus("Salas, marcas y marcadores guardados correctamente.");
+    setAdminMapToolsStatus("Salas y marcadores guardados correctamente.");
 
     destroyPopup();
     clearRoomEditorState();

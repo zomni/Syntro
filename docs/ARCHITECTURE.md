@@ -34,13 +34,13 @@ Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
     globals y nombre de ventana (prefijo `syntro-*`).
   - `utils/addData.js`, `utils/searchMetadata.js` — carga de GeoJSON por piso, catálogo y
     fusión con metadatos/overrides del backend; pintado por piso de salas manuales
-    (`addManualRoomPolygonsForFloor`) y marcas de puertas/escaleras (`addAnnotationsForFloor`).
+    (`addManualRoomPolygonsForFloor`).
   - `components/routePlanner.js`, `utils/walkingRouteStorage.js` — rutas entre edificios.
   - `components/networkTelemetryPanel.js` — panel de telemetría de red (bajo demanda).
   - `components/{manualBuildingEditor,walkingRouteEditor,buildingGeometryEditor}.js` —
     herramientas de edición de mapa (solo rol admin).
   - `components/adminMapToolsPanel.js` — panel unificado de herramientas admin y
-    `roomEditor.js` — editor de salas/marcas de piso (manual rooms + puertas/escaleras).
+    `roomEditor.js` — editor de salas de piso (manual rooms).
 - **Datos estáticos**: `src/data/` contiene el GeoJSON por piso (`<school>_<campus>_<floor>.json`),
   el índice de búsqueda (`<school>_<campus>_search.json`) y el catálogo
   (`<campus>_buildings_catalog.json`). Se generan con los scripts de `frontend/scripts/`.
@@ -63,7 +63,6 @@ Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
     del frontend con `FrontendSyncService`).
   - Salas manuales y layout de piso (`ManualRoomsController`, `RoomLayoutsController`) con
     geometría GeoJSON por sala.
-  - Marcas de puertas/escaleras (`AnnotationsController`, entidad `BuildingAnnotation`).
   - Rutas peatonales (`WalkingRoutesController`: nodos, tramos, caminos).
   - Respaldo estático (`FrontendStaticBackupController`) que escribe JSON a `src/data`.
   - Importación de inventario por Excel (`ExcelInventoryImportService`, ClosedXML).
@@ -90,13 +89,13 @@ El campus es **configuración, no código**. La instalación actual usa el campu
   exigen `campus`/`CampusKey` explícito; la telemetría y los schedules se scopean por
   `CampusKey` y por organización vía `OrganizationAccessService`.
 
-## Editor de salas y marcas (piso)
+## Editor de salas (piso)
 
-- `ManualRoom` y `BuildingAnnotation` se guardan por `BuildingExternalId` + `Floor` y se
-  exponen en `GET /api/manual-rooms` y `GET /api/annotations` (anónimo, con filtros).
-- El editor (`roomEditor.js`) dibuja salas y marcas (puertas `door` / escaleras `stair`),
-  con multiselección siempre activa y rotación conforme en píxeles proyectados.
-- El mapa principal pinta salas y marcas por piso (visible para todos los usuarios);
+- `ManualRoom` se guarda por `BuildingExternalId` + `Floor` y se expone en
+  `GET /api/manual-rooms` y en el layout (`/api/room-layouts`), con filtros.
+- El editor (`roomEditor.js`) dibuja salas con multiselección siempre activa
+  (Ctrl+click izquierdo para sumar/quitar) y rotación conforme en píxeles proyectados.
+- El mapa principal pinta salas manuales por piso (visible para todos los usuarios);
   el guardado refresca vía `refreshCurrentMapData()` + evento `syntro-rooms-changed`.
 
 ## Identificadores
@@ -105,7 +104,7 @@ Prefijos de artefactos en `frontend/src/utils/identifiers.js`:
 
 - `localStorage`: `syntro_map_*`, `syntro_network_*`, etc.
 - Eventos: `syntro-map-data-refreshed`, `syntro-session-changed`, `syntro-admin-map-tool-mode`,
-  `syntro-rooms-changed` (salas/marcas guardadas por edificio).
+  `syntro-rooms-changed` (salas guardadas por edificio).
 - Ventana/globals: `syntro-dashboard`, `window.syntroAdminMapToolMode`.
 - Cookies/claims: `Syntro.Auth`, `Syntro.MfaPending`, `syntro:*`.
 - Archivos de respaldo: `syntro_buildings_backend_backup.json`, `walking_routes_backup.json`.

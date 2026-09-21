@@ -102,7 +102,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - **Agent volume montado**: `./runtime/network-telemetry-agent:/runtime/network-telemetry-agent` en `docker-compose.yml` + directorio creado; el backend ahora puede leer `agent-heartbeat.json` y el agente puede escribir archivos compartidos.
   - Verificación: scheduler log "Next live telemetry scan scheduled in 00:09:56" confirma que detecta schedules habilitados.
 
-- **Editor de salas (manual rooms) + marcas de puertas/escaleras (sala manual por edificio/piso)**:
+- **Editor de salas (manual rooms por edificio/piso)**:
   - Backend: entidad `ManualRoom` (AuditableEntity, `ExternalId UNIQUE`, `BuildingExternalId + Floor` index) con
     migración `AddManualRoomsAndRoomGeometryOverrides` + bloque idempotente en `ExtendedSchemaInitializer`;
     `ManualRoomsController` (`GET /api/manual-rooms` anónimo con filtros building+floor, `POST/PUT/DELETE` admin/editor, auditoría);
@@ -113,16 +113,9 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
     dedup y multi-banda) + copiar layout entre pisos, undo/redo (Ctrl+Z/Y), guardar (G) con POST/PUT/DELETE + `removedExternalIds`.
   - Eliminación del piso 0 (`RemoveFloorZero`): piso 0 y 1 consolidados en 1 (buildings/salas/resúmenes), defaultFloor pasa a 1;
     `campuses.js` y estáticos sin piso 0.
-  - **Marcas de puertas y escaleras**: botones "Puertas" (D) y "Escaleras" (E) en el editor; dibujan polígonos
-    persistentes por edificio+piso con las **mismas funciones que las salas** (seleccionar, mover/rotar en grupo,
-    copiar/pegar, eliminar, undo/redo, panel lateral "Puerta/Escalera" y guardado). IDs `ANN-*`; colores door `#0ea5e9`,
-    stair `#7c3aed`, selección `#f59e0b`. Backend: entidad `BuildingAnnotation` + DbContext/query filter + bloque
-    idempotente `BuildingAnnotations` + `AnnotationsController` (`GET /api/annotations` anónimo por building+floor,
-    `POST/PUT/DELETE` admin/editor con auditoría). Mapa principal (`addData.js`): marca pintada por piso junto a salas
-    manuales (`addAnnotationsForFloor`, visible para todos los usuarios).
   - **Multiselección unificada**: el editor ya no tiene botón de activación de multiselección (siempre activa):
     clic = alternar selección; `Ctrl+arrastrar` = mover grupo; `Shift+arrastrar` = rotar grupo; arrastre normal = no-op;
-    los gestos solo actúan si el arrastre comienza sobre un elemento ya seleccionado. `SelectedRoomIds` cubre salas y marcas.
+    los gestos solo actúan si el arrastre comienza sobre un elemento ya seleccionado (Ctrl+click izquierdo, toggle).
   - **Rotación conforme en espacio de píxeles**: `transformLatLngs` y el gesto de rotación de grupo rotan los vértices en
     píxeles proyectados (`latLngToContainerPoint`/`containerPointToLatLng`) en vez de lat/lng crudos, para que las salas
     conserven su forma y tamaño exactos al rotar (fix del efecto romboide/shrink). Antes de esto, los grupos se rotaban
@@ -149,7 +142,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
 - Multi-tenant — tests: tests backend para CRUD org/sitios, scoping y payload de sesión; tests frontend para `siteConfig`.
 - Docs al día (especs 01/03/13/14/15/17/20/26/27, README, ARCHITECTURE, PROGRESS, AGENTS, `.opencode` plans) **hecho** — commit "docs".
 - Fase 6 (roadmap en `spec/27_ROADMAP.md`): producto, visual/branding (pendiente revisión del usuario), decisión del contenido del checklist del formulario de entrega, documentación y onboarding.
-- Próxima semana: revisión en vivo del editor de salas/marcas y rotación con el usuario (hard refresh `:8081`), y continuar con el push pendiente si se autoriza.
+- Próxima semana: revisión en vivo del editor de salas y rotación con el usuario (hard refresh `:8081`), y continuar con el push pendiente si se autoriza.
 
 
 ## Decisiones de implementación documentadas
