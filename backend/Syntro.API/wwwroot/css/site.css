@@ -143,6 +143,12 @@ body.admin-sidebar-open { overflow: hidden; }
     .data-table-card tbody td.td-actions .d-flex { flex-wrap: wrap; }
 }
 
+/* --- Mobile helpers (Fase 2) -------------------------------------------- */
+@media (max-width: 767.98px) {
+    .w-mobile-100 { width: 100% !important; min-width: 0 !important; max-width: 100% !important; }
+    .pdf-preview-shell { height: 70vh !important; min-height: 0 !important; }
+}
+
 /* --- Touch-friendly tweaks ---------------------------------------------- */
 @media (hover: none) {
     .table-hover tbody tr:hover { background-color: transparent; }
