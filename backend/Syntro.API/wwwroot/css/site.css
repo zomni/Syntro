@@ -1,0 +1,149 @@
+/* ==========================================================================
+   Syntro Admin - base styles + mobile-first responsive (Fase 0)
+   Shared across all Admin Razor views.
+   ========================================================================== */
+
+/* --- Mobile topbar ------------------------------------------------------- */
+.admin-topbar {
+    display: none;
+    position: sticky;
+    top: 0;
+    z-index: 1900;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--pi-deep, #00254d);
+    color: #fff;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.18);
+}
+
+.admin-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #fff;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.admin-drawer-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.3rem;
+    line-height: 1;
+    cursor: pointer;
+}
+.admin-drawer-toggle:hover { background: rgba(255, 255, 255, 0.2); }
+.admin-drawer-toggle:focus-visible { outline: 2px solid #2dd4bf; outline-offset: 2px; }
+
+/* --- Off-canvas sidebar drawer (mobile only) ----------------------------- */
+.admin-sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1990;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+}
+
+body.admin-sidebar-open { overflow: hidden; }
+
+/* --- Mobile helpers ------------------------------------------------------ */
+.mobile-only { display: none !important; }
+
+@media (max-width: 767.98px) {
+    .admin-topbar { display: flex; }
+
+    .mobile-only { display: initial; }
+    .desktop-only { display: none !important; }
+
+    .admin-shell {
+        display: block;
+        min-height: 100vh;
+    }
+
+    .admin-sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 2000;
+        width: 280px;
+        max-width: 85vw;
+        height: 100vh;
+        overflow-y: auto;
+        margin: 0;
+        transform: translateX(-100%);
+        transition: transform 0.24s ease;
+        will-change: transform;
+    }
+
+    .admin-sidebar.open {
+        transform: translateX(0);
+        box-shadow: 0 0 46px rgba(15, 23, 42, 0.4);
+    }
+
+    .admin-sidebar-backdrop:not([hidden]) { display: block; }
+
+    .admin-main {
+        width: 100%;
+        padding: 1rem 1rem 2.5rem;
+    }
+}
+
+/* --- Base table -> card layout for wide tables (used by Fase 1) ----------
+   Opt-in with the `.data-table-card` wrapper: on <768px each row becomes a
+   card and every <td> shows its label via data-label. --------------------- */
+@media (max-width: 767.98px) {
+    .table-responsive.data-table-card { overflow: visible; }
+    .data-table-card thead { display: none; }
+    .data-table-card tbody,
+    .data-table-card tr,
+    .data-table-card td { display: block; width: 100%; }
+    .data-table-card tbody tr {
+        margin-bottom: 0.75rem;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .data-table-card tbody td {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.35rem;
+        padding: 0.4rem 0;
+        border: 0;
+        text-align: right;
+        min-height: 28px;
+    }
+    .data-table-card tbody td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #64748b;
+        margin-right: auto;
+    }
+    .data-table-card tbody td.td-actions { justify-content: flex-start; text-align: left; }
+    .data-table-card tbody td.td-actions::before { display: none; }
+    .data-table-card tbody td.td-actions .btn-group,
+    .data-table-card tbody td.td-actions .d-flex { flex-wrap: wrap; }
+}
+
+/* --- Touch-friendly tweaks ---------------------------------------------- */
+@media (hover: none) {
+    .table-hover tbody tr:hover { background-color: transparent; }
+}

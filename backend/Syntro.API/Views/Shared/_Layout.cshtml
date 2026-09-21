@@ -123,17 +123,29 @@
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.16); }
         }
-        @@media (max-width: 767.98px) {
-            .admin-shell { flex-wrap: wrap; }
-            .admin-sidebar, .admin-main { width: 100%; flex-basis: 100%; }
-            .admin-sidebar { min-height: auto; position: static; height: auto; overflow-y: visible; }
-        }
     </style>
+    <link href="/css/site.css?v=20260921a" rel="stylesheet" />
 </head>
 <body>
     <div class="container-fluid admin-container">
         <div class="row g-0 admin-shell">
-            <nav class="sidebar admin-sidebar py-3 px-3">
+            <div class="admin-topbar">
+                <button
+                    class="admin-drawer-toggle"
+                    type="button"
+                    data-admin-drawer-toggle
+                    aria-label="Abrir menu"
+                    aria-expanded="false"
+                    aria-controls="admin-sidebar"
+                >
+                    <i class="bi bi-list" aria-hidden="true"></i>
+                </button>
+                <a class="admin-topbar-brand" href="/dashboard">
+                    <img src="/assets/branding/app-logo-backend.svg" alt="Syntro" class="app-brand-logo" />
+                    <span>Syntro</span>
+                </a>
+            </div>
+            <nav class="sidebar admin-sidebar py-3 px-3" id="admin-sidebar">
                 <a class="navbar-brand sidebar-brand d-block mb-4 fs-5" href="/dashboard">
                     <span class="d-inline-flex align-items-center gap-2">
                         <img src="/assets/branding/app-logo-backend.svg" alt="Syntro" class="app-brand-logo" />
@@ -241,6 +253,7 @@
             </main>
         </div>
     </div>
+    <div class="admin-sidebar-backdrop" hidden></div>
 
     <div id="session-warning-overlay" class="session-warning-overlay" aria-hidden="true">
         <div id="session-warning" class="session-warning-card" role="dialog" aria-modal="true" aria-labelledby="session-warning-title">
@@ -735,6 +748,45 @@
         if (window.location.pathname.startsWith("/Auth")) {
             return;
         }
+
+        const drawerToggle = document.querySelector("[data-admin-drawer-toggle]");
+        const adminSidebar = document.getElementById("admin-sidebar");
+        const sidebarBackdrop = document.querySelector(".admin-sidebar-backdrop");
+
+        const setDrawer = (open) => {
+            if (!adminSidebar) return;
+            adminSidebar.classList.toggle("open", open);
+            document.body.classList.toggle("admin-sidebar-open", open);
+            if (sidebarBackdrop) {
+                sidebarBackdrop.hidden = !open;
+            }
+            if (drawerToggle) {
+                drawerToggle.setAttribute("aria-expanded", String(open));
+                drawerToggle.setAttribute("aria-label", open ? "Cerrar menu" : "Abrir menu");
+            }
+        };
+
+        if (drawerToggle) {
+            drawerToggle.addEventListener("click", () => {
+                setDrawer(!adminSidebar?.classList.contains("open"));
+            });
+        }
+
+        if (sidebarBackdrop) {
+            sidebarBackdrop.addEventListener("click", () => setDrawer(false));
+        }
+
+        adminSidebar?.addEventListener("click", (event) => {
+            if (event.target?.closest?.("a")) setDrawer(false);
+        });
+
+        document.addEventListener("keydown", (event) => {
+            if (event.key === "Escape") setDrawer(false);
+        });
+
+        window.addEventListener("resize", () => {
+            if (window.innerWidth > 767.98) setDrawer(false);
+        });
 
         const sessionToggle = document.querySelector(".session-dropdown-toggle");
         const sessionMenu = document.querySelector(".session-dropdown-menu");
