@@ -451,7 +451,7 @@ window.addEventListener("DOMContentLoaded", () => {
             const sortBy = data?.sortBy || "risk";
             const direction = data?.sortDirection || "desc";
             table.innerHTML = `
-                <div class="telemetry-table-wrap table-responsive">
+                <div class="telemetry-table-wrap table-responsive data-table-card">
                     <table class="table align-middle table-sm">
                         <thead>
                             <tr>
@@ -470,35 +470,35 @@ window.addEventListener("DOMContentLoaded", () => {
                         <tbody>
                             ${items.map((item) => `
                                 <tr>
-                                    <td>
+                                    <td data-label="Equipo">
                                         <div class="fw-semibold">${item.deviceName || item.hostName || "Sin nombre"}</div>
                                         <div class="small text-muted">${item.hostName || ""}</div>
                                     </td>
-                                    <td>${item.username || ""}</td>
-                                    <td>${item.ipAddress || ""}</td>
-                                    <td>${item.serialNumber || item.macAddress || ""}</td>
-                                    <td><span class="badge bg-secondary-subtle text-secondary-emphasis">${formatKeyLabel(item.matchKey)}</span></td>
-                                    <td>${matchPill(item.matched)}</td>
-                                    <td>
+                                    <td data-label="Usuario">${item.username || ""}</td>
+                                    <td data-label="IP">${item.ipAddress || ""}</td>
+                                    <td data-label="S/N">${item.serialNumber || item.macAddress || ""}</td>
+                                    <td data-label="Clave"><span class="badge bg-secondary-subtle text-secondary-emphasis">${formatKeyLabel(item.matchKey)}</span></td>
+                                    <td data-label="Estado">${matchPill(item.matched)}</td>
+                                    <td data-label="Item inventario">
                                         ${item.matched
                                             ? `<div class="small fw-semibold">${item.inventoryItemNumber || item.inventorySerial || "Item"}</div>
                                                <div class="small text-muted">${item.inventoryDescription || item.inventorySerial || ""}</div>`
                                             : '<span class="text-muted small">-</span>'}
                                     </td>
-                                    <td>
+                                    <td data-label="Responsable">
                                         ${item.matched
                                             ? `<div class="small">${item.inventoryResponsibleUser || "-"}</div>
                                                <div class="small text-muted">${item.inventoryEmail || ""}</div>`
                                             : '<span class="text-muted small">-</span>'}
                                     </td>
-                                    <td>
+                                    <td data-label="Asignado a">
                                         ${item.matched
                                             ? `<div class="small">${item.inventoryAssignedBuildingExternalId || "-"}</div>
                                                <div class="small text-muted">${item.inventoryAssignedRoomExternalId || ""}</div>`
                                             : `<div class="small">${item.buildingExternalId || "-"}</div>
                                                <div class="small text-muted">${item.roomExternalId || ""}</div>`}
                                     </td>
-                                    <td>${riskPill(item.riskLevel, item.riskScore)}</td>
+                                    <td data-label="Riesgo">${riskPill(item.riskLevel, item.riskScore)}</td>
                                 </tr>`).join("")}
                         </tbody>
                     </table>

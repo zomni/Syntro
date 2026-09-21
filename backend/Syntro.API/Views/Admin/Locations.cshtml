@@ -478,7 +478,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        <div class="table-responsive">
+        <div class="table-responsive data-table-card">
             <table class="table table-hover mb-0 align-middle table-fixed-layout">
                                                 <thead class="table-light">
                     <tr>
@@ -496,7 +496,7 @@
                     @if (!Model.Locations.Any())
                     {
                         <tr>
-                            <td colspan="8" class="text-center py-5">
+                            <td colspan="8" class="text-center py-5" data-label="Informacion">
                                 <div class="text-muted">
                                     <i class="bi bi-building fs-1 d-block mb-2"></i>
                                     <div class="fw-semibold">No hay edificios registrados</div>
@@ -511,31 +511,31 @@
                     @foreach (var loc in Model.Locations)
                     {
                         <tr>
-                            <td>
+<td data-label="Edificio">
                                 <div class="fw-semibold">@loc.DisplayName</div>
                                 <div class="small text-muted">@loc.ExternalId</div>
                             </td>
-                            <td>
+                            <td data-label="Campus">
                                 <span class="badge bg-secondary">@loc.Campus</span>
                                 @if (loc.HasManualOverride)
                                 {
                                     <span class="badge bg-warning text-dark ms-1">override</span>
                                 }
                             </td>
-                            <td class="small">@loc.AvailableFloors</td>
-                            <td>@loc.RoomsCount</td>
-                            <td>
+                            <td class="small" data-label="Pisos">@loc.AvailableFloors</td>
+                            <td data-label="Salas">@loc.RoomsCount</td>
+                            <td data-label="Equipos asignados">
                                 <a href="/admin/inventory?assignment=assigned&buildingExternalId=@loc.ExternalId" class="badge bg-success text-decoration-none">
                                     @loc.AssignedInventoryCount
                                 </a>
                             </td>
-                            <td>
+                            <td data-label="Sugeridos">
                                 <a href="/admin/inventory?assignment=suggested&buildingExternalId=@loc.ExternalId" class="badge bg-warning text-dark text-decoration-none">
                                     @loc.SuggestedInventoryCount
                                 </a>
                             </td>
-                            <td class="text-muted small">@loc.Coordinates</td>
-                            <td class="text-end">
+                            <td class="text-muted small" data-label="Coordenadas">@loc.Coordinates</td>
+                            <td class="text-end td-actions" data-label="Acciones">
                                 <div class="d-flex flex-nowrap gap-1 justify-content-end align-items-center">
                                 <a href="@($"{mapBaseUrl}/?id={Uri.EscapeDataString(loc.ExternalId)}&zoom=20&floor={loc.DefaultMapFloor}")"
                                    class="btn btn-sm btn-outline-info"

@@ -479,7 +479,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        <div class="table-responsive">
+        <div class="table-responsive data-table-card">
             <table class="table table-hover mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
@@ -501,7 +501,7 @@
                     @if (items.Count == 0)
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">No hay registros para ese filtro.</td>
+                            <td colspan="12" class="text-center text-muted py-4" data-label="Informacion">No hay registros para ese filtro.</td>
                         </tr>
                     }
                     else
@@ -509,18 +509,18 @@
                         @foreach (var item in items)
                         {
                             <tr>
-                                <td class="small text-nowrap">@(DateTime.TryParse(GetItemString(item, "CreatedAtUtc"), out var createdAt) ? createdAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "")</td>
-                                <td class="small">@GetItemString(item, "ChangedByUsername")</td>
-                                <td>
+                                <td class="small text-nowrap" data-label="Fecha">@(DateTime.TryParse(GetItemString(item, "CreatedAtUtc"), out var createdAt) ? createdAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "")</td>
+                                <td class="small" data-label="Usuario">@GetItemString(item, "ChangedByUsername")</td>
+                                <td data-label="Accion">
                                     <span class="badge bg-secondary"><i class="bi bi-lightning-charge-fill me-1"></i>@TranslateAction(GetItemString(item, "ActionType"))</span>
                                 </td>
-                                <td class="small">
+                                <td class="small" data-label="Recurso">
                                     <span class="d-inline-flex align-items-center gap-1">
                                         <i class="bi @ResourceIcon(GetItemString(item, "Resource")) text-primary"></i>
                                         @GetItemString(item, "Resource")
                                     </span>
                                 </td>
-                                <td class="small">
+                                <td class="small" data-label="Resultado">
                                     @{
                                         var itemResult = GetItemString(item, "Result");
                                         var itemSeverity = GetItemString(item, "Severity");
@@ -529,17 +529,17 @@
                                         @itemResult
                                     </span>
                                 </td>
-                                <td class="small">
+                                <td class="small" data-label="Severidad">
                                     <span class="badge @(itemSeverity == "critical" ? "bg-danger" : itemSeverity == "warning" ? "bg-warning text-dark" : "bg-info text-dark")">
                                         @itemSeverity
                                     </span>
                                 </td>
-                                <td class="small">@GetItemString(item, "BuildingExternalId")</td>
-                                <td class="small">@GetItemString(item, "Summary")</td>
-                                <td class="small text-muted">@GetItemString(item, "PreviousValue")</td>
-                                <td class="small text-muted">@GetItemString(item, "NewValue")</td>
-                                <td class="small text-nowrap">@GetItemString(item, "ClientIp")</td>
-                                <td class="small text-muted">@GetItemString(item, "UserAgent")</td>
+                                <td class="small" data-label="Edificio">@GetItemString(item, "BuildingExternalId")</td>
+                                <td class="small" data-label="Resumen">@GetItemString(item, "Summary")</td>
+                                <td class="small text-muted d-none d-md-table-cell" data-label="Previo">@GetItemString(item, "PreviousValue")</td>
+                                <td class="small text-muted d-none d-md-table-cell" data-label="Nuevo">@GetItemString(item, "NewValue")</td>
+                                <td class="small text-nowrap" data-label="IP">@GetItemString(item, "ClientIp")</td>
+                                <td class="small text-muted" data-label="Agente">@GetItemString(item, "UserAgent")</td>
                             </tr>
                         }
                     }

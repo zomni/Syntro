@@ -1744,32 +1744,32 @@
                 const currentDirection = data?.sortDirection || sortDirectionSelect?.value || "desc";
                 const rows = items.map((item, index) => `
                     <tr class="${item.id === activeSnapshotId ? "telemetry-row-active" : ""}">
-                        <td class="fw-semibold">${item.serialNumber || ""}</td>
-                        <td>
+                        <td class="fw-semibold" data-label="S/N">${item.serialNumber || ""}</td>
+                        <td data-label="Equipo">
                             <div class="fw-semibold">${item.deviceName || item.hostName || "Sin nombre"}</div>
                             <div class="small text-muted">${item.hostName || ""}${item.processor ? ` | ${item.processor}` : ""}</div>
                         </td>
-                        <td>${item.deviceCategory ? `<span class="badge ${item.deviceCategory === "impresora" ? "bg-danger-subtle text-danger-emphasis" : "bg-secondary-subtle text-secondary-emphasis"}">${item.deviceCategory}</span>` : ""}</td>
-                        <td>${item.username || ""}</td>
-                        <td>${item.subnetCidr || ""}</td>
-                        <td>${item.networkProfile || ""}</td>
-                        <td>${item.ipAddress || ""}</td>
-                        <td>${item.macAddress || ""}</td>
-                        <td>${item.operatingSystem || ""} ${item.operatingSystemVersion || ""}</td>
-                        <td>${item.manufacturer || ""} ${item.model || ""}</td>
-                        <td>${item.antivirusStatus || ""}</td>
-                        <td>${item.patchStatus || ""}</td>
-                        <td>${item.isOnline === true ? '<span class="badge bg-success-subtle text-success-emphasis">Online</span>' : item.isOnline === false ? '<span class="badge bg-secondary-subtle text-secondary-emphasis">Offline</span>' : '<span class="badge bg-light text-muted">Sin dato</span>'}</td>
-                        <td>${item.pingMs ?? ""}${item.pingMs != null ? " ms" : ""}</td>
-                        <td><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span>
+                        <td data-label="Cat.">${item.deviceCategory ? `<span class="badge ${item.deviceCategory === "impresora" ? "bg-danger-subtle text-danger-emphasis" : "bg-secondary-subtle text-secondary-emphasis"}">${item.deviceCategory}</span>` : ""}</td>
+                        <td data-label="Usuario">${item.username || ""}</td>
+                        <td data-label="Subred">${item.subnetCidr || ""}</td>
+                        <td data-label="Perfil">${item.networkProfile || ""}</td>
+                        <td data-label="IP">${item.ipAddress || ""}</td>
+                        <td data-label="MAC">${item.macAddress || ""}</td>
+                        <td data-label="SO">${item.operatingSystem || ""} ${item.operatingSystemVersion || ""}</td>
+                        <td data-label="Modelo">${item.manufacturer || ""} ${item.model || ""}</td>
+                        <td data-label="AV">${item.antivirusStatus || ""}</td>
+                        <td data-label="Parches">${item.patchStatus || ""}</td>
+                        <td data-label="Red">${item.isOnline === true ? '<span class="badge bg-success-subtle text-success-emphasis">Online</span>' : item.isOnline === false ? '<span class="badge bg-secondary-subtle text-secondary-emphasis">Offline</span>' : '<span class="badge bg-light text-muted">Sin dato</span>'}</td>
+                        <td data-label="Ping">${item.pingMs ?? ""}${item.pingMs != null ? " ms" : ""}</td>
+                        <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span>
                             <button class="btn btn-sm btn-outline-secondary ms-1 py-0 px-1" title="Ver detalle de riesgo" data-device-index="${index}"><i class="bi bi-info-circle"></i></button>
                         </td>
-                        <td>${item.scoringSource === "ml-hybrid" ? `<span class="badge bg-success-subtle text-success-emphasis" title="ML Probability: ${(item.mlProbability * 100).toFixed(0)}%">ML ${(item.mlProbability * 100).toFixed(0)}%</span>` : `<span class="badge bg-light text-muted">Reglas</span>`}</td>
+                        <td data-label="Fuente">${item.scoringSource === "ml-hybrid" ? `<span class="badge bg-success-subtle text-success-emphasis" title="ML Probability: ${(item.mlProbability * 100).toFixed(0)}%">ML ${(item.mlProbability * 100).toFixed(0)}%</span>` : `<span class="badge bg-light text-muted">Reglas</span>`}</td>
                     </tr>
                 `).join("");
 
                 deviceTable.innerHTML = `
-                    <div class="telemetry-table-wrap table-responsive">
+                    <div class="telemetry-table-wrap table-responsive data-table-card">
                         <table class="table align-middle table-sm">
                             <thead>
                                 <tr>
@@ -1989,7 +1989,7 @@
                 subnetTable.innerHTML = `<div class="text-muted">No hay subredes con equipos observados en el ultimo snapshot.</div>`;
             } else {
                 subnetTable.innerHTML = `
-                    <div class="telemetry-table-wrap table-responsive">
+                    <div class="telemetry-table-wrap table-responsive data-table-card">
                         <table class="table align-middle table-sm">
                             <thead>
                                 <tr>
@@ -2006,14 +2006,14 @@
                             <tbody>
                                 ${pageItems.map((item) => `
                                     <tr class="telemetry-clickable-row" data-subnet-filter="${item.subnetCidr || ""}">
-                                        <td>${item.subnetCidr || ""}</td>
-                                        <td>${item.deviceCount ?? 0}</td>
-                                        <td>${item.criticalCount ?? 0}</td>
-                                        <td>${item.highCount ?? 0}</td>
-                                        <td>${item.mediumCount ?? 0}</td>
-                                        <td>${item.lowCount ?? 0}</td>
-                                        <td><span class="telemetry-pill telemetry-pill-${item.maxRiskLevel || "unknown"}">${item.maxRiskLevel || ""} (${item.maxRiskScore ?? 0})</span></td>
-                                        <td><button type="button" class="btn btn-sm btn-outline-primary" data-subnet-filter="${item.subnetCidr || ""}">Ver</button></td>
+                                        <td data-label="Subred">${item.subnetCidr || ""}</td>
+                                        <td data-label="Eq.">${item.deviceCount ?? 0}</td>
+                                        <td data-label="C">${item.criticalCount ?? 0}</td>
+                                        <td data-label="A">${item.highCount ?? 0}</td>
+                                        <td data-label="M">${item.mediumCount ?? 0}</td>
+                                        <td data-label="B">${item.lowCount ?? 0}</td>
+                                        <td data-label="Max."><span class="telemetry-pill telemetry-pill-${item.maxRiskLevel || "unknown"}">${item.maxRiskLevel || ""} (${item.maxRiskScore ?? 0})</span></td>
+                                        <td class="td-actions" data-label="Acciones"><button type="button" class="btn btn-sm btn-outline-primary" data-subnet-filter="${item.subnetCidr || ""}">Ver</button></td>
                                     </tr>
                                 `).join("")}
                             </tbody>
@@ -2051,15 +2051,15 @@
 
         const buildSessionRows = (items) => items.map((user) => `
             <tr>
-                <td class="fw-semibold">${user.username || ""}</td>
-                <td>${user.role || ""}</td>
-                <td>${sessionStateBadge(user.sessionState, user.sessionStateLabel || user.sessionState || "")}</td>
-                <td>${user.subnetCidr || ""}</td>
-                <td>${user.lastSeenAtUtc ? formatChileDateTime(user.lastSeenAtUtc) : "-"}</td>
-                <td>${user.pingMs == null ? "-" : `${user.pingMs} ms`}</td>
-                <td>${user.openPorts || ""}</td>
-                <td><span class="telemetry-pill telemetry-pill-${user.riskLevel || "unknown"}">${user.riskLevel || ""} (${user.riskScore ?? 0})</span></td>
-                <td>${user.linkedDeviceCount ?? 0}</td>
+                <td class="fw-semibold" data-label="Endpoint">${user.username || ""}</td>
+                <td data-label="Perfil">${user.role || ""}</td>
+                <td data-label="Estado">${sessionStateBadge(user.sessionState, user.sessionStateLabel || user.sessionState || "")}</td>
+                <td data-label="Subred">${user.subnetCidr || ""}</td>
+                <td data-label="Ultima deteccion">${user.lastSeenAtUtc ? formatChileDateTime(user.lastSeenAtUtc) : "-"}</td>
+                <td data-label="Latencia">${user.pingMs == null ? "-" : `${user.pingMs} ms`}</td>
+                <td data-label="Puertos">${user.openPorts || ""}</td>
+                <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${user.riskLevel || "unknown"}">${user.riskLevel || ""} (${user.riskScore ?? 0})</span></td>
+                <td data-label="Equipos">${user.linkedDeviceCount ?? 0}</td>
             </tr>
         `).join("");
 
@@ -2117,7 +2117,7 @@
             sessionSummary.textContent = `Mostrando ${pageItems.length} de ${totalCount} endpoints.`;
             sessionTable.innerHTML = totalCount === 0
                 ? `<div class="text-muted">No hay endpoints para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr><th>${buildSortableHeader("Endpoint", "username", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Perfil", "role", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Estado", "state", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Subred", "subnet", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Ultima deteccion", "lastSeen", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Latencia", "ping", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Puertos", "ports", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Riesgo", "risk", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Equipos", "linkedDevices", sortBy, sessionSortDirection, "session")}</th></tr></thead><tbody>${buildSessionRows(pageItems)}</tbody></table></div>`;
+                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>${buildSortableHeader("Endpoint", "username", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Perfil", "role", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Estado", "state", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Subred", "subnet", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Ultima deteccion", "lastSeen", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Latencia", "ping", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Puertos", "ports", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Riesgo", "risk", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Equipos", "linkedDevices", sortBy, sessionSortDirection, "session")}</th></tr></thead><tbody>${buildSessionRows(pageItems)}</tbody></table></div>`;
 
             sessionTable.querySelectorAll("[data-session-sort]").forEach((button) => {
                 button.addEventListener("click", () => {
@@ -2146,14 +2146,14 @@
             snapshotSummary.textContent = `Mostrando ${items.length} de ${totalCount} snapshots. Pagina ${page} de ${totalPages}.`;
             snapshotTable.innerHTML = items.length === 0
                 ? `<div class="text-muted">No hay snapshots para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Fuente</th><th>Estado</th><th>Usuarios</th><th>Equipos</th><th>Riesgo</th></tr></thead><tbody>${items.map((item) => `
+                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Fuente</th><th>Estado</th><th>Usuarios</th><th>Equipos</th><th>Riesgo</th></tr></thead><tbody>${items.map((item) => `
                     <tr>
-                        <td>${item.observedAtUtc ? formatChileDateTime(item.observedAtUtc) : ""}</td>
-                        <td><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
-                        <td><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
-                        <td>${item.connectedUserCount ?? 0}</td>
-                        <td>${item.deviceCount ?? 0}</td>
-                        <td><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
+                        <td data-label="Fecha">${item.observedAtUtc ? formatChileDateTime(item.observedAtUtc) : ""}</td>
+                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
+                        <td data-label="Estado"><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
+                        <td data-label="Usuarios">${item.connectedUserCount ?? 0}</td>
+                        <td data-label="Equipos">${item.deviceCount ?? 0}</td>
+                        <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
                     </tr>`).join("")}</tbody></table></div>`;
 
             renderClientPager(snapshotPagination, page, totalPages, loadSnapshots);
@@ -2174,18 +2174,18 @@
             snapshotSummary.textContent = `Mostrando ${items.length} de ${totalCount} snapshots. Pagina ${page} de ${totalPages}.`;
             snapshotTable.innerHTML = items.length === 0
                 ? `<div class="text-muted">No hay snapshots para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
+                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
                     <tr>
-                        <td><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</span></td>
-                        <td>${formatChileDateTime(item.observedAtUtc)}</td>
-                        <td>${formatChileWeekday(item.observedAtUtc)}</td>
-                        <td>${formatChileTime(item.observedAtUtc)}</td>
-                        <td><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
-                        <td><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
-                        <td>${item.connectedUserCount ?? 0}</td>
-                        <td>${item.deviceCount ?? 0}</td>
-                        <td><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
-                        <td class="text-end text-nowrap">${String(item.id) === String(activeSnapshotId) ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir esta snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar esta snapshot" data-delete-snapshot="${item.id}"><i class="bi bi-trash3"></i></button></td>
+                        <td data-label="Captura"><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</span></td>
+                        <td data-label="Fecha">${formatChileDateTime(item.observedAtUtc)}</td>
+                        <td data-label="Dia">${formatChileWeekday(item.observedAtUtc)}</td>
+                        <td data-label="Hora">${formatChileTime(item.observedAtUtc)}</td>
+                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
+                        <td data-label="Estado"><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
+                        <td data-label="Usuarios">${item.connectedUserCount ?? 0}</td>
+                        <td data-label="Equipos">${item.deviceCount ?? 0}</td>
+                        <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
+                        <td class="text-end text-nowrap td-actions" data-label="Acciones">${String(item.id) === String(activeSnapshotId) ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir esta snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar esta snapshot" data-delete-snapshot="${item.id}"><i class="bi bi-trash3"></i></button></td>
                     </tr>`).join("")}</tbody></table></div>`;
 
             snapshotTable.querySelectorAll("[data-snapshot-sort]").forEach((button) => {
@@ -2326,7 +2326,7 @@
                 scheduledTable.innerHTML = `<div class="text-muted">No hay escaneos programados para ese filtro.</div>`;
                 return;
             }
-            scheduledTable.innerHTML = `<div class="telemetry-table-wrap table-responsive"><table class="table align-middle"><thead><tr>
+            scheduledTable.innerHTML = `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr>
                 <th>ID</th>
                 <th>Planificacion</th>
                 <th>${buildSortableHeader("Dia", "scheduledDayLocal", currentSortBy, currentDirection, "scheduled")}</th>
@@ -2352,17 +2352,17 @@
                     ? `<a href="/dashboard/network-telemetry?snapshotId=${item.snapshotId}" class="btn btn-sm btn-outline-primary" title="Cargar esta snapshot"><i class="bi bi-eye"></i></a>`
                     : '<span class="text-muted">-</span>';
                 return `<tr>
-                    <td class="fw-semibold" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</td>
-                    <td>${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
-                    <td>${item.scheduledDayLocal || ""}</td>
-                    <td>${item.scheduledTimeLocal || ""}</td>
-                    <td>${createdAt}</td>
-                    <td>${startedAt}</td>
-                    <td>${statusBadge}</td>
-                    <td>${errMsg || '<span class="text-muted small">-</span>'}</td>
-                    <td>${item.deviceCount != null ? item.deviceCount : '-'}</td>
-                    <td>${item.userCount != null ? item.userCount : '-'}</td>
-                    <td>${loadBtn}</td>
+                    <td class="fw-semibold" data-label="ID" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</td>
+                    <td data-label="Planificacion">${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
+                    <td data-label="Dia">${item.scheduledDayLocal || ""}</td>
+                    <td data-label="Hora">${item.scheduledTimeLocal || ""}</td>
+                    <td data-label="Fecha">${createdAt}</td>
+                    <td data-label="Inicio">${startedAt}</td>
+                    <td data-label="Estado">${statusBadge}</td>
+                    <td data-label="Error">${errMsg || '<span class="text-muted small">-</span>'}</td>
+                    <td data-label="Equipos">${item.deviceCount != null ? item.deviceCount : '-'}</td>
+                    <td data-label="Usuarios">${item.userCount != null ? item.userCount : '-'}</td>
+                    <td class="td-actions" data-label="Accion">${loadBtn}</td>
                 </tr>`;
             }).join("")}</tbody></table></div>`;
 

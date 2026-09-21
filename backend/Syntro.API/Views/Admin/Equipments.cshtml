@@ -678,7 +678,7 @@
 
 <div class="card border-0 shadow-sm">
     <div class="card-body p-0">
-        <div class="table-responsive">
+        <div class="table-responsive data-table-card">
             <table class="table table-hover mb-0 align-middle table-fixed-layout">
                                                 <thead class="table-light">
                     <tr>
@@ -716,7 +716,7 @@
                     @if (!Model.Items.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center py-5">
+                            <td colspan="12" class="text-center py-5" data-label="Informacion">
                                 <div class="text-muted">
                                     <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                                     <div class="fw-semibold">No hay equipos registrados</div>
@@ -731,27 +731,27 @@
                     @foreach (var item in Model.Items)
                     {
                         <tr>
-                            <td class="text-muted small">
+                            <td class="text-muted small" data-label="Fila">
                                 <div>#@item.RowNumber</div>
                             </td>
-                            <td>
+                            <td data-label="Equipo">
                                 <div class="fw-semibold">@(string.IsNullOrWhiteSpace(item.SerialNumber) ? "-" : item.SerialNumber)</div>
                             </td>
-                            <td class="small">
+                            <td class="small" data-label="Unidad">
                                 @{
                                     var unitShort = (item.UnitOrDepartment ?? "").Split(new[] { '\n', ',' }, 2)[0].Trim();
                                 }
                                 <div class="text-truncate" style="max-width:220px;" title="@unitShort">@unitShort</div>
                             </td>
-                            <td class="small">
+                            <td class="small" data-label="Usuario">
                                 <div>@item.ResponsibleUser</div>
                                 <div class="text-muted">@item.Email</div>
                             </td>
-                            <td class="small font-monospace">@item.IpAddress</td>
-                            <td>
+                            <td class="small font-monospace" data-label="IP">@item.IpAddress</td>
+                            <td data-label="Categoria">
                                 <span class="badge bg-secondary">@InventoryDisplayLabels.Category(item.InferredCategory)</span>
                             </td>
-                            <td>
+                            <td data-label="Detalles">
                                 <button class="btn btn-sm btn-outline-secondary py-0 px-1" title="Ver detalle de clasificacion"
                                     data-bs-toggle="modal" data-bs-target="#classificationDetailModal"
                                     onclick="showClassificationDetail(
@@ -764,7 +764,7 @@
                                         '@item.ItemNumber'
                                     )"><i class="bi bi-info-circle"></i></button>
                             </td>
-                            <td>
+                            <td data-label="Estado">
                                 @{
                                     var statusExplanation = item.InferredStatus?.ToLowerInvariant() switch
                                     {
@@ -788,7 +788,7 @@
                                     @InventoryDisplayLabels.Status(item.InferredStatus).ToUpperInvariant()
                                 </span>
                             </td>
-                            <td class="small">
+                            <td class="small" data-label="Sugerencia">
                                 @if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
                                 {
                                 }
@@ -806,7 +806,7 @@
                                     <div class="text-muted">@item.MatchConfidence</div>
                                 }
                             </td>
-                            <td class="small">
+                            <td class="small" data-label="Asignacion">
                                 @if (string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
                                 {
                                     <span class="text-muted">Pendiente</span>
@@ -824,7 +824,7 @@
                                     }
                                 }
                             </td>
-                            <td class="small">
+                            <td class="small" data-label="Incongruencias">
                                 @if (Model.InconsistencySummaries.TryGetValue(item.Id, out var inconsistencySummary))
                                 {
                                     var detailUrl = Url.Action("InventoryInconsistency", new { id = item.Id, returnUrl = currentInventoryUrl })
@@ -840,7 +840,7 @@
                                     <span class="text-muted">-</span>
                                 }
                             </td>
-                            <td>
+                            <td class="td-actions" data-label="Acciones">
                                 <div class="d-flex gap-2 justify-content-end flex-nowrap align-items-center">
                                     @if (!string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
                                     {
