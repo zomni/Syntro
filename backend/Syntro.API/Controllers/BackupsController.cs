@@ -7,7 +7,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/backups")]
-[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+[Authorize(Roles = $"{AppRoles.Admin}")]
 public class BackupsController : ControllerBase
 {
     private readonly DatabaseBackupService _backupService;

@@ -12,7 +12,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/frontend-static-backup")]
-[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+[Authorize(Roles = $"{AppRoles.Admin}")]
 public class FrontendStaticBackupController : ControllerBase
 {
     private static readonly JsonSerializerOptions JsonOptions = new()

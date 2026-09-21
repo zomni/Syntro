@@ -75,7 +75,7 @@ public class LocationsController : ControllerBase
     }
 
     // POST /api/locations
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     public async Task<ActionResult<Location>> Create(Location location, CancellationToken cancellationToken)
     {
@@ -85,7 +85,7 @@ public class LocationsController : ControllerBase
     }
 
     // PUT /api/locations/{id}
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, Location location, CancellationToken cancellationToken)
     {
@@ -107,7 +107,7 @@ public class LocationsController : ControllerBase
     }
 
     // DELETE /api/locations/{id}
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

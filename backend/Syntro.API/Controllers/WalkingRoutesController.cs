@@ -73,7 +73,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpPost("paths")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> CreatePath(CreateWalkingRoutePathRequest request, CancellationToken cancellationToken)
     {
         var campus = CampusDefaults.Resolve(_configuration, request.Campus);
@@ -195,7 +195,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpPut("edges/{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> UpdateEdge(string externalId, UpdateWalkingRouteEdgeRequest request, CancellationToken cancellationToken)
     {
         var normalizedExternalId = Uri.UnescapeDataString(externalId ?? string.Empty).Trim();
@@ -227,7 +227,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpPut("nodes/{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> UpdateNode(string externalId, UpdateWalkingRouteNodeRequest request, CancellationToken cancellationToken)
     {
         var normalizedExternalId = Uri.UnescapeDataString(externalId ?? string.Empty).Trim();
@@ -317,7 +317,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpPost("nodes/{externalId}/split")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> SplitNode(string externalId, SplitWalkingRouteNodeRequest request, CancellationToken cancellationToken)
     {
         var normalizedExternalId = Uri.UnescapeDataString(externalId ?? string.Empty).Trim();
@@ -391,7 +391,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpPost("restore")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> RestoreNetwork(RestoreWalkingRouteNetworkRequest request, CancellationToken cancellationToken)
     {
         var campus = CampusDefaults.Resolve(_configuration, request.Campus);
@@ -471,7 +471,7 @@ public class WalkingRoutesController : ControllerBase
     }
 
     [HttpDelete("edges/{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> DeleteEdge(string externalId, CancellationToken cancellationToken)
     {
         var normalizedExternalId = Uri.UnescapeDataString(externalId ?? string.Empty).Trim();

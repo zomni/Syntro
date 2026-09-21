@@ -125,7 +125,7 @@ public class InventoryImportController : ControllerBase
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("run")]
     public async Task<IActionResult> Run(
         [FromQuery] string? fileName,
@@ -137,7 +137,7 @@ public class InventoryImportController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("upload")]
     public async Task<IActionResult> Upload(
         IFormFile file,
@@ -173,7 +173,6 @@ public class InventoryImportController : ControllerBase
         return Ok(result);
     }
 
-    [AllowAnonymous]
     [HttpGet("items")]
     public async Task<IActionResult> GetItems(
         [FromQuery] string? category,
@@ -261,7 +260,6 @@ public class InventoryImportController : ControllerBase
         return Ok(items);
     }
 
-    [AllowAnonymous]
     [HttpGet("building-summary")]
     public async Task<IActionResult> GetBuildingSummary(CancellationToken cancellationToken)
     {

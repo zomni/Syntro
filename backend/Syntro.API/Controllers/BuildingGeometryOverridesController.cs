@@ -22,7 +22,7 @@ public class BuildingGeometryOverridesController : ControllerBase
     }
 
     [HttpGet]
-    [AllowAnonymous]
+    [Authorize]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
     {
         var overrides = await _context.BuildingGeometryOverrides
@@ -43,7 +43,7 @@ public class BuildingGeometryOverridesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> Save(SaveBuildingGeometryOverrideRequest request, CancellationToken cancellationToken)
     {
         var externalId = (request.BuildingExternalId ?? string.Empty).Trim();

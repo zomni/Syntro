@@ -52,7 +52,7 @@ public class EquipmentsController : ControllerBase
     }
 
     // POST /api/equipments
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     public async Task<ActionResult<Equipment>> Create(Equipment equipment, CancellationToken cancellationToken)
     {
@@ -66,7 +66,7 @@ public class EquipmentsController : ControllerBase
     }
 
     // PUT /api/equipments/{id}
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, Equipment equipment, CancellationToken cancellationToken)
     {
@@ -92,7 +92,7 @@ public class EquipmentsController : ControllerBase
     }
 
     // DELETE /api/equipments/{id}
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

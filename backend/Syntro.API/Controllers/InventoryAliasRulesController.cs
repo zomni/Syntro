@@ -30,7 +30,7 @@ public class InventoryAliasRulesController : ControllerBase
         return Ok(rules);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     public async Task<IActionResult> Upsert([FromBody] UpsertAliasRuleRequest request, CancellationToken cancellationToken)
     {
@@ -60,7 +60,7 @@ public class InventoryAliasRulesController : ControllerBase
         return Ok(rule);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {

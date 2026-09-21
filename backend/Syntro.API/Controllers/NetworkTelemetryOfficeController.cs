@@ -11,7 +11,7 @@ namespace Syntro.API.Controllers;
 [ApiController]
 [Route("api/network-telemetry/office")]
 [Tags("Network Telemetry Office")]
-[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
 public class NetworkTelemetryOfficeController : ControllerBase
 {
     private readonly NetworkTelemetryService _service;

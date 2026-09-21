@@ -46,7 +46,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(snapshots);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpPost("scan")]
     public async Task<IActionResult> Scan(
         [FromBody] NetworkTelemetryLiveScanRequest? request,
@@ -144,7 +144,7 @@ public class NetworkTelemetryController : ControllerBase
         };
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpPost("agent/control")]
     public async Task<IActionResult> AgentControl([FromBody] NetworkTelemetryAgentControlRequest? request, CancellationToken cancellationToken = default)
     {
@@ -202,7 +202,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/observations")]
     public async Task<IActionResult> Observations(
         Guid snapshotId,
@@ -255,7 +255,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/matching-summary")]
     public async Task<IActionResult> MatchingSummary(
         Guid snapshotId,
@@ -272,7 +272,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/matches")]
     public async Task<IActionResult> Matches(
         Guid snapshotId,
@@ -307,7 +307,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("snapshots/{snapshotId:guid}/rematch")]
     public async Task<IActionResult> Rematch(
         Guid snapshotId,
@@ -325,7 +325,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("scheduled-scans")]
     public async Task<IActionResult> ScheduledScans(
         [FromQuery] string? search = null,
@@ -357,7 +357,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpDelete("snapshots/{snapshotId:guid}")]
     public async Task<IActionResult> DeleteSnapshot(
         Guid snapshotId,

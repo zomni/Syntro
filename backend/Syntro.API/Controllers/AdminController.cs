@@ -205,7 +205,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("/admin/compliance")]
     public async Task<IActionResult> Compliance()
     {
@@ -363,14 +363,14 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("/dashboard/compliance")]
     public IActionResult ComplianceLegacy()
     {
         return RedirectToAction(nameof(Compliance));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/api/admin/users")]
     public async Task<IActionResult> GetUsers(CancellationToken cancellationToken)
     {
@@ -426,7 +426,7 @@ public class AdminController : Controller
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/api/admin/users")]
     public async Task<IActionResult> CreateUser([FromBody] CreateUserRequest request, CancellationToken cancellationToken)
     {
@@ -494,7 +494,7 @@ public class AdminController : Controller
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPut("/api/admin/users/{id:guid}")]
     public async Task<IActionResult> UpdateUser(Guid id, [FromBody] UpdateUserRequest request, CancellationToken cancellationToken)
     {
@@ -542,7 +542,7 @@ public class AdminController : Controller
         return Ok(new { message = $"Usuario {targetUser.Username} actualizado." });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/api/admin/users/{id:guid}/reset-password")]
     public async Task<IActionResult> ResetPassword(Guid id, [FromBody] ResetPasswordRequest request, CancellationToken cancellationToken)
     {
@@ -584,7 +584,7 @@ public class AdminController : Controller
         return Ok(new { message = $"Contrasena de {targetUser.Username} restablecida." });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPut("/api/admin/users/{id:guid}/mfa")]
     public async Task<IActionResult> ToggleMfa(Guid id, [FromBody] ToggleMfaRequest request, CancellationToken cancellationToken)
     {
@@ -647,7 +647,7 @@ public class AdminController : Controller
         return Ok(new { message = $"MFA {(action == "disable" ? "desactivado" : action == "reenroll" ? "re-enrolado" : "activado")} para {targetUser.Username}.", mfaState = newState });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/api/admin/users/{id:guid}/set-active")]
     public async Task<IActionResult> SetActive(Guid id, [FromBody] SetActiveUserRequest request, CancellationToken cancellationToken)
     {
@@ -685,7 +685,7 @@ public class AdminController : Controller
         return Ok(new { message = $"Usuario {targetUser.Username} {(request.Active ? "activado" : "desactivado")}.", isActive = targetUser.IsActive });
     }
 
-    [Authorize]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("/dashboard/network-telemetry")]
     public async Task<IActionResult> NetworkTelemetry(
         [FromQuery] Guid? snapshotId,
@@ -709,7 +709,7 @@ public class AdminController : Controller
         return View("NetworkTelemetry", model);
     }
 
-    [Authorize]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet("/dashboard/network-telemetry/matching")]
     public async Task<IActionResult> InventoryMatching(
         [FromQuery] Guid? snapshotId,
@@ -851,7 +851,7 @@ public class AdminController : Controller
         }
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/api/package-status")]
     public async Task<IActionResult> GetPackageStatus(CancellationToken cancellationToken)
     {
@@ -870,7 +870,7 @@ public class AdminController : Controller
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/database/download")]
     public async Task<IActionResult> DownloadDatabase()
     {
@@ -890,7 +890,7 @@ public class AdminController : Controller
         return DownloadDatabaseFile(databasePath, $"syntro-backup-{DateTime.UtcNow:yyyyMMdd-HHmmss}.db");
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/database/backups/{fileName}")]
     public async Task<IActionResult> DownloadDatabaseBackup(string fileName)
     {
@@ -913,7 +913,7 @@ public class AdminController : Controller
         return DownloadDatabaseFile(backupPath, Path.GetFileName(backupPath));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/database/backups/{fileName}/restore")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RestoreDatabaseBackup(string fileName, CancellationToken cancellationToken)
@@ -980,7 +980,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/database/backups/{fileName}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteDatabaseBackup(string fileName)
@@ -1055,7 +1055,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/database/clear")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ClearActiveDatabase(CancellationToken cancellationToken)
@@ -1108,7 +1108,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/database/new")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateNewBlankDatabase(CancellationToken cancellationToken)
@@ -1188,7 +1188,7 @@ public class AdminController : Controller
         return Redirect(ResolveFrontendMapUrl());
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(100_000_000)]
     public async Task<IActionResult> UploadDatabase(IFormFile? databaseFile)
@@ -1252,7 +1252,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/project-package/download")]
     [HttpGet("/dashboard/project-package/download")]
     public async Task<IActionResult> DownloadProjectPackage(CancellationToken cancellationToken)
@@ -1325,7 +1325,7 @@ public class AdminController : Controller
         }
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/project-package/upload")]
     [HttpPost("/dashboard/project-package/upload")]
     [ValidateAntiForgeryToken]
@@ -1447,7 +1447,7 @@ public class AdminController : Controller
     }
 
     [HttpGet("/admin/activity")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     public async Task<IActionResult> Activity(
         string? buildingExternalId,
         string? changedByUsername,
@@ -1525,7 +1525,7 @@ public class AdminController : Controller
 
     [HttpGet("/admin/suggestions/inventory")]
     [HttpGet("/dashboard/suggestions/inventory")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
     public async Task<IActionResult> InventorySuggestions(
         [FromQuery] string? query,
         CancellationToken cancellationToken = default)
@@ -1593,7 +1593,7 @@ public class AdminController : Controller
 
     [HttpGet("/admin/suggestions/locations")]
     [HttpGet("/dashboard/suggestions/locations")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
     public async Task<IActionResult> LocationSuggestions(
         [FromQuery] string? query,
         CancellationToken cancellationToken = default)
@@ -1655,7 +1655,7 @@ public class AdminController : Controller
 
     [HttpGet("/admin/suggestions/campus")]
     [HttpGet("/dashboard/suggestions/campus")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
     public async Task<IActionResult> CampusSuggestions(
         [FromQuery] string? query,
         CancellationToken cancellationToken = default)
@@ -1784,7 +1784,7 @@ public class AdminController : Controller
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/delivery-form/preview/{id}/inventory")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddDeliveryFormToInventory(string id, string? assignedBuildingExternalId)
@@ -1899,7 +1899,7 @@ public class AdminController : Controller
         return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType, document.OriginalFileName);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/inventory/{id:guid}/documents")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -1951,7 +1951,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/documents/{documentId:guid}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventoryDocument(Guid documentId, CancellationToken cancellationToken)
@@ -2160,7 +2160,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/editsyncedbuilding/{externalId}")]
     public async Task<IActionResult> EditSyncedBuilding(string externalId)
     {
@@ -2189,7 +2189,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/editsyncedbuilding/{externalId}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EditSyncedBuilding(
@@ -2229,7 +2229,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditSyncedBuilding), new { externalId });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/deletesyncedbuilding/{externalId}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteSyncedBuilding(string externalId)
@@ -2263,7 +2263,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Locations));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/editsyncedroom/{externalId}")]
     public async Task<IActionResult> EditSyncedRoom(string externalId)
     {
@@ -2284,7 +2284,7 @@ public class AdminController : Controller
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/editsyncedroom/{externalId}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EditSyncedRoom(string externalId, string? manualName, int? manualFloor)
@@ -2306,14 +2306,14 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditSyncedRoom), new { externalId });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> CreateLocation()
     {
         ViewBag.HasNoPackage = await HasNoPackageDataAsync();
         return View(new Location());
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateLocation(Location location)
@@ -2327,7 +2327,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Locations));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> EditLocation(Guid id)
     {
         var location = await _context.Locations.FindAsync(id);
@@ -2338,7 +2338,7 @@ public class AdminController : Controller
         return View(location);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> EditLocation(Guid id, Location location)
@@ -2570,7 +2570,7 @@ public class AdminController : Controller
         return View(model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/inventory/inconsistency/{id:guid}/merge")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> MergeInventoryInconsistency(Guid id, Guid[]? selectedItemIds, string? returnUrl = null)
@@ -2654,7 +2654,7 @@ public class AdminController : Controller
         TempData["SuccessMessage"] = $"Fusion completada. Se integraron {mergePlan.Count} registro(s) en el equipo #{primary.Id}.";
         return RedirectToAction(nameof(InventoryInconsistency), new { id = primary.Id, returnUrl = normalizedReturnUrl });
     }
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpGet("/admin/inventory/create")]
     public async Task<IActionResult> CreateInventoryItem()
     {
@@ -2667,7 +2667,7 @@ public class AdminController : Controller
         return View(await BuildCreateInventoryItemViewModelAsync(form));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/inventory/create")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -2854,7 +2854,7 @@ public class AdminController : Controller
         return View(await BuildEditInventoryItemViewModelAsync(item));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -3008,7 +3008,7 @@ public class AdminController : Controller
         }
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("/admin/removeinventoryformpdf/{id:guid}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveInventoryFormPdf(Guid id)
@@ -3032,7 +3032,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ClearInventoryAssignment(Guid id)
@@ -3066,7 +3066,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventoryItem(Guid id)
@@ -3115,14 +3115,14 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Inventory));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> CreateEquipment()
     {
         ViewBag.Locations = await _context.Locations.Where(l => l.IsActive).ToListAsync();
         return View(new Equipment());
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateEquipment(Equipment equipment)
@@ -3149,7 +3149,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(Inventory));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteEquipment(Guid id)

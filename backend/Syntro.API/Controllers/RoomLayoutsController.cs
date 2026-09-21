@@ -10,6 +10,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/room-layouts")]
+[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
 public class RoomLayoutsController : ControllerBase
 {
     private readonly RoomLayoutService _roomLayoutService;

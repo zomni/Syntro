@@ -10,6 +10,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/room-geometry-overrides")]
+[Authorize]
 public class RoomGeometryOverridesController : ControllerBase
 {
     private readonly AppDbContext _context;
@@ -46,7 +47,7 @@ public class RoomGeometryOverridesController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> CreateOrUpdate(
         [FromBody] RoomGeometryOverrideRequest request,
         CancellationToken cancellationToken)

@@ -114,7 +114,7 @@ public class MLController : ControllerBase
     }
 
     [HttpPost("train-item-classification")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> TrainItemClassification(CancellationToken cancellationToken = default)
     {
         var items = await _context.ImportedInventoryItems
@@ -188,7 +188,7 @@ public class MLController : ControllerBase
     }
 
     [HttpPost("train-risk-prediction")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> TrainRiskPrediction(CancellationToken cancellationToken = default)
     {
         var rawObservations = await _context.NetworkTelemetryObservations
@@ -273,7 +273,7 @@ public class MLController : ControllerBase
     }
 
     [HttpPost("delete-model/{modelType}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public IActionResult DeleteModel(string modelType)
     {
         var modelsPath = _configuration["MlSettings:ModelsPath"] ?? "ml-models";
@@ -303,7 +303,7 @@ public class MLController : ControllerBase
     }
 
     [HttpPost("toggle")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public IActionResult ToggleMl([FromBody] ToggleMlRequest request)
     {
         _mlSettings.Toggle(request.Enabled);

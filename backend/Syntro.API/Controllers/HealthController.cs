@@ -10,7 +10,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/health")]
-[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
 public class HealthController : ControllerBase
 {
     private readonly AppDbContext _context;

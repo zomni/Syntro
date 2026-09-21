@@ -8,7 +8,7 @@ namespace Syntro.API.Controllers;
 
 [ApiController]
 [Route("api/activity-log")]
-[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor},{AppRoles.Admin}")]
+[Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
 public class AuditLogController : ControllerBase
 {
     private readonly AuditLogService _auditLogService;
@@ -27,7 +27,7 @@ public class AuditLogController : ControllerBase
         return Ok(result);
     }
 
-    [AllowAnonymous]
+    [Authorize]
     [HttpGet("/api/activity-log/building")]
     public async Task<IActionResult> GetBuildingHistory(
         [FromQuery] string buildingExternalId,

@@ -22,7 +22,7 @@ public class TelemetryScanSchedulesController : ControllerBase
         _auditLog = auditLog;
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpGet]
     public async Task<IActionResult> GetAll(
         [FromQuery] Guid? organizationId,
@@ -73,7 +73,7 @@ public class TelemetryScanSchedulesController : ControllerBase
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromQuery] Guid? organizationId,
@@ -131,7 +131,7 @@ public class TelemetryScanSchedulesController : ControllerBase
         return Ok(schedule);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(
         Guid id,
@@ -195,7 +195,7 @@ public class TelemetryScanSchedulesController : ControllerBase
         return Ok(schedule);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(
         Guid id,

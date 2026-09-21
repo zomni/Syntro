@@ -24,7 +24,7 @@ public class FrontendSyncController : ControllerBase
         return Ok(status);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     [HttpPost("run")]
     public async Task<IActionResult> Run(CancellationToken cancellationToken)
     {

@@ -68,7 +68,7 @@ public class ManualBuildingsController : ControllerBase
     }
 
     [HttpPost]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> Create(CreateManualBuildingRequest request, CancellationToken cancellationToken)
     {
         var externalId = (request.ExternalId ?? string.Empty).Trim();
@@ -187,7 +187,7 @@ public class ManualBuildingsController : ControllerBase
     }
 
     [HttpDelete("{externalId}")]
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
     public async Task<IActionResult> Delete(string externalId, CancellationToken cancellationToken)
     {
         var normalizedExternalId = Uri.UnescapeDataString(externalId ?? string.Empty).Trim();
