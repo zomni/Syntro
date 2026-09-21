@@ -15,6 +15,7 @@ import { addDataToMap, clearAllMapData, resetBuildingsCatalogCache } from "./add
 
 import { resetSearchMetadataCaches } from "@app/searchMetadata";
 import { identifiers } from "./identifiers.js";
+import { isWayfindingMode } from "./wayfinding.js";
 import { getSite, hasCampus, setActiveCampus } from "../config/siteConfig.js";
 import { resolveFloorButtonId } from "./floorButtons.js";
 
@@ -173,7 +174,9 @@ export const goTo = (campus, options = {}) => {
     button.classList.add("floorButton");
     
     button.hidden = parseInt(button.innerHTML, 10) === 0;
-    const floorHost = document.getElementById("map-floor-filter-buttons") || document.getElementById("floorButtons-container");
+    const floorHost = isWayfindingMode()
+      ? document.getElementById("floorButtons-container")
+      : document.getElementById("map-floor-filter-buttons") || document.getElementById("floorButtons-container");
     floorHost.appendChild(button);
   }
 

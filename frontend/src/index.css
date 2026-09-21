@@ -2986,3 +2986,35 @@ body.map-ui-minimal #session-inventory-link {
 body.map-ui-minimal .session-mode-badge {
     z-index: 2200;
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile "wayfinding" mode: map only (orientation + routes).
+   Entered automatically on coarse-pointer devices or narrow viewports.
+--------------------------------------------------------------------------- */
+body.map-ui-wayfinding #session-inventory-link,
+body.map-ui-wayfinding #admin-map-tools-panel,
+body.map-ui-wayfinding .network-telemetry-group,
+body.map-ui-wayfinding .session-mode-badge,
+body.map-ui-wayfinding .building-equipment-bubble {
+    display: none !important;
+}
+
+/* Filters container: keep only the "Mostrar nombres" / "Mostrar rutas" toggles */
+body.map-ui-wayfinding .map-equipment-type-filter > span,
+body.map-ui-wayfinding .map-equipment-type-filter-field,
+body.map-ui-wayfinding .map-floor-filter {
+    display: none !important;
+}
+
+body.map-ui-wayfinding .map-equipment-type-filter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+}
+
+body.map-ui-wayfinding .building-label-toggle {
+    font-size: 12px;
+    padding: 5px 8px;
+    white-space: nowrap;
+}

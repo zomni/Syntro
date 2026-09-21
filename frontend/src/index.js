@@ -47,7 +47,13 @@ import { initSiteViewportPanel } from "@app/siteViewportPanel";
 // Room editor for admins
 import { initRoomEditor } from "@app/roomEditor";
 
+// Mobile "wayfinding" mode (map only: orientation + routes)
+import { initWayfindingMode } from "./utils/wayfinding.js";
+import { initWayfindingControls } from "@app/featureDisplay";
+
 applyBrandingTheme();
+
+initWayfindingMode();
 
 const bootstrapLoadingOverlay = document.getElementById("map-loading-overlay");
 if (bootstrapLoadingOverlay) {
@@ -132,3 +138,6 @@ initCampusMarkerEditor();
 initRoomEditor();
 initWalkingRouteEditor();
 initSiteViewportPanel();
+
+initWayfindingControls();
+window.addEventListener("syntro-wayfinding-changed", initWayfindingControls);

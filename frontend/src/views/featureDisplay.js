@@ -9,6 +9,7 @@ import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
+import { isWayfindingMode } from "../utils/wayfinding.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -1147,12 +1148,87 @@ const updateBuildingEquipmentBubbles = () => {
 };
 
 const syncFloorButtonsToFilter = () => {
+  if (isWayfindingMode()) {
+    const host = document.getElementById("floorButtons-container");
+    if (!host) return;
+    document.querySelectorAll("#map-floor-filter-buttons [id^='b']").forEach((button) => {
+      if (button.id !== "bLoc") host.appendChild(button);
+    });
+    return;
+  }
+
   const floorHost = document.getElementById("map-floor-filter-buttons");
   if (!floorHost) return;
 
   document.querySelectorAll("#floorButtons-container [id^='b']").forEach((button) => {
     if (button.id !== "bLoc") floorHost.appendChild(button);
   });
+};
+
+const ensureWayfindingControls = () => {
+  if (!isWayfindingMode()) return;
+  const topActions = document.getElementById("top-actions");
+  if (!topActions) return;
+
+  let wrapper = document.getElementById("map-equipment-type-filter");
+  if (!wrapper) {
+    wrapper = document.createElement("div");
+    wrapper.className = "map-equipment-type-filter";
+    L.DomEvent.disableClickPropagation(wrapper);
+    L.DomEvent.disableScrollPropagation(wrapper);
+
+    const labelToggle = document.createElement("button");
+    labelToggle.id = "building-label-toggle";
+    labelToggle.className = "dashboard-link building-label-toggle is-muted";
+    labelToggle.type = "button";
+    labelToggle.setAttribute("aria-pressed", "false");
+    labelToggle.textContent = "Mostrar nombres";
+    wrapper.appendChild(labelToggle);
+    bindBuildingLabelToggleButton(labelToggle);
+    setBuildingLabelsVisible(buildingLabelsVisible);
+
+    const routeVisibilityToggle = document.createElement("button");
+    routeVisibilityToggle.id = "walking-route-toggle";
+    routeVisibilityToggle.className = "dashboard-link building-label-toggle is-muted";
+    routeVisibilityToggle.type = "button";
+    routeVisibilityToggle.setAttribute("aria-pressed", "false");
+    routeVisibilityToggle.textContent = "Mostrar rutas";
+    wrapper.appendChild(routeVisibilityToggle);
+    bindWalkingRouteToggleButton(routeVisibilityToggle);
+
+    const routePlannerToggle = document.getElementById("route-planner-toggle");
+    const navigationGroup = document.getElementById("navigation-panel-group");
+    if (navigationGroup) {
+      topActions.insertBefore(wrapper, navigationGroup);
+    } else if (routePlannerToggle) {
+      topActions.insertBefore(wrapper, routePlannerToggle);
+    } else {
+      topActions.appendChild(wrapper);
+    }
+  }
+
+  syncFloorButtonsToFilter();
+  syncEquipmentTypeFilterVisibility();
+};
+
+let previousWayfindingState = false;
+
+export const initWayfindingControls = () => {
+  const active = isWayfindingMode();
+  const entering = active && !previousWayfindingState;
+  const leaving = !active && previousWayfindingState;
+
+  if (entering) {
+    clearMapEquipmentState();
+  }
+
+  ensureWayfindingControls();
+
+  if (leaving) {
+    refreshCurrentMapData();
+  }
+
+  previousWayfindingState = active;
 };
 
 const ensureMapEquipmentTypeFilter = (summaryMap) => {
@@ -1242,7 +1318,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
 const syncEquipmentTypeFilterVisibility = () => {
   const field = document.querySelector(".map-equipment-type-filter-field");
   if (!field) return;
-  field.style.display = lastKnownSessionIsAuthenticated ? "" : "none";
+  field.style.display = !isWayfindingMode() && lastKnownSessionIsAuthenticated ? "" : "none";
 };
 
 const buildRoomsMap = (rooms) => {
@@ -1852,7 +1928,7 @@ const getFeaturePopupHtml = async (feature) => {
 
   const backendSession = await loadBackendSession();
   const featureName = getFeatureDisplayName(feature, building);
-  const canViewEquipment = Boolean(backendSession?.isAuthenticated);
+  const canViewEquipment = Boolean(backendSession?.isAuthenticated) && !isWayfindingMode();
 
   if (!canViewEquipment) {
     currentView = "summary";
@@ -2051,6 +2127,7 @@ const handleFeatureClick = (e) => {
 const createEquipmentBubbleForLayer = async (feature, layer) => {
   const featureId = feature?.properties?.id;
   if (!featureId || typeof layer?.getBounds !== "function") return;
+  if (isWayfindingMode()) return;
 
   const summaryMap = await loadBuildingEquipmentSummary();
   if (!layer?._map) return;
