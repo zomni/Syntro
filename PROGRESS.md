@@ -132,6 +132,27 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   sesión (dropdown a la derecha, submenús), orden por categoría en equipos, crear usuarios/alta-baja; sufijos de docs y
   branch `main` con repo único `Syntro` (5001/8081), white-label confirmado a cliente único (README/SPECs alineados).
 
+- **Responsive móvil — mapa “wayfinding” (frontend)**:
+  - `src/utils/wayfinding.js`: detección por `matchMedia("(pointer: coarse), (hover: none), (max-width: 767px)")` →
+    clase `body.map-ui-wayfinding` + evento `syntro-wayfinding-changed` (`isWayfindingMode`/`initWayfindingMode`).
+  - En modo móvil el mapa muestra solo orientación + rutas (2 toggles), ocultando inventario, burbujas, badge de sesión,
+    panel de herramientas admin y campos de filtro de inventario; al entrar limpia el estado de equipos y al volver a
+    desktop recarga los datos del mapa.
+  - Fixes: burbujas Leaflet persistentes tras desktop→móvil y botones de piso que se salían del contenedor sin recargar
+    (`featureDisplay.js` `syncFloorButtonsToFilter`/`ensureWayfindingControls`, `goToCampus.js`).
+  - Verificado: jest 64/64, webpack OK, bundle servido con los tokens esperados.
+- **Responsive móvil — admin backend (por fases)**:
+  - **Fase 0**: `wwwroot/css/site.css` (nuevo) + `_Layout.cshtml` con topbar móvil, drawer off-canvas con hamburguesa
+    (`[data-admin-drawer-toggle]`, backdrop, cierre por link/backdrop/Escape/resize) y helpers `.mobile-only`/`.desktop-only`.
+  - **Fase 1**: patrón `.data-table-card` en las 5 tablas grandes (`Equipments/Inventory`, `Locations`, `Activity`,
+    `NetworkTelemetry` —5 tablas JS— e `InventoryMatching`): filas como cards con `data-label` y `.td-actions` en <768px.
+  - **Fases 2-3**: helper `.w-mobile-100` y `.pdf-preview-shell` en `site.css`; controles de ancho fijo de
+    `InventoryMatching`, banner de escaneo y d-flex de filtros de `Equipments` pasan a fluidos en móvil. Los formularios
+    ya usaban grids Bootstrap (`col-md/lg`), sin cambios.
+  - **Fase 4**: `Login.cshtml` sin `background-attachment: fixed` (`center/cover no-repeat`) para evitar el fondo fijo en iOS.
+  - Verificado por fase: `dotnet build` 0 errores, suite backend 88/88, y render autenticado de las 5 páginas (200, con
+    `data-table-card`/`data-label` presentes) más `site.css` servido con los helpers nuevos.
+
 ## Pendiente
 
 - F2 (importar Sotero): registrar Organization "Hospital Sótero del Río" + CampusSite `sotero` (school `cs`, floors `["-1".."5"]`, defaultFloor `b1`), copiar estáticos de `/app/frontend-data` renombrando sin `.map`, sembrar schedules ("Lun-Jue 08:30/13:30/17:30; Vie 08:30/13:30/16:30" en `America/Santiago`, cron por fila), agregar `sotero` a `campuses.js`.
