@@ -531,6 +531,7 @@ const initPopupMap = (geometry) => {
 const handleBoxSelectStart = (e) => {
   if (!currentEditorState || !popupMap || currentEditorState.mode !== "select") return;
   if (e.button !== 0) return;
+  if (!(e.ctrlKey || e.metaKey)) return;
   if (e.target?.closest?.(".room-editor-marker-icon")) return;
 
   e.preventDefault();
