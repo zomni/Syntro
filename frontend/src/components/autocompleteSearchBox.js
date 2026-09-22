@@ -327,7 +327,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     try {
       const response = await fetch(
         `${BACKEND_API_URL}/api/inventory-import/items?search=${encodeURIComponent(query)}`,
-        { cache: "no-store" }
+        { cache: "no-store", credentials: "include" }
       );
 
       if (!response.ok) {

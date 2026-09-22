@@ -398,6 +398,7 @@ const loadBuildingEquipmentSummary = async () => {
 
   buildingEquipmentSummaryPromise = fetch(`${BACKEND_API_URL}/api/inventory-import/building-summary`, {
     cache: "no-store",
+    credentials: "include",
   })
     .then((response) => (response.ok ? response.json() : []))
     .then((items) => {
@@ -811,7 +812,7 @@ const loadBackendInventoryForBuilding = async (building) => {
       `${BACKEND_API_URL}/api/inventory-import/items?assignedBuildingExternalId=${encodeURIComponent(
         building.id
       )}`,
-      { cache: "no-store" }
+      { cache: "no-store", credentials: "include" }
     );
 
     const items = response.ok ? await response.json() : [];
@@ -830,7 +831,7 @@ const loadBuildingActivity = async (building) => {
   try {
     const response = await fetch(
       `${BACKEND_API_URL}/api/activity-log/building?buildingExternalId=${encodeURIComponent(building.id)}&take=6`,
-      { cache: "no-store" }
+      { cache: "no-store", credentials: "include" }
     );
 
     const items = response.ok ? await response.json() : [];
