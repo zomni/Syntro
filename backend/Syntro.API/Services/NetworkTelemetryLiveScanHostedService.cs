@@ -88,10 +88,15 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                     continue;
                 }
 
-                // Contador cronologico por organizacion: siguiente numero del campus.
-                var nextRunNumber = await db.ScheduledScanRuns
+                // Contador cronologico por organizacion: siguiente numero del campus,
+                // compartido con las snapshots manuales (NetworkTelemetrySnapshots.RunNumber).
+                var maxScheduledRunNumber = await db.ScheduledScanRuns
                     .Where(r => r.CampusKey == slotInfo.CampusKey)
                     .MaxAsync(r => (int?)r.RunNumber, stoppingToken) ?? 0;
+                var maxSnapshotRunNumber = await db.NetworkTelemetrySnapshots
+                    .Where(s => s.CampusKey == slotInfo.CampusKey)
+                    .MaxAsync(s => (int?)s.RunNumber, stoppingToken) ?? 0;
+                var nextRunNumber = Math.Max(maxScheduledRunNumber, maxSnapshotRunNumber);
 
                 var run = new ScheduledScanRun
                 {
@@ -261,13 +266,10 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
 
         foreach (var schedule in schedules)
         {
-            var timeZone = TelemetryScanScheduleService.ResolveTimeZone(schedule.TimeZone);
-            if (!TelemetryScanScheduleService.TryParseCron(schedule.Cron, out var expression) || expression is null)
-            {
-                continue;
-            }
-
-            var nextUtc = expression.GetNextOccurrence(nowUtc.UtcDateTime, timeZone);
+            var nextUtc = TelemetryScanScheduleService.GetNextOccurrenceUtc(
+                schedule.Cron,
+                schedule.TimeZone,
+                nowUtc.UtcDateTime);
             if (nextUtc is null)
             {
                 continue;
@@ -279,6 +281,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         if (candidates.Count > 0)
         {
             var nextOccurrenceUtc = candidates.OrderBy(candidate => candidate).First();
+            _logger.LogInformation("Telemetry scan candidates: {Candidates}", string.Join(" | ", candidates.OrderBy(candidate => candidate).Take(8).Select(candidate => candidate.ToString("yyyy-MM-dd HH:mm:ss"))));
             nextScheduledUtc = nextOccurrenceUtc.UtcDateTime;
             var delay = nextOccurrenceUtc - nowUtc;
             return delay > TimeSpan.Zero ? delay : TimeSpan.Zero;
@@ -378,13 +381,10 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 continue;
             }
 
-            var timeZone = TelemetryScanScheduleService.ResolveTimeZone(schedule.TimeZone);
-            if (!TelemetryScanScheduleService.TryParseCron(schedule.Cron, out var expression) || expression is null)
-            {
-                continue;
-            }
-
-            var nextUtc = expression.GetNextOccurrence(scheduledAtUtc.AddSeconds(-1), timeZone);
+            var nextUtc = TelemetryScanScheduleService.GetNextOccurrenceUtc(
+                schedule.Cron,
+                schedule.TimeZone,
+                scheduledAtUtc.AddSeconds(-1));
             if (nextUtc.HasValue &&
                 Math.Abs((nextUtc.Value - scheduledAtUtc).TotalSeconds) <= 2)
             {

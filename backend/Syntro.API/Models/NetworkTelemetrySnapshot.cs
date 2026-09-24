@@ -18,5 +18,6 @@ public class NetworkTelemetrySnapshot : AuditableEntity
     public DateTime? WindowStartUtc { get; set; }
     public DateTime? WindowEndUtc { get; set; }
     public string Notes { get; set; } = string.Empty;
+    public int? RunNumber { get; set; }
     public string PayloadJson { get; set; } = "{}";
 }

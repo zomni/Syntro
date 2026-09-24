@@ -2149,7 +2149,7 @@
                 : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Fecha</th><th>Fuente</th><th>Estado</th><th>Usuarios</th><th>Equipos</th><th>Riesgo</th></tr></thead><tbody>${items.map((item) => `
                     <tr>
                         <td data-label="Fecha">${item.observedAtUtc ? formatChileDateTime(item.observedAtUtc) : ""}</td>
-                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
+                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} · ${item.triggerLabel || ""}</div></td>
                         <td data-label="Estado"><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
                         <td data-label="Usuarios">${item.connectedUserCount ?? 0}</td>
                         <td data-label="Equipos">${item.deviceCount ?? 0}</td>
@@ -2176,11 +2176,11 @@
                 ? `<div class="text-muted">No hay snapshots para ese filtro.</div>`
                 : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
                     <tr>
-                        <td data-label="Captura"><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</span></td>
+                        <td data-label="Captura"><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber > 0 ? item.runNumber : (item.id ? String(item.id).slice(0, 8) : '-')}</span></td>
                         <td data-label="Fecha">${formatChileDateTime(item.observedAtUtc)}</td>
                         <td data-label="Dia">${formatChileWeekday(item.observedAtUtc)}</td>
                         <td data-label="Hora">${formatChileTime(item.observedAtUtc)}</td>
-                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} Â· ${item.triggerLabel || ""}</div></td>
+                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} · ${item.triggerLabel || ""}</div></td>
                         <td data-label="Estado"><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
                         <td data-label="Usuarios">${item.connectedUserCount ?? 0}</td>
                         <td data-label="Equipos">${item.deviceCount ?? 0}</td>
@@ -2202,7 +2202,7 @@
                 button.addEventListener("click", async () => {
                     const snapshotId = button.getAttribute("data-delete-snapshot");
                     if (!snapshotId) return;
-                    if (!(await SyntroUI.confirm(`¿Esta seguro de eliminar ${item.runNumber != null && item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${snapshotId}`}? Los datos de observacion asociados tambien se eliminaran.`))) {
+                    if (!(await SyntroUI.confirm(`¿Esta seguro de eliminar ${item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${String(snapshotId).slice(0, 8)}`}? Los datos de observacion asociados tambien se eliminaran.`))) {
                         return;
                     }
 
@@ -2352,7 +2352,7 @@
                     ? `<a href="/dashboard/network-telemetry?snapshotId=${item.snapshotId}" class="btn btn-sm btn-outline-primary" title="Cargar esta snapshot"><i class="bi bi-eye"></i></a>`
                     : '<span class="text-muted">-</span>';
                 return `<tr>
-                    <td class="fw-semibold" data-label="ID" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber != null && item.runNumber > 0 ? item.runNumber : '-'}</td>
+                    <td class="fw-semibold" data-label="ID" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber > 0 ? item.runNumber : (item.snapshotId ? String(item.snapshotId).slice(0, 8) : '-')}</td>
                     <td data-label="Planificacion">${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
                     <td data-label="Dia">${item.scheduledDayLocal || ""}</td>
                     <td data-label="Hora">${item.scheduledTimeLocal || ""}</td>
@@ -2573,7 +2573,7 @@
                     if (triggerLabel) detailParts.push(triggerLabel);
                     if (currentIpAddress) detailParts.push(currentIpAddress);
                     if (currentStage) detailParts.push(currentStage);
-                    runningDetail.textContent = detailParts.join(" Â· ") || "";
+                    runningDetail.textContent = detailParts.join(" · ") || "";
                 }
                 if (runningProgress) runningProgress.style.width = progressPercent + "%";
                 if (runningPct) runningPct.textContent = progressPercent + "%";

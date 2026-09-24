@@ -464,10 +464,12 @@ public static class ExtendedSchemaInitializer
             await EnsureColumnAsync(context, "NetworkTelemetryObservations", "MatchKey", "TEXT NOT NULL DEFAULT ''");
 
             await EnsureColumnAsync(context, "NetworkTelemetrySnapshots", "CampusKey", "TEXT NOT NULL DEFAULT ''");
+            await EnsureColumnAsync(context, "NetworkTelemetrySnapshots", "RunNumber", "INTEGER NULL");
             await EnsureColumnAsync(context, "ScheduledScanRuns", "CampusKey", "TEXT NOT NULL DEFAULT ''");
 
             await BackfillSnapshotCampusKeysAsync(context);
             await BackfillScanRunCampusKeysAsync(context);
+            await BackfillSnapshotRunNumbersAsync(context);
 
             await EnsureScheduledScanRunsTableAsync(context, configuration);
 
@@ -961,6 +963,36 @@ public static class ExtendedSchemaInitializer
                        OR (s.CreatedAtUtc = ScheduledScanRuns.CreatedAtUtc AND s.ScheduledAtUtc < ScheduledScanRuns.ScheduledAtUtc)
                        OR (s.CreatedAtUtc = ScheduledScanRuns.CreatedAtUtc AND s.ScheduledAtUtc = ScheduledScanRuns.ScheduledAtUtc AND s.Id < ScheduledScanRuns.Id))
             );
+            """);
+    }
+
+    // Numeracion compartida entre runs y snapshots por campus: continua la
+    // secuencia de ScheduledScanRuns, en orden cronologico de cada snapshot.
+    private static async Task BackfillSnapshotRunNumbersAsync(AppDbContext context)
+    {
+        var pending = await context.NetworkTelemetrySnapshots
+            .AsNoTracking()
+            .AnyAsync(snapshot => snapshot.RunNumber == null || snapshot.RunNumber == 0);
+        if (!pending)
+        {
+            return;
+        }
+
+        await context.Database.ExecuteSqlRawAsync("""
+            UPDATE NetworkTelemetrySnapshots
+            SET RunNumber = (
+                SELECT COALESCE(MAX(r.RunNumber), 0) + 1
+                FROM ScheduledScanRuns AS r
+                WHERE r.CampusKey = NetworkTelemetrySnapshots.CampusKey
+            ) + (
+                SELECT COUNT(*)
+                FROM NetworkTelemetrySnapshots AS s
+                WHERE s.CampusKey = NetworkTelemetrySnapshots.CampusKey
+                  AND s.Id != NetworkTelemetrySnapshots.Id
+                  AND (s.ObservedAtUtc < NetworkTelemetrySnapshots.ObservedAtUtc
+                       OR (s.ObservedAtUtc = NetworkTelemetrySnapshots.ObservedAtUtc AND s.Id < NetworkTelemetrySnapshots.Id))
+            )
+            WHERE RunNumber IS NULL OR RunNumber = 0;
             """);
     }
 

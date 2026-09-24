@@ -181,8 +181,16 @@ public class NetworkTelemetryService
             LatestLowRiskDeviceCount = activeSnapshot?.LowRiskDeviceCount ?? 0,
             LatestSnapshotId = latest?.Id ?? Guid.Empty,
             ActiveSnapshotId = activeSnapshot?.Id ?? Guid.Empty,
-            LatestSnapshotRunNumber = latest is null ? null : runNumbersById.GetValueOrDefault(latest.Id),
-            ActiveSnapshotRunNumber = activeSnapshot is null ? null : runNumbersById.GetValueOrDefault(activeSnapshot.Id),
+            LatestSnapshotRunNumber = latest?.RunNumber is > 0
+                ? latest.RunNumber
+                : (runNumbersById.GetValueOrDefault(latest?.Id ?? Guid.Empty) > 0
+                    ? runNumbersById.GetValueOrDefault(latest?.Id ?? Guid.Empty)
+                    : null),
+            ActiveSnapshotRunNumber = activeSnapshot?.RunNumber is > 0
+                ? activeSnapshot.RunNumber
+                : (runNumbersById.GetValueOrDefault(activeSnapshot?.Id ?? Guid.Empty) > 0
+                    ? runNumbersById.GetValueOrDefault(activeSnapshot?.Id ?? Guid.Empty)
+                    : null),
             IsViewingLatestSnapshot = activeSnapshot?.Id == latest?.Id,
             LatestObservedAtUtc = activeSnapshot?.ObservedAtUtc,
             LatestWindowStartUtc = activeSnapshot?.WindowStartUtc,
@@ -433,9 +441,10 @@ public class NetworkTelemetryService
         return snapshots.Select(snapshot =>
         {
             var viewModel = MapSnapshot(snapshot);
-            if (runNumbers.TryGetValue(snapshot.Id, out var runNumber))
+            if (viewModel.RunNumber is null || viewModel.RunNumber <= 0)
             {
-                viewModel.RunNumber = runNumber;
+                var runNumber = runNumbers.GetValueOrDefault(snapshot.Id);
+                viewModel.RunNumber = runNumber > 0 ? runNumber : null;
             }
 
             return viewModel;
@@ -466,6 +475,41 @@ public class NetworkTelemetryService
                 .ToListAsync(cancellationToken))
             .GroupBy(pair => pair.SnapshotKey)
             .ToDictionary(group => group.Key, group => group.First().RunNumber);
+    }
+
+    // Numeracion compartida runs/snapshots por campus: las capturas programadas
+    // adoptan el numero del run pendiente (queued/running); el resto continua la
+    // secuencia tras el maximo entre runs y snapshots del campus.
+    private async Task<int> ResolveSnapshotRunNumberAsync(
+        string campusKey,
+        string? triggerType,
+        CancellationToken cancellationToken)
+    {
+        var campus = (campusKey ?? string.Empty).Trim();
+
+        if (string.Equals(triggerType, "scheduled", StringComparison.OrdinalIgnoreCase))
+        {
+            var pendingRun = await _context.ScheduledScanRuns
+                .AsNoTracking()
+                .Where(r => (r.CampusKey == campus || r.CampusKey == string.Empty)
+                            && (r.Status == "queued" || r.Status == "running"))
+                .OrderByDescending(r => r.CreatedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (pendingRun is not null && pendingRun.RunNumber > 0)
+            {
+                return pendingRun.RunNumber;
+            }
+        }
+
+        var maxRunNumber = await _context.ScheduledScanRuns
+            .Where(r => r.CampusKey == campus)
+            .MaxAsync(r => (int?)r.RunNumber, cancellationToken) ?? 0;
+        var maxSnapshotRunNumber = await _context.NetworkTelemetrySnapshots
+            .Where(s => s.CampusKey == campus)
+            .MaxAsync(s => (int?)s.RunNumber, cancellationToken) ?? 0;
+
+        return Math.Max(maxRunNumber, maxSnapshotRunNumber) + 1;
     }
 
     public async Task<NetworkTelemetrySnapshotPageViewModel> GetSnapshotPageAsync(
@@ -538,7 +582,8 @@ public class NetworkTelemetryService
                 WindowStartUtc = snapshot.WindowStartUtc,
                 WindowEndUtc = snapshot.WindowEndUtc,
                 Notes = snapshot.Notes,
-                CreatedBy = snapshot.CreatedBy
+                CreatedBy = snapshot.CreatedBy,
+                RunNumber = snapshot.RunNumber
             })
             .ToListAsync(cancellationToken);
         materializeStopwatch.Stop();
@@ -601,7 +646,7 @@ public class NetworkTelemetryService
             WindowEndUtc = item.WindowEndUtc,
             Notes = item.Notes,
             CreatedBy = item.CreatedBy,
-            RunNumber = runNumbers.GetValueOrDefault(item.Id)
+            RunNumber = item.RunNumber ?? (runNumbers.GetValueOrDefault(item.Id) > 0 ? runNumbers.GetValueOrDefault(item.Id) : (int?)null)
         }).ToList();
 
         postProcessStopwatch.Stop();
@@ -735,6 +780,11 @@ public class NetworkTelemetryService
             : (int)Math.Round((deviceRiskScore + userRiskScore) / 2.0);
         var overallRiskLevel = ToRiskLevel(overallRiskScore);
 
+        var runNumber = await ResolveSnapshotRunNumberAsync(
+            (request.CampusKey ?? string.Empty).Trim(),
+            request.TriggerType,
+            cancellationToken);
+
         var snapshot = new NetworkTelemetrySnapshot
         {
             CampusKey = (request.CampusKey ?? string.Empty).Trim(),
@@ -743,6 +793,7 @@ public class NetworkTelemetryService
             Status = "received",
             RiskLevel = overallRiskLevel,
             RiskScore = overallRiskScore,
+            RunNumber = runNumber,
             DeviceCount = deviceObservations.Count,
             ConnectedUserCount = userObservations.Count,
             HighRiskDeviceCount = deviceObservations.Count(observation => observation.RiskLevel == "high" || observation.RiskLevel == "critical"),
@@ -1133,6 +1184,7 @@ public class NetworkTelemetryService
             Status = snapshot.Status,
             RiskLevel = snapshot.RiskLevel,
             RiskScore = snapshot.RiskScore,
+            RunNumber = snapshot.RunNumber,
             DeviceCount = snapshot.DeviceCount,
             ConnectedUserCount = snapshot.ConnectedUserCount,
             HighRiskDeviceCount = snapshot.HighRiskDeviceCount,
@@ -2456,6 +2508,7 @@ public class NetworkTelemetryService
             WindowStartUtc = snapshot.WindowStartUtc,
             WindowEndUtc = snapshot.WindowEndUtc,
             Notes = snapshot.Notes,
+            RunNumber = snapshot.RunNumber,
             CreatedByUsername = snapshot.CreatedBy
         };
     }
