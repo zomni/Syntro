@@ -2841,6 +2841,14 @@
     scheduleCancelBtn?.addEventListener("click", () => scheduleModal?.classList.remove("is-open"));
     scheduleModalClose?.addEventListener("click", () => scheduleModal?.classList.remove("is-open"));
 
+    const friendlyScheduleError = (err, fallback) => {
+        const raw = (err && (err.message || err.toString())) || "";
+        if (/HTTP 401|session-expired/i.test(raw)) {
+            return "Tu sesion expiro. Recarga la pagina e inicia sesion de nuevo.";
+        }
+        return raw.trim() ? raw : fallback;
+    };
+
     schedulePreviewBtn?.addEventListener("click", () => {
         const slots = readSlotsFromModal();
         if (slots.length === 0) { schedulePreviewDiv.classList.add("d-none"); return; }
@@ -2898,7 +2906,7 @@
             scheduleModal?.classList.remove("is-open");
             loadSchedules();
         })
-        .catch(err => SyntroUI.alert("Error guardando horario: " + err.message))
+        .catch(err => SyntroUI.alert("Error guardando horario: " + friendlyScheduleError(err, "No se pudo guardar el horario.")))
         .finally(() => { scheduleSaveBtn.disabled = false; });
     });
 
@@ -2909,7 +2917,7 @@
         fetch(`/api/network-telemetry/schedule/${id}`, { method: "DELETE", credentials: "include" })
         .then(r => { if (!r.ok && r.status !== 204) throw new Error(`HTTP ${r.status}`); })
         .then(() => { scheduleModal?.classList.remove("is-open"); loadSchedules(); })
-        .catch(err => SyntroUI.alert("Error eliminando horario: " + err.message));
+        .catch(err => SyntroUI.alert("Error eliminando horario: " + friendlyScheduleError(err, "No se pudo eliminar el horario.")));
     });
 
     const loadSchedules = () => {

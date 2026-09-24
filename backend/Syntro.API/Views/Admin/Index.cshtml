@@ -988,6 +988,115 @@
                 });
             });
 
+            let packageDownloadInProgress = false;
+
+            document.querySelectorAll('a[href*="/project-package/download"]').forEach((anchor) => {
+                anchor.addEventListener("click", async (event) => {
+                    if (event.defaultPrevented || packageDownloadInProgress) {
+                        return;
+                    }
+
+                    event.preventDefault();
+                    event.stopPropagation();
+                    packageDownloadInProgress = true;
+
+                    var overlay = document.getElementById("projectPackageLoadingOverlay");
+                    var progressBar = document.getElementById("packageProgressBar");
+                    var percentLabel = document.getElementById("packageOverlayPercent");
+                    var titleEl = document.getElementById("packageOverlayTitle");
+                    var subtitleEl = document.getElementById("packageOverlaySubtitle");
+                    var cancelBtn = document.getElementById("packageCancelButton");
+
+                    if (overlay) {
+                        if (overlay.parentElement !== document.body) {
+                            document.body.appendChild(overlay);
+                        }
+                        overlay.classList.remove("d-none");
+                    }
+                    if (progressBar) { progressBar.style.width = "0%"; progressBar.classList.remove("bg-danger", "bg-success"); }
+                    if (percentLabel) percentLabel.textContent = "";
+                    if (titleEl) titleEl.textContent = "Generando paquete completo";
+                    if (subtitleEl) subtitleEl.textContent = "Este proceso puede tardar varios minutos. No cierres la pesta\u00f1a.";
+                    if (cancelBtn) { cancelBtn.style.display = ""; cancelBtn.textContent = "Cancelar"; }
+
+                    var abortCtrl = new AbortController();
+                    if (cancelBtn) cancelBtn.onclick = () => abortCtrl.abort();
+
+                    try {
+                        var res = await fetch(anchor.href, {
+                            credentials: "include",
+                            headers: { Accept: "application/zip", "X-Requested-With": "XMLHttpRequest" },
+                            signal: abortCtrl.signal
+                        });
+
+                        if (!res.ok) {
+                            var msg = "Error del servidor (" + res.status + ")";
+                            try {
+                                var errBody = await res.json();
+                                if (errBody && errBody.message) msg = errBody.message;
+                            } catch { }
+                            throw new Error(msg);
+                        }
+
+                        if (percentLabel) percentLabel.textContent = "Descargando archivo...";
+
+                        var blob = await res.blob();
+                        var fileName = "syntro-data-package.zip";
+                        var contentDisposition = res.headers.get("Content-Disposition");
+                        if (contentDisposition) {
+                            var m = /filename="?([^";]+)"?/.exec(contentDisposition);
+                            if (m) fileName = m[1];
+                        }
+                        var downloadUrl = URL.createObjectURL(blob);
+                        var link = document.createElement("a");
+                        link.href = downloadUrl;
+                        link.download = fileName;
+                        document.body.appendChild(link);
+                        link.click();
+                        link.remove();
+                        setTimeout(function () { URL.revokeObjectURL(downloadUrl); }, 4000);
+
+                        if (titleEl) titleEl.textContent = "\u2705 Paquete descargado correctamente";
+                        if (subtitleEl) subtitleEl.textContent = "El archivo se guard\u00f3 en tu computadora.";
+                        if (progressBar) { progressBar.style.width = "100%"; progressBar.classList.add("bg-success"); }
+                        if (percentLabel) percentLabel.textContent = "100%";
+                        if (cancelBtn) cancelBtn.style.display = "none";
+
+                        setTimeout(function () {
+                            if (overlay) overlay.classList.add("d-none");
+                            if (titleEl) titleEl.textContent = "Restaurando paquete completo";
+                            if (subtitleEl) subtitleEl.textContent = "Este proceso puede tardar varios minutos. No cierres la pesta\u00f1a ni navegues a otra p\u00e1gina.";
+                            if (percentLabel) percentLabel.textContent = "0%";
+                            if (progressBar) { progressBar.style.width = "0%"; progressBar.classList.remove("bg-danger", "bg-success"); }
+                            if (cancelBtn) { cancelBtn.style.display = ""; cancelBtn.textContent = "Cancelar"; }
+                        }, 2500);
+                    } catch (err) {
+                        if (err && err.name === "AbortError") {
+                            if (overlay) overlay.classList.add("d-none");
+                        } else {
+                            var detail = (err && (err.message || err.toString())) || "Error al descargar el paquete.";
+                            if (titleEl) titleEl.textContent = "\u274c Error al descargar paquete";
+                            if (subtitleEl) subtitleEl.textContent = /Failed to fetch|NetworkError/i.test(detail)
+                                ? "No se pudo conectar con el servidor. Verifica tu conexion."
+                                : detail;
+                            if (progressBar) progressBar.classList.add("bg-danger");
+                            if (percentLabel) percentLabel.textContent = "";
+                            if (cancelBtn) {
+                                cancelBtn.style.display = "";
+                                cancelBtn.textContent = "Cerrar";
+                                cancelBtn.onclick = () => {
+                                    if (overlay) overlay.classList.add("d-none");
+                                    cancelBtn.style.display = "";
+                                    cancelBtn.textContent = "Cancelar";
+                                };
+                            }
+                        }
+                    } finally {
+                        packageDownloadInProgress = false;
+                    }
+                });
+            });
+
             updateUploadState();
         })();
 

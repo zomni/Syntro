@@ -316,6 +316,7 @@
         let modalEl = null;
         let titleEl = null;
         let bodyEl = null;
+        let msgEl = null;
         let inputEl = null;
         let inputWrap = null;
         let okBtn = null;
@@ -350,6 +351,9 @@
             document.body.appendChild(modalEl);
             titleEl = modalEl.querySelector(".modal-title");
             bodyEl = modalEl.querySelector(".modal-body");
+            msgEl = document.createElement("div");
+            msgEl.className = "modal-message";
+            bodyEl.appendChild(msgEl);
             inputWrap = document.createElement("div");
             inputWrap.className = "mt-2";
             inputEl = document.createElement("input");
@@ -378,7 +382,8 @@
         const showModal = (opts) => {
             ensureModal();
             titleEl.textContent = opts.title || defaultTitle;
-            bodyEl.childNodes[0].textContent = opts.message || "";
+            msgEl.textContent = opts.message || "";
+            msgEl.classList.toggle("d-none", !opts.message);
             inputWrap.classList.toggle("d-none", !opts.input);
             if (opts.input) {
                 inputEl.value = opts.defaultValue || "";
