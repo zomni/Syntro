@@ -141,6 +141,7 @@ public class InventoryImportController : ControllerBase
     [HttpPost("upload")]
     public async Task<IActionResult> Upload(
         IFormFile file,
+        [FromQuery] string? sheetName,
         [FromQuery] bool merge = false,
         CancellationToken cancellationToken = default)
     {
@@ -169,7 +170,7 @@ public class InventoryImportController : ControllerBase
         await file.CopyToAsync(stream, cancellationToken);
         await stream.FlushAsync(cancellationToken);
 
-        var result = await _importService.ImportAsync(safeFileName, null, merge, cancellationToken);
+        var result = await _importService.ImportAsync(safeFileName, sheetName, merge, cancellationToken);
         return Ok(result);
     }
 

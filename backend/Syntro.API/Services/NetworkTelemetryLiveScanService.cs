@@ -604,6 +604,7 @@ public class NetworkTelemetryLiveScanService
             "00:40:01" or "00:80:77" => "Canon",
             "00:13:50" or "00:1F:16" => "Epson",
             "00:08:74" or "00:0F:1F" => "Samsung",
+            "00:00:1D" => "Lexmark",
             "00:15:5D" => "Microsoft",
             "00:1A:11" => "Intel",
             "3C:52:82" => "Zebra",

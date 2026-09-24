@@ -65,7 +65,10 @@ public class ExcelInventoryImportService
         }
 
         var isCsv = excelPath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase);
-        var rows = isCsv ? ParseCsv(excelPath) : ParseWorksheet(excelPath, sheetName);
+        var parsedSheet = isCsv
+            ? ParseCsv(excelPath)
+            : ParseWorksheet(excelPath, sheetName);
+        var rows = parsedSheet.Rows;
         var importedAt = DateTime.UtcNow;
         var baseSourceFile = Path.GetFileName(excelPath);
         var sourceFile = string.IsNullOrWhiteSpace(sheetName)
@@ -99,56 +102,65 @@ public class ExcelInventoryImportService
 
         foreach (var row in rows)
         {
-            var physicalLocation = row.Get("UBICACION FISICA");
-            var matchedBuilding = ResolveBuildingByPhysicalLocation(physicalLocation, buildings);
-            var categoryResult = InferCategoryWithMl(row.Get("ITE_DESCRIPCION"), row.Get("OBSERVACION"));
+            ImportedInventoryItem candidate;
 
-            if (categoryResult.UsedMl) mlClassifiedCount++;
-            else ruleClassifiedCount++;
-
-            var candidate = new ImportedInventoryItem
+            if (parsedSheet.Layout == ImportLayout.Lexmark)
             {
-                RowNumber = row.RowNumber,
-                ItemNumber = FirstNonEmpty(row.Get("NUM"), row.Get("N")),
-                SerialNumber = FirstNonEmpty(row.Get("PL_LOTE"), row.Get("S_N")),
-                Description = FirstNonEmpty(row.Get("ITE_DESCRIPCION"), "Equipo"),
-                Lot = row.Get("PL_LOTE"),
-                InstallDate = FirstNonEmpty(row.Get("FECHA INSTALACION"), row.Get("FECHA INSTALACION_2")),
-                UnitOrDepartment = row.Get("UNIDAD O DEPTO"),
-                OrganizationalUnit = row.Get("UNIDAD ORGANIZATIVA"),
-                ResponsibleUser = row.Get("USUARIO RESPONSABLE"),
-                Run = FirstNonEmpty(row.Get("RUN"), row.Get("RUT")),
-                Email = row.Get("E-MAIL"),
-                JobTitle = row.Get("CARGO"),
-                IpAddress = FirstNonEmpty(row.Get("IP"), row.Get("IP_2")),
-                MacAddress = row.Get("MAC"),
-                AnnexPhone = row.Get("ANEXO/TELEFONO"),
-                ReplacedEquipment = row.Get("EQUIPO REEMPLAZADO"),
-                TicketMda = row.Get("TICKET MDA"),
-                Installer = row.Get("TECNICO INSTALADOR"),
-                Observation = row.Get("OBSERVACION"),
-                Rut = row.Get("RUT"),
-                InventoryDate = row.Get("FECHA INVENTARIO"),
-                InferredCategory = categoryResult.Category,
-                CategorySource = categoryResult.UsedMl ? "ml" : "rule",
-                ClassificationConfidence = categoryResult.Confidence,
-                ClassificationDetail = categoryResult.Detail,
-                InferredStatus = InferStatus(row.Get("OBSERVACION")),
-                MatchedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
-                MatchConfidence = matchedBuilding is null ? string.Empty : "import-physical-location",
-                MatchNotes = matchedBuilding is null
-                    ? string.Empty
-                    : $"Autoasignado por UBICACION FISICA: {physicalLocation}",
-                AssignedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
-                AssignedRoomExternalId = string.Empty,
-                AssignedFloor = null,
-                AssignmentNotes = matchedBuilding is null
-                    ? string.Empty
-                    : $"Asignado automaticamente por UBICACION FISICA: {physicalLocation}",
-                AssignmentUpdatedAtUtc = matchedBuilding is null ? null : importedAt,
-                SourceFile = sourceFile,
-                ImportedAtUtc = importedAt
-            };
+                candidate = BuildLexmarkItem(row, buildings, sourceFile, importedAt);
+            }
+            else
+            {
+                var physicalLocation = row.Get("UBICACION FISICA");
+                var matchedBuilding = ResolveBuildingByPhysicalLocation(physicalLocation, buildings);
+                var categoryResult = InferCategoryWithMl(row.Get("ITE_DESCRIPCION"), row.Get("OBSERVACION"));
+
+                if (categoryResult.UsedMl) mlClassifiedCount++;
+                else ruleClassifiedCount++;
+
+                candidate = new ImportedInventoryItem
+                {
+                    RowNumber = row.RowNumber,
+                    ItemNumber = FirstNonEmpty(row.Get("NUM"), row.Get("N")),
+                    SerialNumber = FirstNonEmpty(row.Get("PL_LOTE"), row.Get("S_N")),
+                    Description = FirstNonEmpty(row.Get("ITE_DESCRIPCION"), "Equipo"),
+                    Lot = row.Get("PL_LOTE"),
+                    InstallDate = FirstNonEmpty(row.Get("FECHA INSTALACION"), row.Get("FECHA INSTALACION_2")),
+                    UnitOrDepartment = row.Get("UNIDAD O DEPTO"),
+                    OrganizationalUnit = row.Get("UNIDAD ORGANIZATIVA"),
+                    ResponsibleUser = row.Get("USUARIO RESPONSABLE"),
+                    Run = FirstNonEmpty(row.Get("RUN"), row.Get("RUT")),
+                    Email = row.Get("E-MAIL"),
+                    JobTitle = row.Get("CARGO"),
+                    IpAddress = FirstNonEmpty(row.Get("IP"), row.Get("IP_2")),
+                    MacAddress = row.Get("MAC"),
+                    AnnexPhone = row.Get("ANEXO/TELEFONO"),
+                    ReplacedEquipment = row.Get("EQUIPO REEMPLAZADO"),
+                    TicketMda = row.Get("TICKET MDA"),
+                    Installer = row.Get("TECNICO INSTALADOR"),
+                    Observation = row.Get("OBSERVACION"),
+                    Rut = row.Get("RUT"),
+                    InventoryDate = row.Get("FECHA INVENTARIO"),
+                    InferredCategory = categoryResult.Category,
+                    CategorySource = categoryResult.UsedMl ? "ml" : "rule",
+                    ClassificationConfidence = categoryResult.Confidence,
+                    ClassificationDetail = categoryResult.Detail,
+                    InferredStatus = InferStatus(row.Get("OBSERVACION")),
+                    MatchedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
+                    MatchConfidence = matchedBuilding is null ? string.Empty : "import-physical-location",
+                    MatchNotes = matchedBuilding is null
+                        ? string.Empty
+                        : $"Autoasignado por UBICACION FISICA: {physicalLocation}",
+                    AssignedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
+                    AssignedRoomExternalId = string.Empty,
+                    AssignedFloor = null,
+                    AssignmentNotes = matchedBuilding is null
+                        ? string.Empty
+                        : $"Asignado automaticamente por UBICACION FISICA: {physicalLocation}",
+                    AssignmentUpdatedAtUtc = matchedBuilding is null ? null : importedAt,
+                    SourceFile = sourceFile,
+                    ImportedAtUtc = importedAt
+                };
+            }
 
             if (merge && TryFindExistingItem(existingInventoryItems, candidate, out var existingItem))
             {
@@ -176,6 +188,7 @@ public class ExcelInventoryImportService
         return new ExcelImportResult
         {
             ExcelPath = excelPath,
+            SheetName = parsedSheet.SheetName,
             ImportedItemsCount = insertedItems.Count,
             MergedItemsCount = mergedItemsCount,
             ImportedAtUtc = importedAt,
@@ -209,34 +222,33 @@ public class ExcelInventoryImportService
         return string.Empty;
     }
 
-    private static List<ParsedRow> ParseWorksheet(string path, string? sheetName = null)
+    private static ParsedWorksheet ParseWorksheet(string path, string? sheetName = null)
     {
         using var zip = ZipFile.OpenRead(path);
 
         var sharedStrings = LoadSharedStrings(zip);
-        var sheetDocument = LoadWorksheet(zip, sheetName);
+        var (sheetDocument, selectedSheetName, layout) = LoadWorksheet(zip, sheetName, sharedStrings);
         var rows = sheetDocument.Root!
             .Element(SpreadsheetNs + "sheetData")!
             .Elements(SpreadsheetNs + "row")
             .ToList();
 
-        var headerRow = rows.FirstOrDefault(r => IsHeaderRow(r, sharedStrings))
-            ?? throw new InvalidOperationException("No se encontraron encabezados reconocibles en la primera hoja del Excel.");
+        var headerRow = rows.FirstOrDefault(r => IsHeaderRow(r, sharedStrings, out _))
+            ?? throw new InvalidOperationException("No se encontraron encabezados reconocibles en la hoja seleccionada del Excel.");
 
         var headerRowNumber = GetRowNumber(headerRow);
         var headersByColumn = BuildHeadersMap(headerRow, sharedStrings);
 
-        return rows
+        var parsedRows = rows
             .Where(r => GetRowNumber(r) > headerRowNumber)
             .Select(r => ParseRow(r, headersByColumn, sharedStrings))
-            .Where(r =>
-                !string.IsNullOrWhiteSpace(r.Get("ITE_DESCRIPCION")) ||
-                !string.IsNullOrWhiteSpace(r.Get("PL_LOTE")) ||
-                !string.IsNullOrWhiteSpace(r.Get("S_N")))
+            .Where(r => IsDataRow(r, layout))
             .ToList();
+
+        return new ParsedWorksheet(layout, selectedSheetName, parsedRows);
     }
 
-    private static List<ParsedRow> ParseCsv(string path)
+    private static ParsedWorksheet ParseCsv(string path)
     {
         var lines = File.ReadAllLines(path, Encoding.UTF8);
         if (lines.Length < 2)
@@ -275,7 +287,7 @@ public class ExcelInventoryImportService
             }
         }
 
-        return rows;
+        return new ParsedWorksheet(ImportLayout.Winsig, string.Empty, rows);
     }
 
     private static char DetectDelimiter(string headerLine)
@@ -348,21 +360,70 @@ public class ExcelInventoryImportService
         return result;
     }
 
-    private static XDocument LoadWorksheet(ZipArchive zip, string? sheetName)
+    private static (XDocument Document, string SheetName, ImportLayout Layout) LoadWorksheet(
+        ZipArchive zip,
+        string? sheetName,
+        IReadOnlyList<string> sharedStrings)
     {
         var workbook = XDocument.Load(zip.GetEntry("xl/workbook.xml")!.Open());
         var workbookRels = XDocument.Load(zip.GetEntry("xl/_rels/workbook.xml.rels")!.Open());
 
         var sheets = workbook.Root!
             .Element(SpreadsheetNs + "sheets")!
-            .Elements(SpreadsheetNs + "sheet");
+            .Elements(SpreadsheetNs + "sheet")
+            .ToList();
 
-        var selectedSheet = string.IsNullOrWhiteSpace(sheetName)
-            ? sheets.First()
-            : sheets.FirstOrDefault(sheet => string.Equals((string?)sheet.Attribute("name"), sheetName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(sheetName))
+        {
+            var requested = sheets.FirstOrDefault(sheet =>
+                    string.Equals((string?)sheet.Attribute("name"), sheetName, StringComparison.OrdinalIgnoreCase))
                 ?? throw new InvalidOperationException($"No se encontro la hoja '{sheetName}' en el Excel.");
 
-        var relationshipId = (string?)selectedSheet.Attribute(OfficeRelNs + "id")
+            var requestedName = (string?)requested.Attribute("name") ?? sheetName;
+            var requestedDocument = LoadWorksheetDocument(zip, workbookRels, requested);
+            var requestedLayout = DetectLayout(requestedDocument, sharedStrings)
+                ?? throw new InvalidOperationException($"No se encontraron encabezados reconocibles en la hoja '{requestedName}'.");
+
+            return (requestedDocument, requestedName, requestedLayout);
+        }
+
+        foreach (var sheet in sheets)
+        {
+            var name = (string?)sheet.Attribute("name");
+            if (string.IsNullOrWhiteSpace(name))
+                continue;
+
+            var document = LoadWorksheetDocument(zip, workbookRels, sheet);
+            var layout = DetectLayout(document, sharedStrings);
+            if (layout is not null)
+            {
+                return (document, name, layout.Value);
+            }
+        }
+
+        throw new InvalidOperationException("No se encontraron hojas con encabezados reconocibles en el Excel.");
+    }
+
+    private static ImportLayout? DetectLayout(XDocument sheetDocument, IReadOnlyList<string> sharedStrings)
+    {
+        var rows = sheetDocument.Root?
+            .Element(SpreadsheetNs + "sheetData")?
+            .Elements(SpreadsheetNs + "row");
+
+        if (rows is null)
+            return null;
+
+        var headerRow = rows.FirstOrDefault(r => IsHeaderRow(r, sharedStrings, out _));
+        if (headerRow is null)
+            return null;
+
+        IsHeaderRow(headerRow, sharedStrings, out var layout);
+        return layout;
+    }
+
+    private static XDocument LoadWorksheetDocument(ZipArchive zip, XDocument workbookRels, XElement sheet)
+    {
+        var relationshipId = (string?)sheet.Attribute(OfficeRelNs + "id")
             ?? throw new InvalidOperationException("No se pudo resolver la hoja del Excel.");
 
         var target = workbookRels.Root!
@@ -384,15 +445,49 @@ public class ExcelInventoryImportService
         return XDocument.Load(sheetEntry.Open());
     }
 
-    private static bool IsHeaderRow(XElement row, IReadOnlyList<string> sharedStrings)
+    private static bool IsHeaderRow(XElement row, IReadOnlyList<string> sharedStrings, out ImportLayout layout)
     {
         var values = row.Elements(SpreadsheetNs + "c")
             .Select(cell => NormalizeHeader(GetCellValue(cell, sharedStrings)))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        return (values.Contains("ITE_DESCRIPCION") && values.Contains("PL_LOTE")) ||
-               (values.Contains("S_N") && values.Contains("UNIDAD_O_DEPTO"));
+        if ((values.Contains("ITE_DESCRIPCION") && values.Contains("PL_LOTE")) ||
+            (values.Contains("S_N") && values.Contains("UNIDAD_O_DEPTO")))
+        {
+            layout = ImportLayout.Winsig;
+            return true;
+        }
+
+        if (values.Contains("SERIE") && values.Contains("NUMERO_IP") && values.Contains("MODELO"))
+        {
+            layout = ImportLayout.Lexmark;
+            return true;
+        }
+
+        layout = ImportLayout.Winsig;
+        return false;
+    }
+
+    private static bool IsDataRow(ParsedRow row, ImportLayout layout)
+    {
+        if (layout == ImportLayout.Lexmark)
+        {
+            return !string.IsNullOrWhiteSpace(row.Get("SERIE"));
+        }
+
+        return !string.IsNullOrWhiteSpace(row.Get("ITE_DESCRIPCION")) ||
+               !string.IsNullOrWhiteSpace(row.Get("PL_LOTE")) ||
+               !string.IsNullOrWhiteSpace(row.Get("S_N"));
+    }
+
+    private static bool IsValidIpv4(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        var parts = value.Split('.');
+        return parts.Length == 4 && parts.All(part => byte.TryParse(part, out _));
     }
 
     private static Dictionary<string, string> BuildHeadersMap(XElement headerRow, IReadOnlyList<string> sharedStrings)
@@ -566,6 +661,63 @@ public class ExcelInventoryImportService
         return values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)) ?? string.Empty;
     }
 
+    private ImportedInventoryItem BuildLexmarkItem(
+        ParsedRow row,
+        IReadOnlyList<SyncedBuilding> buildings,
+        string sourceFile,
+        DateTime importedAt)
+    {
+        var physicalLocation = row.Get("UNIDADES");
+        var matchedBuilding = ResolveBuildingByPhysicalLocation(physicalLocation, buildings);
+        var model = row.Get("MODELO");
+        var description = string.IsNullOrWhiteSpace(model)
+            ? "IMPRESORA LEXMARK"
+            : $"IMPRESORA LEXMARK {model}";
+        var costCenter = row.Get("CCOSTO_WINSIG");
+        var complejo = row.Get("COMPLEJO");
+
+        var observationParts = new[]
+        {
+            string.IsNullOrWhiteSpace(costCenter) ? string.Empty : $"CCOSTO: {costCenter}",
+            string.IsNullOrWhiteSpace(complejo) ? string.Empty : $"COMPLEJO: {complejo}"
+        }.Where(part => part.Length > 0);
+
+        var ip = IsValidIpv4(row.Get("NUMERO_IP")) ? row.Get("NUMERO_IP") : string.Empty;
+
+        return new ImportedInventoryItem
+        {
+            RowNumber = row.RowNumber,
+            ItemNumber = FirstNonEmpty(row.Get("ETIQUETA"), row.Get("SERIE")),
+            SerialNumber = row.Get("SERIE"),
+            Description = description,
+            UnitOrDepartment = physicalLocation,
+            OrganizationalUnit = costCenter,
+            ResponsibleUser = row.Get("CONTACTO"),
+            JobTitle = row.Get("RESPONSABLE"),
+            IpAddress = ip,
+            AnnexPhone = row.Get("TELEFONO"),
+            Observation = string.Join(" | ", observationParts),
+            InferredCategory = "printer",
+            CategorySource = "lexmark",
+            ClassificationDetail = "Regla: hoja de impresoras Lexmark \u2192 categor\u00eda \u2018printer\u2019",
+            InferredStatus = "active",
+            MatchedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
+            MatchConfidence = matchedBuilding is null ? string.Empty : "import-physical-location",
+            MatchNotes = matchedBuilding is null
+                ? string.Empty
+                : $"Autoasignado por UNIDADES: {physicalLocation}",
+            AssignedBuildingExternalId = matchedBuilding?.ExternalId ?? string.Empty,
+            AssignedRoomExternalId = string.Empty,
+            AssignedFloor = null,
+            AssignmentNotes = matchedBuilding is null
+                ? string.Empty
+                : $"Asignado automaticamente por UNIDADES: {physicalLocation}",
+            AssignmentUpdatedAtUtc = matchedBuilding is null ? null : importedAt,
+            SourceFile = sourceFile,
+            ImportedAtUtc = importedAt
+        };
+    }
+
     private static string NormalizeHeader(string value)
     {
         var normalized = NormalizeText(value);
@@ -668,6 +820,14 @@ public class ExcelInventoryImportService
                haystack.EndsWith($" {needle}", StringComparison.Ordinal);
     }
 
+    private enum ImportLayout
+    {
+        Winsig,
+        Lexmark
+    }
+
+    private sealed record ParsedWorksheet(ImportLayout Layout, string SheetName, List<ParsedRow> Rows);
+
     private sealed record ParsedRow(int RowNumber, Dictionary<string, string> Values)
     {
         public string Get(string key)
@@ -687,6 +847,7 @@ public class ExcelInventoryImportService
     public sealed class ExcelImportResult
     {
         public string ExcelPath { get; set; } = string.Empty;
+        public string SheetName { get; set; } = string.Empty;
         public int ImportedItemsCount { get; set; }
         public int MergedItemsCount { get; set; }
         public int MlClassifiedCount { get; set; }
