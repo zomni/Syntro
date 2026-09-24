@@ -173,8 +173,27 @@ public class NetworkTelemetryAgentBridgeService
             return null;
         }
 
-        await using var stream = File.OpenRead(requestPath);
-        return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentRequest>(stream, JsonOptions, cancellationToken);
+        try
+        {
+            await using var stream = File.OpenRead(requestPath);
+            return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentRequest>(stream, JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private async Task UpdateStatusAsync(
@@ -286,8 +305,27 @@ public class NetworkTelemetryAgentBridgeService
             return null;
         }
 
-        await using var stream = File.OpenRead(statusPath);
-        return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentStatus>(stream, JsonOptions, cancellationToken);
+        try
+        {
+            await using var stream = File.OpenRead(statusPath);
+            return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentStatus>(stream, JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private async Task<NetworkTelemetryAgentHeartbeat?> GetHeartbeatAsync(string? campusKey, CancellationToken cancellationToken)
@@ -298,8 +336,27 @@ public class NetworkTelemetryAgentBridgeService
             return null;
         }
 
-        await using var stream = File.OpenRead(heartbeatPath);
-        return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentHeartbeat>(stream, JsonOptions, cancellationToken);
+        try
+        {
+            await using var stream = File.OpenRead(heartbeatPath);
+            return await JsonSerializer.DeserializeAsync<NetworkTelemetryAgentHeartbeat>(stream, JsonOptions, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     private async Task SaveStatusAsync(string? campusKey, NetworkTelemetryAgentStatus status, CancellationToken cancellationToken)

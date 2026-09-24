@@ -1,5 +1,6 @@
 param(
     [string]$ConfigPath = "",
+    [string]$StopMarkerPath = "",
     [switch]$Watch
 )
 
@@ -35,10 +36,25 @@ Write-Host "Este proceso pedira tu clave solo si PromptForCredential=true." -For
 Write-Host "La clave no se guarda en el archivo." -ForegroundColor DarkCyan
 Write-Host ""
 
+if ([string]::IsNullOrWhiteSpace($StopMarkerPath)) {
+    $StopMarkerPath = Join-Path $collectorDir ".agent-stop"
+}
+
 Push-Location $repoRoot
 try {
     if ($Watch) {
-        dotnet run --project $projectPath -- --config $ConfigPath --watch
+        $runCount = 0
+        while (-not (Test-Path $StopMarkerPath)) {
+            if ($runCount -gt 0) {
+                Write-Host ""
+                Write-Host "El agente termino (exit $LASTEXITCODE). Reiniciando en 3 segundos (reinicios: $runCount)..." -ForegroundColor Yellow
+                Write-Host "Para detenerlo definitivamente, crea el archivo: $StopMarkerPath" -ForegroundColor DarkCyan
+                Start-Sleep -Seconds 3
+            }
+            dotnet run --project $projectPath -- --config $ConfigPath --watch
+            $runCount++
+        }
+        Write-Host "Marcador de detencion presente. Agente detenido." -ForegroundColor Cyan
     }
     else {
         dotnet run --project $projectPath -- --config $ConfigPath

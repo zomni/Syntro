@@ -473,23 +473,11 @@ static string ResolveSharedPath(CollectorOptions options)
 
 static async Task SaveAgentStatusAsync(string statusPath, AgentStatus status, CancellationToken cancellationToken)
 {
-    var directory = Path.GetDirectoryName(statusPath);
-    if (!string.IsNullOrWhiteSpace(directory))
-    {
-        Directory.CreateDirectory(directory);
-    }
-
-    await File.WriteAllTextAsync(statusPath, JsonSerializer.Serialize(status, JsonOptions.Default), cancellationToken);
+    await WriteJsonAtomicAsync(statusPath, JsonSerializer.Serialize(status, JsonOptions.Default), cancellationToken);
 }
 
 static async Task SaveAgentHeartbeatAsync(string heartbeatPath, CollectorOptions options, CancellationToken cancellationToken)
 {
-    var directory = Path.GetDirectoryName(heartbeatPath);
-    if (!string.IsNullOrWhiteSpace(directory))
-    {
-        Directory.CreateDirectory(directory);
-    }
-
     var heartbeat = new AgentHeartbeat
     {
         AgentId = options.AgentId,
@@ -499,7 +487,20 @@ static async Task SaveAgentHeartbeatAsync(string heartbeatPath, CollectorOptions
         Mode = "watch"
     };
 
-    await File.WriteAllTextAsync(heartbeatPath, JsonSerializer.Serialize(heartbeat, JsonOptions.Default), cancellationToken);
+    await WriteJsonAtomicAsync(heartbeatPath, JsonSerializer.Serialize(heartbeat, JsonOptions.Default), cancellationToken);
+}
+
+static async Task WriteJsonAtomicAsync(string filePath, string json, CancellationToken cancellationToken)
+{
+    var directory = Path.GetDirectoryName(filePath);
+    if (!string.IsNullOrWhiteSpace(directory))
+    {
+        Directory.CreateDirectory(directory);
+    }
+
+    var temporaryPath = filePath + ".tmp";
+    await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
+    File.Move(temporaryPath, filePath, overwrite: true);
 }
 
 static async Task AppendAgentLogAsync(string logPath, string message, CancellationToken cancellationToken)
@@ -1573,7 +1574,7 @@ internal sealed class UserInput
 
 internal sealed class IngestResult
 {
-    public int SnapshotId { get; set; }
+    public Guid SnapshotId { get; set; }
     public string OverallRiskLevel { get; set; } = string.Empty;
     public int OverallRiskScore { get; set; }
     public string Notes { get; set; } = string.Empty;
@@ -1605,7 +1606,7 @@ internal sealed class AgentStatus
     public string AgentId { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string Error { get; set; } = string.Empty;
-    public int? SnapshotId { get; set; }
+    public Guid? SnapshotId { get; set; }
     public DateTime? RequestedAtUtc { get; set; }
     public string RequestedByUsername { get; set; } = string.Empty;
     public DateTime? StartedAtUtc { get; set; }

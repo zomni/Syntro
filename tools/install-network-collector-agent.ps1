@@ -45,9 +45,7 @@ $isElevated = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]
 $runRegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runRegistryName = "SyntroNetworkCollectorAgent"
 
-$escapedRunner = $runnerPath.Replace("'", "''")
-$escapedConfig = $ConfigPath.Replace("'", "''")
-$arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File '$escapedRunner' -Watch -ConfigPath '$escapedConfig'"
+$arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runnerPath`" -Watch -ConfigPath `"$ConfigPath`""
 $commandLine = "powershell.exe $arguments"
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
