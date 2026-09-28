@@ -2891,6 +2891,8 @@ body.map-ui-wayfinding #route-planner-toggle {
 
 .building-panel-popup .leaflet-popup-content {
     margin: 16px 18px;
+    width: auto !important;
+    max-width: none;
 }
 
 .building-panel-popup .leaflet-popup-tip {

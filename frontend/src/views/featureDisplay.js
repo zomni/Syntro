@@ -2507,7 +2507,11 @@ const dockBuildingPopup = (layer) => {
 
 export const onEachFeature = (feature, layer) => {
   if (feature.properties.isClickable) {
-    layer.bindPopup("Cargando información...", { className: "building-panel-popup" });
+    layer.bindPopup("Cargando información...", {
+      className: "building-panel-popup",
+      minWidth: 320,
+      maxWidth: 480,
+    });
 
     if (layer.getPopup()) {
       layer.getPopup().options.autoPan = false;
