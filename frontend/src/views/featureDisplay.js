@@ -92,6 +92,13 @@ export const closeCurrentPopup = () => {
   clearCurrentOpenFeatureId();
 };
 
+if (!window.closeBuildingPanel) {
+  window.closeBuildingPanel = () => {
+    closeCurrentPopup();
+    return false;
+  };
+}
+
 map.on("click", (event) => {
   const originalTarget = event?.originalEvent?.target;
   const clickedInsideFeature =
@@ -1432,8 +1439,8 @@ const getRecentEvents = (devices) => {
 };
 
 const popupShellStyle = `
-  min-width: 300px;
-  max-width: 390px;
+  min-width: 320px;
+  max-width: 400px;
   max-height: 68vh;
   overflow-y: auto;
   line-height: 1.35;
@@ -1441,6 +1448,20 @@ const popupShellStyle = `
   word-break: break-word;
   overflow-wrap: anywhere;
   padding-right: 2px;
+`;
+
+const buildBuildingPanelHeaderHtml = (featureName) => `
+  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+    <b style="font-size:16px; flex:1 1 auto; min-width:0;">
+      ${escapeHtml(featureName)}
+    </b>
+    <button
+      type="button"
+      class="building-panel-close"
+      onclick="window.closeBuildingPanel && window.closeBuildingPanel()"
+      aria-label="Cerrar edificio"
+    >×</button>
+  </div>
 `;
 
 const sectionBoxStyle = `
@@ -1950,7 +1971,7 @@ const getFeaturePopupHtml = async (feature) => {
     popupViewState[featureId] = "summary";
     return `
       <div style="${popupShellStyle}">
-        <b style="font-size:16px;">${escapeHtml(featureName)}</b>
+        ${buildBuildingPanelHeaderHtml(featureName)}
         ${buildFloorSelectorHtml(building, currentFloor)}
       </div>
     `;
@@ -1981,7 +2002,7 @@ const getFeaturePopupHtml = async (feature) => {
 
   let detailsHtml = `
     <div style="${popupShellStyle}">
-      <b style="font-size:16px;">${escapeHtml(featureName)}</b>
+      ${buildBuildingPanelHeaderHtml(featureName)}
   `;
 
 detailsHtml += buildFloorSelectorHtml(building, currentFloor);
@@ -2064,22 +2085,55 @@ export const style = (feature) => {
   return feature.properties.style;
 };
 
+let buildingPanelMapFrozen = false;
+
+const freezeMapForBuildingPanel = () => {
+  if (buildingPanelMapFrozen) return;
+  buildingPanelMapFrozen = true;
+
+  ["dragging", "touchZoom", "doubleClickZoom", "scrollWheelZoom", "boxZoom", "keyboard"].forEach(
+    (handler) => {
+      if (map[handler]?.disable) {
+        map[handler].disable();
+      }
+    }
+  );
+};
+
+const unfreezeMapForBuildingPanel = () => {
+  if (!buildingPanelMapFrozen) return;
+  buildingPanelMapFrozen = false;
+
+  ["dragging", "touchZoom", "doubleClickZoom", "scrollWheelZoom", "boxZoom", "keyboard"].forEach(
+    (handler) => {
+      if (map[handler]?.enable) {
+        map[handler].enable();
+      }
+    }
+  );
+};
+
+const frameBuildingToLeftArea = (layer, maxZoom = 20) => {
+  const bounds = layer.getBounds();
+  const mapSize = map.getSize();
+  const panelWidth = Math.min(440, mapSize.x - 28);
+  const rightReserve = panelWidth + 28;
+  const leftAreaWidth = Math.max(180, mapSize.x - rightReserve);
+
+  map.fitBounds(bounds, {
+    maxZoom,
+    paddingTopLeft: [84, 20],
+    paddingBottomRight: [rightReserve, 20],
+    animate: false,
+  });
+
+  map.panBy([leftAreaWidth / 2 - mapSize.x / 2, 0], { animate: false });
+};
+
 export const openBuildingPopupLayer = (layer, options = {}) => {
   if (!layer) return false;
 
-  const {
-    zoom = true,
-    rememberView = true,
-    maxZoom = 20,
-    padding = [40, 40],
-  } = options;
-  const minZoom = typeof map.getMinZoom === "function" ? map.getMinZoom() : null;
-  const currentZoom = typeof map.getZoom === "function" ? map.getZoom() : null;
-  const shouldZoom =
-    !!zoom &&
-    Number.isFinite(Number(minZoom)) &&
-    Number.isFinite(Number(currentZoom)) &&
-    Number(currentZoom) <= Number(minZoom) + 0.05;
+  const { zoom = true, rememberView = true, maxZoom = 20 } = options;
 
   if (rememberView) {
     popupReturnView = {
@@ -2090,12 +2144,9 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
 
   suspendMapBoundsForPopup();
 
-  if (shouldZoom && typeof layer.getBounds === "function") {
-    map.fitBounds(layer.getBounds(), {
-      maxZoom,
-      padding,
-    });
-  } else if (shouldZoom && typeof layer.getLatLng === "function") {
+  if (zoom && typeof layer.getBounds === "function") {
+    frameBuildingToLeftArea(layer, maxZoom);
+  } else if (zoom && typeof layer.getLatLng === "function") {
     map.setView(layer.getLatLng(), maxZoom);
   }
 
@@ -2457,6 +2508,7 @@ export const onEachFeature = (feature, layer) => {
       currentOpenLayer = layer;
       setSelectedLayer(layer);
       dockBuildingPopup(layer);
+      freezeMapForBuildingPanel();
 
       if (!popupViewState[feature.properties.id]) {
         popupViewState[feature.properties.id] = null;
@@ -2468,6 +2520,7 @@ export const onEachFeature = (feature, layer) => {
 
     layer.on("popupclose", () => {
       document.body.classList.remove("map-building-panel");
+      unfreezeMapForBuildingPanel();
 
       if (currentOpenLayer === layer) {
         clearCurrentOpenFeatureId();
