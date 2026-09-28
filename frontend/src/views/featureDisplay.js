@@ -2432,22 +2432,31 @@ const resetHighlight = (e) => {
   }
 };
 
+const dockBuildingPopup = (layer) => {
+  const popupElement = layer?.getPopup()?.getElement();
+  const mapHost = document.getElementById("map");
+  if (popupElement && mapHost && popupElement.parentNode !== mapHost) {
+    mapHost.appendChild(popupElement);
+  }
+};
+
 export const onEachFeature = (feature, layer) => {
   if (feature.properties.isClickable) {
     layer.bindPopup("Cargando información...", { className: "building-panel-popup" });
 
     if (layer.getPopup()) {
-      layer.getPopup().options.autoPan = true;
-      layer.getPopup().options.keepInView = true;
+      layer.getPopup().options.autoPan = false;
+      layer.getPopup().options.keepInView = false;
       layer.getPopup().options.closeOnClick = false;
     }
 
-        layer.on("popupopen", async () => {
+    layer.on("popupopen", async () => {
       document.body.classList.add("map-building-panel");
       suspendMapBoundsForPopup();
       setCurrentOpenFeatureId(feature?.properties?.id || null);
       currentOpenLayer = layer;
       setSelectedLayer(layer);
+      dockBuildingPopup(layer);
 
       if (!popupViewState[feature.properties.id]) {
         popupViewState[feature.properties.id] = null;

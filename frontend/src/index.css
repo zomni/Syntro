@@ -2876,6 +2876,7 @@ body.map-ui-wayfinding #route-planner-toggle {
     max-height: none !important;
     margin: 0 !important;
     transform: none !important;
+    opacity: 1 !important;
     z-index: 1500;
     overflow: hidden;
     border-radius: 16px;
@@ -2883,11 +2884,16 @@ body.map-ui-wayfinding #route-planner-toggle {
 }
 
 .building-panel-popup .leaflet-popup-content-wrapper {
+    height: 100%;
     border-radius: 16px;
+    overflow: hidden;
 }
 
 .building-panel-popup .leaflet-popup-content {
+    height: calc(100% - 32px);
     margin: 16px 18px;
+    overflow-y: auto;
+    box-sizing: border-box;
 }
 
 .building-panel-popup .leaflet-popup-tip {
