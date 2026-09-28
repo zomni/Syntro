@@ -2595,7 +2595,8 @@ public class NetworkTelemetryService
                 observation.BuildingExternalId,
                 observation.RiskLevel,
                 observation.RiskScore,
-                Matched = observation.ImportedInventoryItemId != null || observation.SyncedEquipmentId != null
+                observation.ImportedInventoryItemId,
+                observation.SyncedEquipmentId
             })
             .ToListAsync(cancellationToken);
 
@@ -2608,7 +2609,8 @@ public class NetworkTelemetryService
                     .ThenByDescending(item => item.Id)
                     .First();
 
-                var matchedCount = group.Count(item => item.Matched);
+                var matchedCount = group.Count(item =>
+                    item.ImportedInventoryItemId.HasValue || item.SyncedEquipmentId.HasValue);
 
                 return new NetworkTelemetryBuildingRiskSummaryViewModel
                 {

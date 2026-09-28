@@ -3,14 +3,14 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
-import { getCurrentCampusKey, getCatalogFileName, getPrimaryCampusKey } from "../utils/campusConfig.js";
+import { getCatalogFileName, getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
 import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
 import { isWayfindingMode } from "../utils/wayfinding.js";
-import { loadNetworkTelemetryStatus, canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
+import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
@@ -288,6 +288,42 @@ const buildingMatchBubbleEntries = new Map();
 let buildingMatchModeActive = false;
 let buildingMatchData = null;
 let buildingMatchDataPromise = null;
+let warnedMissingMatchRate = false;
+
+const registerMatchBubble = (featureId, marker) => {
+  if (!featureId || !marker) return;
+  const markers = buildingMatchBubbleEntries.get(featureId);
+  if (markers) {
+    markers.add(marker);
+    return;
+  }
+  buildingMatchBubbleEntries.set(featureId, new Set([marker]));
+};
+
+const discardMatchBubble = (featureId, marker) => {
+  const markers = buildingMatchBubbleEntries.get(featureId);
+  if (!markers) return;
+
+  markers.delete(marker);
+  if (markers.size === 0) {
+    buildingMatchBubbleEntries.delete(featureId);
+  }
+};
+
+const removeMatchBubbleMarker = (featureId, marker) => {
+  if (!marker) return;
+  if (map.hasLayer(marker)) {
+    map.removeLayer(marker);
+  }
+  discardMatchBubble(featureId, marker);
+};
+
+const removeAllMatchBubbles = () => {
+  buildingMatchBubbleEntries.forEach((markers, featureId) => {
+    Array.from(markers).forEach((marker) => removeMatchBubbleMarker(featureId, marker));
+  });
+  buildingMatchBubbleEntries.clear();
+};
 const EQUIPMENT_SYNC_POLL_MS = 30000;
 const EQUIPMENT_SYNC_RETRY_MS = 5000;
 const BACKEND_SESSION_CACHE_MS = 15000;
@@ -2133,6 +2169,11 @@ const handleFeatureClick = (e) => {
   });
 };
 
+const normalizeMatchRate = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : null;
+};
+
 const loadBuildingMatchData = async () => {
   const session = await loadBackendSession();
   if (!canAccessLiveTelemetry(session)) return new Map();
@@ -2140,19 +2181,41 @@ const loadBuildingMatchData = async () => {
   if (buildingMatchData) return buildingMatchData;
   if (buildingMatchDataPromise) return buildingMatchDataPromise;
 
-  buildingMatchDataPromise = loadNetworkTelemetryStatus(getCurrentCampusKey(), { forceRefresh: true })
+  buildingMatchDataPromise = fetch(`${BACKEND_API_URL}/api/network-telemetry/status?take=10`, {
+    cache: "no-store",
+    credentials: "include",
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`API respondio ${response.status}`);
+      }
+      return response.json();
+    })
     .then((telemetry) => {
       const result = new Map();
+      let missingMatchRate = false;
+
       for (const summary of telemetry?.buildingRiskSummaries || []) {
         const key = String(summary?.buildingExternalId || "").trim();
         if (!key) continue;
 
+        const matchRate = normalizeMatchRate(summary?.matchRate);
+        if (matchRate === null) missingMatchRate = true;
+
         result.set(key, {
           deviceCount: Number(summary?.deviceCount) || 0,
           matchedCount: Number(summary?.matchedCount) || 0,
-          matchRate: Number(summary?.matchRate) || 0,
+          matchRate,
         });
       }
+
+      if (missingMatchRate && !warnedMissingMatchRate) {
+        warnedMissingMatchRate = true;
+        console.warn(
+          "[feature-display] la API de telemetria no devolvio matchRate; los edificios afectados se muestran sin dato en vez de 0%."
+        );
+      }
+
       return result;
     })
     .catch((error) => {
@@ -2168,7 +2231,7 @@ const applyBuildingMatchStyle = (layer) => {
   if (!featureId || !buildingMatchData) return false;
 
   const summary = buildingMatchData.get(featureId);
-  if (!summary || summary.deviceCount <= 0) return false;
+  if (!summary || summary.deviceCount <= 0 || summary.matchRate === null) return false;
 
   const fillColor = buildingMatchColor(summary.matchRate);
   if (!fillColor) return false;
@@ -2189,14 +2252,21 @@ const createMatchBubbleForLayer = async (feature, layer) => {
   if (isWayfindingMode()) return;
 
   const data = await loadBuildingMatchData();
+  if (!buildingMatchModeActive) return;
   if (!layer?._map) return;
+
+  if (layer.syntroMatchBubbles) {
+    Array.from(layer.syntroMatchBubbles).forEach((previous) => removeMatchBubbleMarker(featureId, previous));
+  }
 
   applyBuildingMatchStyle(layer);
 
   const summary = data.get(featureId);
-  if (!summary || summary.deviceCount <= 0) return;
+  if (!summary || summary.deviceCount <= 0 || summary.matchRate === null) return;
 
-  const label = buildingMatchPercentLabel(summary.matchRate) || "0%";
+  const label = buildingMatchPercentLabel(summary.matchRate);
+  if (!label) return;
+
   const fillColor = buildingMatchColor(summary.matchRate) || "#666";
 
   const marker = L.marker(layer.getBounds().getCenter(), {
@@ -2242,29 +2312,21 @@ const createMatchBubbleForLayer = async (feature, layer) => {
     });
   });
 
-  buildingMatchBubbleEntries.set(featureId, marker);
+  registerMatchBubble(featureId, marker);
+
+  if (!layer.syntroMatchBubbles) {
+    layer.syntroMatchBubbles = new Set();
+  }
+  layer.syntroMatchBubbles.add(marker);
 
   if (!map.hasLayer(marker) && layer?._map) {
     marker.addTo(map);
   }
 
   layer.on("remove", () => {
-    if (map.hasLayer(marker)) {
-      map.removeLayer(marker);
-    }
-    buildingMatchBubbleEntries.delete(featureId);
+    layer.syntroMatchBubbles?.delete(marker);
+    removeMatchBubbleMarker(featureId, marker);
   });
-};
-
-const removeMatchBubbleForLayer = (layer) => {
-  const featureId = layer?.feature?.properties?.id;
-  if (!featureId) return;
-
-  const marker = buildingMatchBubbleEntries.get(featureId);
-  if (marker && map.hasLayer(marker)) {
-    map.removeLayer(marker);
-  }
-  buildingMatchBubbleEntries.delete(featureId);
 };
 
 const hideEquipmentTypeFilterWhileMatchActive = () => {
@@ -2276,18 +2338,20 @@ export const setBuildingMatchMode = async (active) => {
   buildingMatchModeActive = Boolean(active);
 
   if (!buildingMatchModeActive) {
+    removeAllMatchBubbles();
     forEachVisibleFeatureLayer((layer) => {
-      removeMatchBubbleForLayer(layer);
       applyDefaultStyle(layer);
     });
-    buildingMatchBubbleEntries.clear();
     hideEquipmentTypeFilterWhileMatchActive();
     updateBuildingEquipmentBubbles();
     return;
   }
 
   buildingMatchData = await loadBuildingMatchData();
-  if (!buildingMatchModeActive) return;
+  if (!buildingMatchModeActive) {
+    removeAllMatchBubbles();
+    return;
+  }
 
   buildingEquipmentBubbleEntries.forEach((entry) => {
     if (entry.marker && map.hasLayer(entry.marker)) {
@@ -2295,6 +2359,7 @@ export const setBuildingMatchMode = async (active) => {
     }
   });
 
+  removeAllMatchBubbles();
   hideEquipmentTypeFilterWhileMatchActive();
   forEachVisibleFeatureLayer((layer) => {
     applyBuildingMatchStyle(layer);

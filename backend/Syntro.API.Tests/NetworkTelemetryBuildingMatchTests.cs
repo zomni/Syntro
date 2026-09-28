@@ -131,6 +131,38 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         Assert.Equal(0.0, summary.MatchRate);
     }
 
+    [Fact]
+    public async Task GetBuildingRiskSummariesAsync_CountsFullMatchWhenOnlyImportedInventoryIsLinked()
+    {
+        var snapshot = new NetworkTelemetrySnapshot
+        {
+            CampusKey = "test-campus",
+            SourceName = "test",
+            SourceType = "wmi",
+            Status = "received",
+            ObservedAtUtc = DateTime.UtcNow
+        };
+        _context.NetworkTelemetrySnapshots.Add(snapshot);
+        await _context.SaveChangesAsync();
+
+        var importedItem = Guid.NewGuid();
+        var observations = Enumerable.Range(0, 40)
+            .Select(_ => Device(snapshot.Id, "SR-BLD-IMPORTED", importedInventoryItemId: importedItem))
+            .ToList();
+        observations.Add(Device(snapshot.Id, "SR-BLD-IMPORTED"));
+        _context.NetworkTelemetryObservations.AddRange(observations);
+        await _context.SaveChangesAsync();
+
+        var service = BuildService();
+
+        var summaries = await service.GetBuildingRiskSummariesAsync(snapshot.Id, campusKeys: null);
+
+        var summary = Assert.Single(summaries);
+        Assert.Equal(41, summary.DeviceCount);
+        Assert.Equal(40, summary.MatchedCount);
+        Assert.Equal(97.6, summary.MatchRate);
+    }
+
     private NetworkTelemetryService BuildService()
     {
         var config = TestConfiguration.FromSettings(new Dictionary<string, string?>());

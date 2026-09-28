@@ -260,7 +260,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
-    width: min(220px, calc(100vw - 24px));
+    width: min(240px, calc(100vw - 24px));
     min-height: 40px;
     padding: 8px 9px 8px 11px;
     box-sizing: border-box;
@@ -283,6 +283,9 @@
 
 .session-mode-label {
     font: inherit;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -291,6 +294,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-width: 0;
 }
 
 .session-mode-user {
@@ -2032,7 +2036,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     .session-mode-badge {
         top: 8px;
         left: 8px;
-        width: min(200px, calc(100vw - 16px));
+        width: min(220px, calc(100vw - 16px));
     }
 
     #top-container {
@@ -2297,6 +2301,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
 
 .session-mode-heading-buttons {
     display: flex;
+    flex: 0 0 auto;
     gap: 4px;
 }
 
