@@ -2594,7 +2594,8 @@ public class NetworkTelemetryService
                 observation.Id,
                 observation.BuildingExternalId,
                 observation.RiskLevel,
-                observation.RiskScore
+                observation.RiskScore,
+                Matched = observation.ImportedInventoryItemId != null || observation.SyncedEquipmentId != null
             })
             .ToListAsync(cancellationToken);
 
@@ -2607,6 +2608,8 @@ public class NetworkTelemetryService
                     .ThenByDescending(item => item.Id)
                     .First();
 
+                var matchedCount = group.Count(item => item.Matched);
+
                 return new NetworkTelemetryBuildingRiskSummaryViewModel
                 {
                     BuildingExternalId = group.Key,
@@ -2616,7 +2619,9 @@ public class NetworkTelemetryService
                     MediumCount = group.Count(item => item.RiskLevel == "medium"),
                     LowCount = group.Count(item => item.RiskLevel == "low"),
                     MaxRiskScore = group.Max(item => item.RiskScore),
-                    MaxRiskLevel = string.IsNullOrWhiteSpace(topRisk.RiskLevel) ? "low" : topRisk.RiskLevel
+                    MaxRiskLevel = string.IsNullOrWhiteSpace(topRisk.RiskLevel) ? "low" : topRisk.RiskLevel,
+                    MatchedCount = matchedCount,
+                    MatchRate = group.Count() == 0 ? 0 : Math.Round(matchedCount * 100.0 / group.Count(), 1)
                 };
             })
             .OrderByDescending(item => item.MaxRiskScore)

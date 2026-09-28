@@ -123,7 +123,7 @@ const loadSession = async () => {
   }
 };
 
-const canAccessLiveTelemetry = (session) => {
+export const canAccessLiveTelemetry = (session) => {
   const role = String(session?.role || "").trim().toLowerCase();
   return Boolean(session?.isAuthenticated) && (session?.isAdmin || role === "auditor");
 };

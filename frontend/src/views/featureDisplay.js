@@ -10,6 +10,8 @@ import { resetBuildingsCatalogCache } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
 import { isWayfindingMode } from "../utils/wayfinding.js";
+import { loadNetworkTelemetryStatus, canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
+import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -282,6 +284,10 @@ let buildingEquipmentSummaryPromise = null;
 let globalEquipmentTypeFilter = "";
 let lastKnownSessionIsAuthenticated = false;
 const buildingEquipmentBubbleEntries = new Map();
+const buildingMatchBubbleEntries = new Map();
+let buildingMatchModeActive = false;
+let buildingMatchData = null;
+let buildingMatchDataPromise = null;
 const EQUIPMENT_SYNC_POLL_MS = 30000;
 const EQUIPMENT_SYNC_RETRY_MS = 5000;
 const BACKEND_SESSION_CACHE_MS = 15000;
@@ -1128,6 +1134,8 @@ const createEquipmentBubbleIcon = (count) =>
   });
 
 const updateBuildingEquipmentBubbles = () => {
+  if (buildingMatchModeActive) return;
+
   const selectedFloor = getSelectedMapFloor();
   buildingEquipmentBubbleEntries.forEach((entry) => {
     const count = getSummaryCountForType(entry.summary, globalEquipmentTypeFilter, selectedFloor);
@@ -2125,6 +2133,175 @@ const handleFeatureClick = (e) => {
   });
 };
 
+const loadBuildingMatchData = async () => {
+  const session = await loadBackendSession();
+  if (!canAccessLiveTelemetry(session)) return new Map();
+
+  if (buildingMatchData) return buildingMatchData;
+  if (buildingMatchDataPromise) return buildingMatchDataPromise;
+
+  buildingMatchDataPromise = loadNetworkTelemetryStatus(getCurrentCampusKey(), { forceRefresh: true })
+    .then((telemetry) => {
+      const result = new Map();
+      for (const summary of telemetry?.buildingRiskSummaries || []) {
+        const key = String(summary?.buildingExternalId || "").trim();
+        if (!key) continue;
+
+        result.set(key, {
+          deviceCount: Number(summary?.deviceCount) || 0,
+          matchedCount: Number(summary?.matchedCount) || 0,
+          matchRate: Number(summary?.matchRate) || 0,
+        });
+      }
+      return result;
+    })
+    .catch((error) => {
+      console.error("[feature-display] no se pudo cargar las coincidencias de inventario:", error);
+      return new Map();
+    });
+
+  return buildingMatchDataPromise;
+};
+
+const applyBuildingMatchStyle = (layer) => {
+  const featureId = layer?.feature?.properties?.id;
+  if (!featureId || !buildingMatchData) return false;
+
+  const summary = buildingMatchData.get(featureId);
+  if (!summary || summary.deviceCount <= 0) return false;
+
+  const fillColor = buildingMatchColor(summary.matchRate);
+  if (!fillColor) return false;
+
+  const baseStyle = style(layer.feature) || {};
+  layer.setStyle({
+    ...baseStyle,
+    fillColor,
+    fillOpacity: 0.45,
+    weight: 2,
+  });
+  return true;
+};
+
+const createMatchBubbleForLayer = async (feature, layer) => {
+  const featureId = feature?.properties?.id;
+  if (!featureId || typeof layer?.getBounds !== "function") return;
+  if (isWayfindingMode()) return;
+
+  const data = await loadBuildingMatchData();
+  if (!layer?._map) return;
+
+  applyBuildingMatchStyle(layer);
+
+  const summary = data.get(featureId);
+  if (!summary || summary.deviceCount <= 0) return;
+
+  const label = buildingMatchPercentLabel(summary.matchRate) || "0%";
+  const fillColor = buildingMatchColor(summary.matchRate) || "#666";
+
+  const marker = L.marker(layer.getBounds().getCenter(), {
+    interactive: true,
+    keyboard: true,
+    title: `${summary.matchedCount} de ${summary.deviceCount} dispositivos coinciden con inventario (${label})`,
+    icon: L.divIcon({
+      className: "building-match-bubble",
+      html: `<button type="button" style="background-color:${fillColor};" aria-label="${label} de coincidencia de inventario">${label}</button>`,
+      iconSize: [46, 28],
+      iconAnchor: [23, 14],
+    }),
+  });
+
+  marker.on("click", (event) => {
+    event?.originalEvent?.preventDefault?.();
+    event?.originalEvent?.stopPropagation?.();
+    L.DomEvent.stop(event);
+
+    if (["geometry-shape", "geometry-move", "walking-route-building"].includes(window.syntroAdminMapToolMode)) {
+      const buildingEvent = new CustomEvent("syntro-building-layer-click", {
+        cancelable: true,
+        detail: {
+          featureId,
+          feature,
+          layer,
+          originalEvent: event,
+        },
+      });
+      window.dispatchEvent(buildingEvent);
+      return;
+    }
+
+    popupViewState[featureId] = "devices";
+    popupDeviceTypeFilterState[featureId] = globalEquipmentTypeFilter || "";
+    popupDeviceScopeState[featureId] = "building";
+    popupRoomState[featureId] = null;
+    openBuildingPopupLayer(layer, {
+      zoom: true,
+      rememberView: true,
+      maxZoom: 20,
+      padding: [40, 40],
+    });
+  });
+
+  buildingMatchBubbleEntries.set(featureId, marker);
+
+  if (!map.hasLayer(marker) && layer?._map) {
+    marker.addTo(map);
+  }
+
+  layer.on("remove", () => {
+    if (map.hasLayer(marker)) {
+      map.removeLayer(marker);
+    }
+    buildingMatchBubbleEntries.delete(featureId);
+  });
+};
+
+const removeMatchBubbleForLayer = (layer) => {
+  const featureId = layer?.feature?.properties?.id;
+  if (!featureId) return;
+
+  const marker = buildingMatchBubbleEntries.get(featureId);
+  if (marker && map.hasLayer(marker)) {
+    map.removeLayer(marker);
+  }
+  buildingMatchBubbleEntries.delete(featureId);
+};
+
+const hideEquipmentTypeFilterWhileMatchActive = () => {
+  const filter = document.querySelector(".map-equipment-type-filter");
+  filter?.classList.toggle("building-match-active", buildingMatchModeActive);
+};
+
+export const setBuildingMatchMode = async (active) => {
+  buildingMatchModeActive = Boolean(active);
+
+  if (!buildingMatchModeActive) {
+    forEachVisibleFeatureLayer((layer) => {
+      removeMatchBubbleForLayer(layer);
+      applyDefaultStyle(layer);
+    });
+    buildingMatchBubbleEntries.clear();
+    hideEquipmentTypeFilterWhileMatchActive();
+    updateBuildingEquipmentBubbles();
+    return;
+  }
+
+  buildingMatchData = await loadBuildingMatchData();
+  if (!buildingMatchModeActive) return;
+
+  buildingEquipmentBubbleEntries.forEach((entry) => {
+    if (entry.marker && map.hasLayer(entry.marker)) {
+      map.removeLayer(entry.marker);
+    }
+  });
+
+  hideEquipmentTypeFilterWhileMatchActive();
+  forEachVisibleFeatureLayer((layer) => {
+    applyBuildingMatchStyle(layer);
+    createMatchBubbleForLayer(layer.feature, layer);
+  });
+};
+
 const createEquipmentBubbleForLayer = async (feature, layer) => {
   const featureId = feature?.properties?.id;
   if (!featureId || typeof layer?.getBounds !== "function") return;
@@ -2286,6 +2463,10 @@ export const onEachFeature = (feature, layer) => {
       });
 
       createEquipmentBubbleForLayer(feature, layer);
+
+      if (buildingMatchModeActive) {
+        createMatchBubbleForLayer(feature, layer);
+      }
 
       layer.on("remove", () => {
         if (currentHoveredLayer === layer) {

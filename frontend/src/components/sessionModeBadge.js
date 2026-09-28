@@ -2,6 +2,8 @@ import { BACKEND_API_URL, map, osmLayer, satelliteLayer } from "../views/map.js"
 import { identifiers } from "../utils/identifiers.js";
 import { goTo } from "@app/goToCampus";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
+import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
+import { setBuildingMatchMode } from "@app/featureDisplay";
 
 const rootId = "session-mode-badge";
 const inventoryLinkId = "session-inventory-link";
@@ -10,6 +12,7 @@ let lastSessionKey = "";
 let pollHandle = null;
 let minimalMapMode = false;
 let satelliteActive = false;
+let buildingMatchActive = false;
 
 const updateMinimalMapMode = () => {
   document.body.classList.toggle("map-ui-minimal", minimalMapMode);
@@ -104,6 +107,13 @@ const renderBadge = (badge, session) => {
           <button type="button" class="session-mode-visibility" aria-pressed="false" title="Ocultar controles del mapa" aria-label="Ocultar controles del mapa">
             <span class="session-mode-eye-icon" aria-hidden="true"></span>
           </button>
+          ${
+            canAccessLiveTelemetry(session)
+              ? `<button type="button" class="session-mode-match" aria-pressed="${buildingMatchActive}" title="${buildingMatchActive ? "Ocultar coincidencias de inventario" : "Coincidencias de inventario"}" aria-label="${buildingMatchActive ? "Ocultar coincidencias de inventario" : "Coincidencias de inventario"}">
+                  <span class="session-mode-match-icon" aria-hidden="true"></span>
+                </button>`
+              : ""
+          }
         </div>
       </div>
       ${userLabel}
@@ -155,6 +165,20 @@ const renderBadge = (badge, session) => {
       btn.classList.toggle("is-active", satelliteActive);
       btn.setAttribute("aria-pressed", String(satelliteActive));
     }
+  });
+
+  badge.querySelector(".session-mode-match")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    buildingMatchActive = !buildingMatchActive;
+    await setBuildingMatchMode(buildingMatchActive);
+
+    const btn = badge.querySelector(".session-mode-match");
+    if (!btn) return;
+    btn.classList.toggle("is-active", buildingMatchActive);
+    btn.setAttribute("aria-pressed", String(buildingMatchActive));
+    btn.title = buildingMatchActive ? "Ocultar coincidencias de inventario" : "Coincidencias de inventario";
+    btn.setAttribute("aria-label", btn.title);
   });
 
   updateMinimalMapMode();
@@ -248,6 +272,11 @@ const refreshSessionBadge = async () => {
   ensureInventoryLink(session);
   requestAnimationFrame(positionInventoryLink);
   window.dispatchEvent(new CustomEvent(identifiers.events.sessionChanged, { detail: session || {} }));
+
+  if (!canAccessLiveTelemetry(session)) {
+    buildingMatchActive = false;
+    setBuildingMatchMode(false);
+  }
 };
 
 export const initSessionModeBadge = async () => {

@@ -1820,6 +1820,36 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     transform: translateY(-1px);
 }
 
+.building-match-bubble {
+    pointer-events: auto;
+}
+
+html[data-admin-map-tool-mode="geometry-shape"] .building-match-bubble,
+html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
+    display: none;
+}
+
+.building-match-bubble button {
+    min-width: 46px;
+    height: 28px;
+    padding: 0 8px;
+    border: 2px solid rgba(var(--pi-surface-rgb), 0.95);
+    border-radius: 999px;
+    box-shadow: 0 8px 18px rgba(var(--pi-ink-rgb), 0.26);
+    color: var(--pi-surface);
+    cursor: pointer;
+    font: 800 12px/1 sans-serif;
+    text-align: center;
+}
+
+.building-match-bubble button:hover {
+    transform: translateY(-1px);
+}
+
+.map-equipment-type-filter.building-match-active {
+    display: none;
+}
+
 .building-name-label {
     width: auto;
     min-width: 56px;
@@ -2316,6 +2346,55 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     width: 16px;
     height: 0;
     border-top: 1.5px solid currentColor;
+}
+
+.session-mode-match {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid rgba(var(--pi-surface-rgb), 0.42);
+    border-radius: 999px;
+    background: rgba(var(--pi-surface-rgb), 0.16);
+    color: var(--pi-surface);
+    cursor: pointer;
+}
+
+.session-mode-match:hover,
+.session-mode-match.is-active {
+    background: rgba(var(--pi-surface-rgb), 0.28);
+}
+
+.session-mode-match-icon {
+    position: relative;
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    vertical-align: middle;
+}
+
+.session-mode-match-icon::before {
+    content: "";
+    position: absolute;
+    top: 7px;
+    left: -1px;
+    width: 17px;
+    height: 2px;
+    background: currentColor;
+    transform: rotate(-45deg);
+    transform-origin: center;
+}
+
+.session-mode-match-icon::after {
+    content: "";
+    position: absolute;
+    top: 1px;
+    left: 0;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 10px 9px 0 0 currentColor;
 }
 
 .network-telemetry-top-header::-webkit-details-marker {
@@ -2995,7 +3074,8 @@ body.map-ui-wayfinding #session-inventory-link,
 body.map-ui-wayfinding #admin-map-tools-panel,
 body.map-ui-wayfinding .network-telemetry-group,
 body.map-ui-wayfinding .session-mode-badge,
-body.map-ui-wayfinding .building-equipment-bubble {
+body.map-ui-wayfinding .building-equipment-bubble,
+body.map-ui-wayfinding .building-match-bubble {
     display: none !important;
 }
 

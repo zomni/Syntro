@@ -239,6 +239,8 @@ public class NetworkTelemetryBuildingRiskSummaryViewModel
     public int LowCount { get; set; }
     public int MaxRiskScore { get; set; }
     public string MaxRiskLevel { get; set; } = "low";
+    public int MatchedCount { get; set; }
+    public double MatchRate { get; set; }
 }
 
 public class NetworkTelemetrySubnetRiskSummaryViewModel
