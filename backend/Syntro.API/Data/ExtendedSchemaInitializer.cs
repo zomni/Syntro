@@ -472,6 +472,7 @@ public static class ExtendedSchemaInitializer
             await BackfillSnapshotRunNumbersAsync(context);
 
             await EnsureScheduledScanRunsTableAsync(context, configuration);
+            await RecomputeScheduledRunLocalLabelsAsync(context, configuration);
 
             await context.Database.ExecuteSqlRawAsync("""
                 CREATE TABLE IF NOT EXISTS ManualBuildings (
@@ -994,6 +995,109 @@ public static class ExtendedSchemaInitializer
             )
             WHERE RunNumber IS NULL OR RunNumber = 0;
             """);
+    }
+
+    // Las etiquetas Dia/Hora deben derivarse de la zona horaria del schedule que
+    // genero el run, no de la zona global de configuracion. Corrige los runs que
+    // quedaron rotulados con el offset equivocado. Idempotente: solo escribe cuando
+    // el valor calculado difiere del almacenado.
+    private static async Task RecomputeScheduledRunLocalLabelsAsync(AppDbContext context, IConfiguration? configuration)
+    {
+        var displayCulture = TelemetryTimeSettings.ResolveCulture(configuration);
+        var fallbackTimeZone = TelemetryTimeSettings.ResolveTimeZone(configuration);
+
+        var schedules = await context.TelemetryScanSchedules
+            .AsNoTracking()
+            .Where(s => s.DeletedAtUtc == null)
+            .ToListAsync();
+
+        var runs = await context.ScheduledScanRuns
+            .Where(r => r.DeletedAtUtc == null)
+            .ToListAsync();
+
+        if (runs.Count == 0)
+            return;
+
+        // Zona por etiqueta de planificacion (ScheduleLabel puede traer varias separadas por ';').
+        var timeZoneByLabel = new Dictionary<string, TimeZoneInfo>(StringComparer.OrdinalIgnoreCase);
+        foreach (var schedule in schedules)
+        {
+            if (string.IsNullOrWhiteSpace(schedule.Label))
+                continue;
+
+            timeZoneByLabel.TryAdd(schedule.Label.Trim(), TelemetryScanScheduleService.ResolveTimeZone(schedule.TimeZone));
+        }
+
+        // Zona representativa por sede, para los runs antiguos sin ScheduleLabel.
+        var timeZoneByCampus = schedules
+            .Where(s => !string.IsNullOrWhiteSpace(s.CampusKey))
+            .GroupBy(s => s.CampusKey.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => TelemetryScanScheduleService.ResolveTimeZone(
+                    group
+                        .Select(s => TelemetryScanScheduleService.ResolveTimeZone(s.TimeZone).Id)
+                        .GroupBy(id => id, StringComparer.OrdinalIgnoreCase)
+                        .OrderByDescending(id => id.Count())
+                        .First().Key),
+                StringComparer.OrdinalIgnoreCase);
+
+        var changed = 0;
+        foreach (var run in runs)
+        {
+            var timeZone = ResolveRunTimeZone(run, timeZoneByLabel, timeZoneByCampus, fallbackTimeZone);
+            var scheduledAtUtc = run.ScheduledAtUtc.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(run.ScheduledAtUtc, DateTimeKind.Utc)
+                : run.ScheduledAtUtc.ToUniversalTime();
+
+            var localTime = TimeZoneInfo.ConvertTime(scheduledAtUtc, timeZone);
+            var expectedTime = localTime.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            var expectedDay = localTime.ToString("dddd", displayCulture);
+
+            if (string.Equals(run.ScheduledTimeLocal, expectedTime, StringComparison.Ordinal) &&
+                string.Equals(run.ScheduledDayLocal, expectedDay, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            run.ScheduledTimeLocal = expectedTime;
+            run.ScheduledDayLocal = expectedDay;
+            changed++;
+        }
+
+        if (changed == 0)
+            return;
+
+        await context.SaveChangesAsync();
+    }
+
+    private static TimeZoneInfo ResolveRunTimeZone(
+        Models.ScheduledScanRun run,
+        IReadOnlyDictionary<string, TimeZoneInfo> timeZoneByLabel,
+        IReadOnlyDictionary<string, TimeZoneInfo> timeZoneByCampus,
+        TimeZoneInfo fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(run.ScheduleLabel))
+        {
+            var tokens = run.ScheduleLabel
+                .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var token in tokens)
+            {
+                if (timeZoneByLabel.TryGetValue(token, out var timeZone))
+                {
+                    return timeZone;
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(run.CampusKey) &&
+            timeZoneByCampus.TryGetValue(run.CampusKey.Trim(), out var campusTimeZone))
+        {
+            return campusTimeZone;
+        }
+
+        return fallback;
     }
 
     private static async Task BackfillScheduledScanRunsAsync(AppDbContext context, IConfiguration? configuration)

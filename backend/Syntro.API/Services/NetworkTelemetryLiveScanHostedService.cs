@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Syntro.API.Data;
 using Syntro.API.Models;
@@ -25,6 +26,8 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        await ReconcileOrphanedRunsAsync(stoppingToken);
+
         var enabled = GetBool("NetworkTelemetrySettings:AutoScanEnabled", "NETWORK_TELEMETRY_AUTO_SCAN_ENABLED", true);
         if (!enabled)
         {
@@ -75,6 +78,8 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 var schedules = await LoadActiveSchedulesAsync(stoppingToken);
                 var normalizedCron = string.Join(";", schedules.Select(s => s.Cron));
                 var slotInfo = ResolveSlotInfo(schedules, scheduledAtUtc);
+                var slotTimeZone = ResolveTimeZone(slotInfo.TimeZoneId ?? _scheduleTimeZone.Id);
+                var slotLocalTime = TimeZoneInfo.ConvertTime(scheduledAtUtc, slotTimeZone);
 
                 var existingRunForSlot = await db.ScheduledScanRuns
                     .Where(r => r.ScheduledAtUtc == scheduledAtUtc && r.Status != "failed")
@@ -105,8 +110,8 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                     ScheduledAtUtc = scheduledAtUtc,
                     StartedAtUtc = nowUtc,
                     Status = "running",
-                    ScheduledTimeLocal = TimeZoneInfo.ConvertTime(scheduledAtUtc, _scheduleTimeZone).ToString("HH:mm"),
-                    ScheduledDayLocal = TimeZoneInfo.ConvertTime(scheduledAtUtc, _scheduleTimeZone).ToString("dddd", TelemetryTimeSettings.ResolveCulture(_configuration)),
+                    ScheduledTimeLocal = slotLocalTime.ToString("HH:mm", CultureInfo.InvariantCulture),
+                    ScheduledDayLocal = slotLocalTime.ToString("dddd", TelemetryTimeSettings.ResolveCulture(_configuration)),
                     NormalizedCron = normalizedCron,
                     ScheduleLabel = slotInfo.ScheduleLabel,
                     CreatedAtUtc = nowUtc
@@ -230,19 +235,103 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         }
     }
 
+    // Un reinicio del API a mitad de un escaneo deja el run en 'running'/'queued'
+    // para siempre: el proceso en memoria que debia cerrarlo ya no existe. Se
+    // cierran al arrancar los runs que superaron el periodo de gracia y que no
+    // tienen ningun snapshot posterior que demuestre que el agente la termino.
+    private async Task ReconcileOrphanedRunsAsync(CancellationToken stoppingToken)
+    {
+        var graceMinutes = GetInt("NetworkTelemetrySettings:OrphanedRunGraceMinutes", "NETWORK_TELEMETRY_ORPHANED_RUN_GRACE_MINUTES", 120);
+        if (graceMinutes <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+            var reconciled = await ReconcileOrphanedRunsAsync(db, graceMinutes, DateTime.UtcNow, stoppingToken);
+            if (reconciled > 0)
+            {
+                _logger.LogWarning(
+                    "Reconciled {Count} orphaned telemetry scan run(s) left in running/queued state.",
+                    reconciled);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "No se pudieron reconciliar las ejecuciones programadas huerfanas.");
+        }
+    }
+
+    // Marca como fallidas las ejecucion que quedaron running/queued sin cerrar, salvo que
+    // exista un snapshot de la misma sede dentro de la ventana plausible del escaneo.
+    internal static async Task<int> ReconcileOrphanedRunsAsync(
+        AppDbContext db,
+        int graceMinutes,
+        DateTime utcNow,
+        CancellationToken stoppingToken = default)
+    {
+        if (graceMinutes <= 0)
+        {
+            return 0;
+        }
+
+        var cutoffUtc = utcNow.AddMinutes(-graceMinutes);
+        var candidates = await db.ScheduledScanRuns
+            .Where(r => (r.Status == "running" || r.Status == "queued") && r.CompletedAtUtc == null)
+            .ToListAsync(stoppingToken);
+
+        var reconciled = 0;
+        foreach (var run in candidates)
+        {
+            var startedAtUtc = run.StartedAtUtc ?? run.CreatedAtUtc;
+            if (startedAtUtc >= cutoffUtc)
+            {
+                continue;
+            }
+
+            // Solo damos por terminado el run si hay un snapshot de la misma sede
+            // dentro de la ventana plausible del escaneo. Un snapshot muy posterior
+            // pertenece a otra ejecucion y no debe enmascarar a este huerfano.
+            var windowEndUtc = startedAtUtc.AddMinutes(graceMinutes);
+            var hasSnapshotForThisRun = await db.NetworkTelemetrySnapshots
+                .AnyAsync(
+                    s => s.CampusKey == run.CampusKey
+                        && s.CreatedAtUtc >= startedAtUtc
+                        && s.CreatedAtUtc <= windowEndUtc,
+                    stoppingToken);
+            if (hasSnapshotForThisRun)
+            {
+                continue;
+            }
+
+            run.Status = "failed";
+            run.CompletedAtUtc = utcNow;
+            run.ErrorMessage = $"Ejecucion interrumpida: el servicio se reinicio sin cerrar el escaneo (inicio {startedAtUtc:u}).";
+            reconciled++;
+        }
+
+        if (reconciled > 0)
+        {
+            await db.SaveChangesAsync(stoppingToken);
+        }
+
+        return reconciled;
+    }
+
     private async Task<IReadOnlyList<ActiveSchedule>> LoadActiveSchedulesAsync(CancellationToken stoppingToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-        var dbSchedules = await db.TelemetryScanSchedules
-            .AsNoTracking()
-            .Where(s => s.IsEnabled)
-            .OrderBy(s => s.SortOrder)
-            .ThenBy(s => s.CreatedAtUtc)
-            .Select(s => new ActiveSchedule(s.Cron, s.TimeZone, s.CampusKey, s.Label))
-            .ToListAsync(stoppingToken);
-
+        var dbSchedules = await LoadEnabledSchedulesAsync(db, stoppingToken);
         if (dbSchedules.Count > 0)
         {
             return dbSchedules;
@@ -257,6 +346,21 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         }
 
         return Array.Empty<ActiveSchedule>();
+    }
+
+    // Regresion del bug B: un schedule con DeletedAtUtc informado no debe volver a dispararse,
+    // aunque IsEnabled siga en true.
+    internal static async Task<List<ActiveSchedule>> LoadEnabledSchedulesAsync(
+        AppDbContext db,
+        CancellationToken stoppingToken = default)
+    {
+        return await db.TelemetryScanSchedules
+            .AsNoTracking()
+            .Where(s => s.IsEnabled && s.DeletedAtUtc == null)
+            .OrderBy(s => s.SortOrder)
+            .ThenBy(s => s.CreatedAtUtc)
+            .Select(s => new ActiveSchedule(s.Cron, s.TimeZone, s.CampusKey, s.Label))
+            .ToListAsync(stoppingToken);
     }
 
     private TimeSpan GetDelayUntilNextRun(IReadOnlyList<ActiveSchedule> schedules, out DateTime nextScheduledUtc)
@@ -366,14 +470,15 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         return bool.TryParse(_configuration[configKey], out parsed) ? parsed : fallback;
     }
 
-    private readonly record struct ActiveSchedule(string Cron, string TimeZone, string CampusKey, string Label);
+    internal readonly record struct ActiveSchedule(string Cron, string TimeZone, string CampusKey, string Label);
 
-    private readonly record struct SlotResolution(string CampusKey, string ScheduleLabel);
+    internal readonly record struct SlotResolution(string CampusKey, string ScheduleLabel, string? TimeZoneId);
 
-    private static SlotResolution ResolveSlotInfo(IReadOnlyList<ActiveSchedule> schedules, DateTime scheduledAtUtc)
+    internal static SlotResolution ResolveSlotInfo(IReadOnlyList<ActiveSchedule> schedules, DateTime scheduledAtUtc)
     {
         var keys = new List<string>();
         var labels = new List<string>();
+        string? timeZoneId = null;
         foreach (var schedule in schedules)
         {
             if (string.IsNullOrWhiteSpace(schedule.CampusKey))
@@ -393,6 +498,8 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 {
                     labels.Add(schedule.Label);
                 }
+
+                timeZoneId ??= schedule.TimeZone;
             }
         }
 
@@ -402,6 +509,6 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         var scheduleLabel = string.Join(", ", labels
             .Distinct(StringComparer.OrdinalIgnoreCase));
 
-        return new SlotResolution(campusKey, scheduleLabel);
+        return new SlotResolution(campusKey, scheduleLabel, timeZoneId);
     }
 }

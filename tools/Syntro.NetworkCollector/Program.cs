@@ -9,6 +9,7 @@ using System.Security;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Syntro.NetworkCollector;
 
 if (!OperatingSystem.IsWindows())
 {
@@ -18,6 +19,7 @@ if (!OperatingSystem.IsWindows())
 
 var configPath = ResolveConfigPath(args);
 var watchMode = args.Any(arg => arg.Equals("--watch", StringComparison.OrdinalIgnoreCase));
+var superviseMode = args.Any(arg => arg.Equals("--supervise", StringComparison.OrdinalIgnoreCase));
 if (!File.Exists(configPath))
 {
     Console.Error.WriteLine($"No se encontro el archivo de configuracion: {configPath}");
@@ -47,6 +49,27 @@ if (options.ScanCidrs.Count == 0)
 {
     Console.Error.WriteLine("Debes configurar al menos un rango en ScanCidrs.");
     return 1;
+}
+
+if (superviseMode)
+{
+    using var supervisorShutdown = new CancellationTokenSource();
+    ConsoleCancelEventHandler cancelHandler = (_, eventArgs) =>
+    {
+        eventArgs.Cancel = true;
+        supervisorShutdown.Cancel();
+    };
+    Console.CancelKeyPress += cancelHandler;
+    try
+    {
+        await new AgentSupervisor(options, configPath).RunAsync(supervisorShutdown.Token);
+    }
+    finally
+    {
+        Console.CancelKeyPress -= cancelHandler;
+    }
+
+    return 0;
 }
 
 ProbeCredential? credential = null;
@@ -105,6 +128,8 @@ static CollectorOptions LoadOptions(string path)
         ?? throw new InvalidOperationException("La configuracion esta vacia.");
 
     options.ApiBaseUrl = options.ApiBaseUrl.Trim().TrimEnd('/');
+    options.AgentId = options.AgentId.Trim();
+    options.CampusKey = options.CampusKey.Trim();
     options.Domain = string.IsNullOrWhiteSpace(options.Domain) ? string.Empty : options.Domain.Trim();
     options.SourceName = string.IsNullOrWhiteSpace(options.SourceName) ? "Syntro Network Collector" : options.SourceName.Trim();
     options.ScanCidrs = options.ScanCidrs
@@ -1475,6 +1500,7 @@ internal sealed class CollectorOptions
     public string ApiKey { get; set; } = string.Empty;
     public string SourceName { get; set; } = "Syntro Network Collector";
     public string AgentId { get; set; } = Environment.MachineName;
+    public string CampusKey { get; set; } = string.Empty;
     public string SharedPath { get; set; } = string.Empty;
     public string ConfigurationDirectory { get; set; } = string.Empty;
     public bool WatchMode { get; set; }

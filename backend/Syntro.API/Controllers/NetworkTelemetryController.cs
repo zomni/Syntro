@@ -48,6 +48,7 @@ public class NetworkTelemetryController : ControllerBase
 
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpPost("scan")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> Scan(
         [FromBody] NetworkTelemetryLiveScanRequest? request,
         [FromQuery] Guid? organizationId = null,
@@ -115,6 +116,22 @@ public class NetworkTelemetryController : ControllerBase
         var latest = statuses
             .OrderByDescending(status => status.UpdatedAtUtc ?? DateTime.MinValue)
             .FirstOrDefault();
+        var latestLifecycle = statuses
+            .OrderByDescending(status => status.LastCommandAtUtc ?? status.SupervisorUpdatedAtUtc ?? DateTime.MinValue)
+            .FirstOrDefault();
+        var processState = AggregateState(statuses.Select(status => status.ProcessState), "unknown");
+        var desiredState = AggregateState(statuses.Select(status => status.DesiredState), "unknown");
+        var supervisorState = AggregateState(statuses.Select(status => status.SupervisorState), "unavailable");
+        var allSupervisorAvailable = statuses.Count > 0 && statuses.All(status => status.IsSupervisorAvailable);
+        var allControlAvailable = statuses.Count > 0 && statuses.All(status => status.ControlAvailable);
+        var lastError = string.Join(
+            " ",
+            statuses
+                .Select(status => status.LastError)
+                .Where(error => !string.IsNullOrWhiteSpace(error))
+                .Select(error => error.Trim())
+                .Distinct(StringComparer.Ordinal)
+                .ToArray());
 
         return new NetworkTelemetryAgentStatusViewModel
         {
@@ -122,7 +139,30 @@ public class NetworkTelemetryController : ControllerBase
                 .Select(priority => statuses.FirstOrDefault(status => string.Equals(status.State, priority, StringComparison.OrdinalIgnoreCase))?.State)
                 .FirstOrDefault(state => !string.IsNullOrEmpty(state)) ?? "idle",
             Message = $"{connectedCount} de {statuses.Count} agentes conectados.",
-            AgentId = latest?.AgentId ?? string.Empty,
+            AgentId = latestLifecycle?.AgentId ?? latest?.AgentId ?? string.Empty,
+            MachineName = latestLifecycle?.MachineName ?? string.Empty,
+            SupervisorState = supervisorState,
+            ProcessState = processState,
+            DesiredState = desiredState,
+            WorkerProcessId = latestLifecycle?.WorkerProcessId,
+            WorkerStartedAtUtc = latestLifecycle?.WorkerStartedAtUtc,
+            WorkerStoppedAtUtc = latestLifecycle?.WorkerStoppedAtUtc,
+            SupervisorHeartbeatAtUtc = statuses
+                .Where(status => status.SupervisorHeartbeatAtUtc.HasValue)
+                .OrderByDescending(status => status.SupervisorHeartbeatAtUtc)
+                .FirstOrDefault()?.SupervisorHeartbeatAtUtc,
+            SupervisorUpdatedAtUtc = latestLifecycle?.SupervisorUpdatedAtUtc,
+            LastCommandId = latestLifecycle?.LastCommandId ?? string.Empty,
+            LastCommand = latestLifecycle?.LastCommand ?? string.Empty,
+            LastCommandRequestedBy = latestLifecycle?.LastCommandRequestedBy ?? string.Empty,
+            LastCommandAtUtc = latestLifecycle?.LastCommandAtUtc,
+            LastError = lastError,
+            Version = latestLifecycle?.Version ?? string.Empty,
+            IsSupervisorAvailable = allSupervisorAvailable,
+            ControlAvailable = allControlAvailable,
+            CanStart = allControlAvailable && processState != "mixed" && statuses.All(status => status.CanStart),
+            CanStop = allControlAvailable && processState != "mixed" && statuses.All(status => status.CanStop),
+            CanRestart = allControlAvailable && processState != "mixed" && statuses.All(status => status.CanRestart),
             SnapshotId = latest?.SnapshotId,
             RequestedAtUtc = latest?.RequestedAtUtc,
             StartedAtUtc = latest?.StartedAtUtc,
@@ -135,6 +175,8 @@ public class NetworkTelemetryController : ControllerBase
                 .OrderByDescending(status => status.LastHeartbeatAtUtc)
                 .FirstOrDefault()?.LastHeartbeatAtUtc,
             IsConnected = connectedCount > 0,
+            ConnectedAgentCount = connectedCount,
+            AgentCount = statuses.Count,
             TotalHosts = latest?.TotalHosts,
             ProcessedHosts = latest?.ProcessedHosts,
             CurrentIpAddress = latest?.CurrentIpAddress ?? string.Empty,
@@ -144,8 +186,24 @@ public class NetworkTelemetryController : ControllerBase
         };
     }
 
+    private static string AggregateState(IEnumerable<string?> values, string fallback)
+    {
+        var normalized = values
+            .Select(value => value?.Trim().ToLowerInvariant() ?? string.Empty)
+            .Where(value => value.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return normalized.Length switch
+        {
+            0 => fallback,
+            1 => normalized[0],
+            _ => "mixed"
+        };
+    }
+
     [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
     [HttpPost("agent/control")]
+    [ValidateAntiForgeryToken]
     public async Task<IActionResult> AgentControl([FromBody] NetworkTelemetryAgentControlRequest? request, CancellationToken cancellationToken = default)
     {
         var actor = User.Identity?.IsAuthenticated == true
@@ -158,8 +216,65 @@ public class NetworkTelemetryController : ControllerBase
             return BadRequest(new { message = resolutionError });
         }
 
-        var status = await _agentBridgeService.SendControlAsync(actor, request?.Action ?? "pause", campusKey, cancellationToken);
+        if (!NetworkTelemetryAgentBridgeService.TryNormalizeControlAction(request?.Action, out var normalizedAction))
+        {
+            return BadRequest(new { message = "La accion de control debe ser pause, resume o stop." });
+        }
+
+        var status = await _agentBridgeService.SendControlAsync(actor, normalizedAction, campusKey, cancellationToken);
         return Ok(status);
+    }
+
+    [Authorize(Roles = AppRoles.Admin)]
+    [HttpPost("agent/lifecycle")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> AgentLifecycle(
+        [FromBody] NetworkTelemetryAgentLifecycleRequest? request,
+        CancellationToken cancellationToken = default)
+    {
+        if (!NetworkTelemetryAgentBridgeService.TryNormalizeLifecycleAction(request?.Action, out var normalizedAction))
+        {
+            return BadRequest(new { message = "La accion del ciclo de vida debe ser start, stop o restart." });
+        }
+
+        var actor = User.Identity?.IsAuthenticated == true
+            ? (User.Identity?.Name ?? "system")
+            : "system";
+        var (campusKey, resolutionError) = await ResolveAgentCampusKeyAsync(
+            request?.OrganizationId,
+            request?.CampusKey,
+            cancellationToken);
+        if (campusKey is null)
+        {
+            return BadRequest(new { message = resolutionError });
+        }
+
+        var result = await _agentBridgeService.QueueLifecycleCommandAsync(
+            actor,
+            normalizedAction,
+            campusKey,
+            request?.AgentId,
+            cancellationToken);
+        if (!result.Succeeded || result.Command is null)
+        {
+            var statusCode = result.Failure switch
+            {
+                NetworkTelemetryAgentLifecycleFailure.InvalidAction => StatusCodes.Status400BadRequest,
+                NetworkTelemetryAgentLifecycleFailure.PendingCommand or NetworkTelemetryAgentLifecycleFailure.InvalidCommandFile => StatusCodes.Status409Conflict,
+                _ => StatusCodes.Status503ServiceUnavailable
+            };
+            return StatusCode(statusCode, new
+            {
+                message = result.Error ?? "Control del ciclo de vida no disponible.",
+                lifecycle = NetworkTelemetryAgentBridgeService.ToLifecycleViewModel(result.Status)
+            });
+        }
+
+        return Accepted(new NetworkTelemetryAgentLifecycleResponse
+        {
+            CommandId = result.Command.RequestId,
+            Lifecycle = NetworkTelemetryAgentBridgeService.ToLifecycleViewModel(result.Status)
+        });
     }
 
     private async Task<(string? CampusKey, string? Error)> ResolveAgentCampusKeyAsync(
@@ -167,7 +282,7 @@ public class NetworkTelemetryController : ControllerBase
         string? requestedCampusKey,
         CancellationToken cancellationToken)
     {
-        var campusKeys = await ResolveCampusKeysAsync(organizationId, cancellationToken);
+        var campusKeys = await ResolveCampusKeysAsync(organizationId, cancellationToken) ?? Array.Empty<string>();
 
         if (!string.IsNullOrWhiteSpace(requestedCampusKey))
         {
@@ -435,6 +550,14 @@ public class NetworkTelemetryController : ControllerBase
 public class NetworkTelemetryAgentControlRequest
 {
     public string Action { get; set; } = string.Empty;
+    public Guid? OrganizationId { get; set; }
+    public string? CampusKey { get; set; }
+}
+
+public class NetworkTelemetryAgentLifecycleRequest
+{
+    public string Action { get; set; } = string.Empty;
+    public string? AgentId { get; set; }
     public Guid? OrganizationId { get; set; }
     public string? CampusKey { get; set; }
 }

@@ -1,7 +1,8 @@
 param(
     [string]$ConfigPath = "",
     [string]$StopMarkerPath = "",
-    [switch]$Watch
+    [switch]$Watch,
+    [switch]$Supervise
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,7 +31,7 @@ Write-Host ""
 Write-Host "=== Colector Windows de telemetria Syntro ===" -ForegroundColor Cyan
 Write-Host "Proyecto : $projectPath"
 Write-Host "Config    : $ConfigPath"
-Write-Host "Modo      : $(if ($Watch) { 'agente' } else { 'manual' })"
+Write-Host "Modo      : $(if ($Supervise) { 'supervisor' } elseif ($Watch) { 'agente' } else { 'manual' })"
 Write-Host ""
 Write-Host "Este proceso pedira tu clave solo si PromptForCredential=true." -ForegroundColor DarkCyan
 Write-Host "La clave no se guarda en el archivo." -ForegroundColor DarkCyan
@@ -42,6 +43,19 @@ if ([string]::IsNullOrWhiteSpace($StopMarkerPath)) {
 
 Push-Location $repoRoot
 try {
+    $dotnetArguments = @("--config", $ConfigPath)
+    if ($Supervise) {
+        $dotnetArguments += "--supervise"
+    }
+    elseif ($Watch) {
+        $dotnetArguments += "--watch"
+    }
+
+    if ($Supervise) {
+        dotnet run --project $projectPath -- @dotnetArguments
+        exit $LASTEXITCODE
+    }
+
     if ($Watch) {
         $runCount = 0
         while (-not (Test-Path $StopMarkerPath)) {
@@ -51,13 +65,13 @@ try {
                 Write-Host "Para detenerlo definitivamente, crea el archivo: $StopMarkerPath" -ForegroundColor DarkCyan
                 Start-Sleep -Seconds 3
             }
-            dotnet run --project $projectPath -- --config $ConfigPath --watch
+            dotnet run --project $projectPath -- @dotnetArguments
             $runCount++
         }
         Write-Host "Marcador de detencion presente. Agente detenido." -ForegroundColor Cyan
     }
     else {
-        dotnet run --project $projectPath -- --config $ConfigPath
+        dotnet run --project $projectPath -- @dotnetArguments
     }
 }
 finally {

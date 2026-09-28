@@ -17,6 +17,9 @@ if ([string]::IsNullOrWhiteSpace($sanitizedCampusKey)) {
     Write-Host "El backend encola cada escaneo en la carpeta de su organizacion." -ForegroundColor Yellow
     exit 1
 }
+if ($sanitizedCampusKey.Length -gt 64) {
+    $sanitizedCampusKey = $sanitizedCampusKey.Substring(0, 64).Trim('-')
+}
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $runnerPath = Join-Path $repoRoot "tools\run-network-collector.ps1"
@@ -27,45 +30,58 @@ if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
     $ConfigPath = Join-Path $collectorDir "appsettings.local.json"
 }
 
-if (-not (Test-Path $ConfigPath)) {
-    Copy-Item $exampleConfigPath $ConfigPath
+$ConfigPath = [IO.Path]::GetFullPath($ConfigPath)
+if (-not (Test-Path -LiteralPath $ConfigPath)) {
+    Copy-Item -LiteralPath $exampleConfigPath -Destination $ConfigPath
     Write-Host "Se creo la configuracion inicial del agente en:" -ForegroundColor Green
     Write-Host $ConfigPath -ForegroundColor Yellow
 }
 
-$config = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+$config = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
 $config.WatchMode = $true
 $config.PromptForCredential = $false
 $config.SharedPath = "..\\..\\runtime\\network-telemetry-agent\\$sanitizedCampusKey"
-$config | ConvertTo-Json -Depth 10 | Set-Content $ConfigPath -Encoding UTF8
+if ($config.PSObject.Properties.Name -contains "CampusKey") {
+    $config.CampusKey = $sanitizedCampusKey
+}
+else {
+    $config | Add-Member -NotePropertyName "CampusKey" -NotePropertyValue $sanitizedCampusKey
+}
+$config | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+
+$configDirectory = [IO.Path]::GetFullPath((Split-Path -Parent $ConfigPath))
+$sharedPath = if ([IO.Path]::IsPathRooted($config.SharedPath)) {
+    [IO.Path]::GetFullPath($config.SharedPath)
+}
+else {
+    [IO.Path]::GetFullPath([IO.Path]::Combine($configDirectory, $config.SharedPath))
+}
+[IO.Directory]::CreateDirectory($sharedPath) | Out-Null
+$lifecycleKeyPath = Join-Path $sharedPath "agent-lifecycle.key"
+if (-not (Test-Path -LiteralPath $lifecycleKeyPath)) {
+    $keyBytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($keyBytes)
+    }
+    finally {
+        $rng.Dispose()
+    }
+    [IO.File]::WriteAllText($lifecycleKeyPath, [Convert]::ToBase64String($keyBytes), [Text.Encoding]::ASCII)
+}
 
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
-$currentPrincipal = New-Object Security.Principal.WindowsPrincipal($currentIdentity)
-$isElevated = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $runRegistryPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runRegistryName = "SyntroNetworkCollectorAgent"
 
-$arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runnerPath`" -Watch -ConfigPath `"$ConfigPath`""
+$arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$runnerPath`" -Supervise -ConfigPath `"$ConfigPath`""
 $commandLine = "powershell.exe $arguments"
 
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $arguments
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
-$taskMode = ""
-
-if ($isElevated) {
-    $trigger = New-ScheduledTaskTrigger -AtStartup
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest -LogonType ServiceAccount
-    $taskMode = "SYSTEM al iniciar Windows"
-}
-else {
-    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentIdentity.Name
-    $principal = New-ScheduledTaskPrincipal -UserId $currentIdentity.Name -RunLevel Limited -LogonType Interactive
-    $taskMode = "usuario actual al iniciar sesion"
-    Write-Host ""
-    Write-Host "No se detectaron privilegios de administrador." -ForegroundColor Yellow
-    Write-Host "Se instalara el agente para tu usuario actual ($($currentIdentity.Name))." -ForegroundColor Yellow
-    Write-Host "Si luego quieres que corra para todo el equipo, vuelve a ejecutar este script como administrador." -ForegroundColor DarkYellow
-}
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+$trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentIdentity.Name
+$principal = New-ScheduledTaskPrincipal -UserId $currentIdentity.Name -RunLevel Limited -LogonType Interactive
+$taskMode = "usuario actual al iniciar sesion"
 
 try {
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
@@ -79,13 +95,6 @@ try {
     }
 }
 catch {
-    if ($isElevated) {
-        Write-Host ""
-        Write-Host "No fue posible registrar la tarea programada." -ForegroundColor Red
-        Write-Host $_.Exception.Message -ForegroundColor Yellow
-        exit 1
-    }
-
     Write-Host ""
     Write-Host "No fue posible registrar la tarea programada para el usuario actual." -ForegroundColor Yellow
     Write-Host "Se usara inicio automatico por registro HKCU como alternativa." -ForegroundColor Yellow

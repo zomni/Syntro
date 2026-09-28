@@ -356,6 +356,59 @@
         font-size: 0.8rem;
     }
 
+    .telemetry-agent-controls {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 10px;
+    }
+
+    .telemetry-agent-control-group {
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        background: rgba(15, 23, 42, 0.22);
+        padding: 12px;
+    }
+
+    .telemetry-agent-control-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .telemetry-agent-control-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+    }
+
+    .telemetry-agent-notice {
+        border-radius: 12px;
+        background: rgba(248, 113, 113, 0.16);
+        color: #fecaca;
+        padding: 8px 10px;
+        font-size: 0.78rem;
+    }
+
+    .telemetry-agent-feedback {
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+        padding: 8px 10px;
+        font-size: 0.8rem;
+    }
+
+    .telemetry-agent-feedback.is-error {
+        background: rgba(248, 113, 113, 0.18);
+        color: #fecaca;
+    }
+
     .telemetry-progress {
         height: 8px;
         width: 100%;
@@ -541,6 +594,7 @@
     </div>
 </div>
 
+@Html.AntiForgeryToken()
 <div class="card telemetry-hero shadow-sm mb-4">
     <div class="card-body p-4 p-lg-5">
         <div class="row g-4 align-items-center">
@@ -558,15 +612,6 @@
                     {
                         <button id="network-telemetry-scan" type="button" class="btn btn-warning fw-semibold">
                             <i class="bi bi-radar me-1"></i> Escanear ahora
-                        </button>
-                        <button id="network-telemetry-pause" type="button" class="btn btn-outline-light fw-semibold" disabled>
-                            <i class="bi bi-pause-fill me-1"></i> Pausar
-                        </button>
-                        <button id="network-telemetry-resume" type="button" class="btn btn-outline-light fw-semibold" disabled>
-                            <i class="bi bi-play-fill me-1"></i> Reanudar
-                        </button>
-                        <button id="network-telemetry-stop" type="button" class="btn btn-outline-danger fw-semibold" disabled>
-                            <i class="bi bi-stop-fill me-1"></i> Detener
                         </button>
                     }
                     <a href="/dashboard" class="btn btn-outline-light fw-semibold">
@@ -1317,9 +1362,11 @@
         const activeFiltersContainer = document.getElementById("telemetry-device-active-filters");
         const scanButton = document.getElementById("network-telemetry-scan");
         const agentState = document.getElementById("network-telemetry-agent-state");
-        const pauseButton = document.getElementById("network-telemetry-pause");
-        const resumeButton = document.getElementById("network-telemetry-resume");
-        const stopButton = document.getElementById("network-telemetry-stop");
+        const canManageAgentLifecycle = @(User.IsInRole(Syntro.API.Models.AppRoles.Admin) ? "true" : "false");
+        let currentAgentStatus = null;
+        let agentActionFeedback = "";
+        let agentActionFeedbackIsError = false;
+        let agentFeedbackTimer = null;
         const scanModalElement = document.getElementById("networkTelemetryScanModal");
         const scanConfirmButton = document.getElementById("network-telemetry-confirm-scan");
         const scanCloseButton = document.getElementById("network-telemetry-close-scan");
@@ -1369,6 +1416,22 @@
         let subnetSortBy = "risk";
         let subnetSortDirection = "desc";
         let scheduledLastSignature = "";
+        const antiForgeryToken = document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
+        const jsonRequestHeaders = () => ({
+            "Content-Type": "application/json",
+            ...(antiForgeryToken ? { "RequestVerificationToken": antiForgeryToken } : {})
+        });
+
+        const setAgentFeedback = (message, isError) => {
+            agentActionFeedback = message;
+            agentActionFeedbackIsError = isError;
+            window.clearTimeout(agentFeedbackTimer);
+            agentFeedbackTimer = window.setTimeout(() => {
+                agentActionFeedback = "";
+                agentActionFeedbackIsError = false;
+                loadAgentStatus(false);
+            }, 20000);
+        };
 
         const openScanModal = () => {
             if (!scanModalElement) {
@@ -1453,9 +1516,7 @@
                     method: "POST",
                     credentials: "include",
                     signal: controller.signal,
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: jsonRequestHeaders(),
                     body: JSON.stringify({
                         resolveInteractiveSessions: !!resolveSessionsCheckbox?.checked,
                         scanMode: scanModeSelect?.value || "simple"
@@ -1501,31 +1562,83 @@
             }
         });
 
+        const readApiError = async (response, fallback) => {
+            try {
+                const payload = await response.json();
+                return payload?.message || fallback;
+            } catch {
+                return fallback;
+            }
+        };
+
         const sendAgentControl = async (action) => {
             try {
                 const response = await fetch("/api/network-telemetry/agent/control", {
                     method: "POST",
                     credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
+                    headers: jsonRequestHeaders(),
                     body: JSON.stringify({ action })
                 });
 
                 if (!response.ok) {
-                    throw new Error(`La API respondio ${response.status}`);
+                    throw new Error(await readApiError(response, `La API respondio ${response.status}`));
                 }
 
+                setAgentFeedback(`Control del escaneo enviado: ${action}.`, false);
                 const status = await response.json();
                 renderAgentStatus(status, false);
+                window.setTimeout(() => loadAgentStatus(true), 900);
             } catch (error) {
+                setAgentFeedback(error?.message || "No fue posible enviar el control del escaneo.", true);
                 console.error(`Error enviando control ${action} al agente:`, error);
+                loadAgentStatus(false);
             }
         };
 
-        pauseButton?.addEventListener("click", () => sendAgentControl("pause"));
-        resumeButton?.addEventListener("click", () => sendAgentControl("resume"));
-        stopButton?.addEventListener("click", () => sendAgentControl("stop"));
+        const sendLifecycleControl = async (action) => {
+            const scanState = currentAgentStatus?.state || "idle";
+            if ((action === "stop" || action === "restart") &&
+                (scanState === "running" || scanState === "pending" || scanState === "paused") &&
+                !window.confirm("El escaneo actual se interrumpira. Deseas continuar?")) {
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/network-telemetry/agent/lifecycle", {
+                    method: "POST",
+                    credentials: "include",
+                    headers: jsonRequestHeaders(),
+                    body: JSON.stringify({
+                        action,
+                        agentId: currentAgentStatus?.agentId || ""
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(await readApiError(response, `La API respondio ${response.status}`));
+                }
+
+                setAgentFeedback(`Comando enviado al supervisor: ${action}.`, false);
+                loadAgentStatus(true);
+            } catch (error) {
+                setAgentFeedback(error?.message || "No fue posible controlar el proceso del agente.", true);
+                console.error(`Error enviando comando ${action} al supervisor:`, error);
+                loadAgentStatus(false);
+            }
+        };
+
+        agentState?.addEventListener("click", (event) => {
+            const button = event.target.closest("button[data-control-action], button[data-lifecycle-action]");
+            if (!button || !agentState.contains(button) || button.disabled) {
+                return;
+            }
+
+            if (button.dataset.controlAction) {
+                sendAgentControl(button.dataset.controlAction);
+            } else if (button.dataset.lifecycleAction) {
+                sendLifecycleControl(button.dataset.lifecycleAction);
+            }
+        });
 
         searchInput?.addEventListener("keydown", (event) => {
             if (event.key === "Enter") {
@@ -2488,6 +2601,44 @@
                     : state === "paused" || state === "stopping"
                         ? "warning text-dark"
                         : "info";
+            const processState = String(status?.processState || "unknown").toLowerCase();
+            const processLabel = {
+                starting: "Iniciando",
+                running: "En ejecucion",
+                stopping: "Deteniendo",
+                stopped: "Detenido",
+                restarting: "Reiniciando",
+                failed: "Fallido",
+                mixed: "Multiple",
+                unavailable: "No disponible"
+            }[processState] || "Desconocido";
+            const processTone = processState === "running"
+                ? "success"
+                : processState === "failed"
+                    ? "danger"
+                    : processState === "starting" || processState === "restarting"
+                        ? "info"
+                        : "secondary";
+            const supervisorAvailable = !!status?.isSupervisorAvailable;
+            const controlAvailable = !!status?.controlAvailable;
+            const canStart = !!status?.canStart;
+            const canStop = !!status?.canStop;
+            const canRestart = !!status?.canRestart;
+            const supervisorHeartbeatAt = formatChileDateTime(status?.supervisorHeartbeatAtUtc);
+            const lastCommandAt = formatChileDateTime(status?.lastCommandAtUtc);
+            const lastCommand = String(status?.lastCommand || "").trim();
+            const lastCommandBy = String(status?.lastCommandRequestedBy || "").trim();
+            const workerProcessId = Number(status?.workerProcessId) || 0;
+            const lastError = String(status?.lastError || "").trim();
+            const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                "\"": "&quot;",
+                "'": "&#39;"
+            })[character]);
+
+            currentAgentStatus = status;
 
             if (state === "completed" && snapshotId !== noSnapshotId && snapshotId !== lastKnownSnapshotId) {
                 pendingSnapshotId = snapshotId;
@@ -2504,27 +2655,72 @@
                 <div class="telemetry-agent-shell">
                     <div class="telemetry-agent-top">
                         <span class="badge bg-${connectionTone}">${isConnected ? "Conectado" : "Desconectado"}</span>
-                        <span class="badge bg-${stateTone}">${state || "idle"}</span>
-                        <span class="fw-semibold text-white">${agentId}</span>
+                        <span class="badge bg-${stateTone}">${escapeHtml(state || "idle")}</span>
+                        <span class="fw-semibold text-white">${escapeHtml(agentId)}</span>
                         ${refreshButton}
                     </div>
-                    <div class="text-white">${message}${triggerLabel && state === "failed" ? ` <span class="badge bg-light text-dark">${triggerLabel}</span>` : ""}</div>
+                    <div class="text-white">${escapeHtml(message)}${triggerLabel && state === "failed" ? ` <span class="badge bg-light text-dark">${escapeHtml(triggerLabel)}</span>` : ""}</div>
                     ${totalHosts > 0 ? `
                         <div class="telemetry-progress" aria-label="Progreso de escaneo">
                             <span style="width:${progressPercent}%"></span>
                         </div>
                         <div class="telemetry-agent-meta">
                             <span class="telemetry-agent-stat"><i class="bi bi-hdd-network"></i> ${processedHosts}/${totalHosts} hosts</span>
-                            ${currentSubnetCidr ? `<span class="telemetry-agent-stat"><i class="bi bi-diagram-3"></i> ${currentSubnetCidr}</span>` : ""}
-                            ${currentIpAddress ? `<span class="telemetry-agent-stat"><i class="bi bi-router"></i> ${currentIpAddress}</span>` : ""}
-                            ${currentHostName ? `<span class="telemetry-agent-stat"><i class="bi bi-pc-display"></i> ${currentHostName}</span>` : ""}
-                            ${currentStage ? `<span class="telemetry-agent-stat"><i class="bi bi-activity"></i> ${currentStage}</span>` : ""}
+                            ${currentSubnetCidr ? `<span class="telemetry-agent-stat"><i class="bi bi-diagram-3"></i> ${escapeHtml(currentSubnetCidr)}</span>` : ""}
+                            ${currentIpAddress ? `<span class="telemetry-agent-stat"><i class="bi bi-router"></i> ${escapeHtml(currentIpAddress)}</span>` : ""}
+                            ${currentHostName ? `<span class="telemetry-agent-stat"><i class="bi bi-pc-display"></i> ${escapeHtml(currentHostName)}</span>` : ""}
+                            ${currentStage ? `<span class="telemetry-agent-stat"><i class="bi bi-activity"></i> ${escapeHtml(currentStage)}</span>` : ""}
                         </div>` : ""}
                     <div class="telemetry-agent-meta">
-                        ${triggerLabel ? `<span class="telemetry-agent-stat"><i class="bi bi-tag"></i> ${triggerLabel}</span>` : ""}
-                        ${heartbeatAt ? `<span class="telemetry-agent-stat"><i class="bi bi-heart-pulse"></i> Latido ${heartbeatAt}</span>` : ""}
-                        ${updatedAt ? `<span class="telemetry-agent-stat"><i class="bi bi-clock-history"></i> Estado ${updatedAt}</span>` : ""}
-                        ${snapshotId !== noSnapshotId ? `<span class="telemetry-agent-stat"><i class="bi bi-database-check"></i> Snapshot ${snapshotId}</span>` : ""}
+                        ${triggerLabel ? `<span class="telemetry-agent-stat"><i class="bi bi-tag"></i> ${escapeHtml(triggerLabel)}</span>` : ""}
+                        ${heartbeatAt ? `<span class="telemetry-agent-stat"><i class="bi bi-heart-pulse"></i> Latido ${escapeHtml(heartbeatAt)}</span>` : ""}
+                        ${updatedAt ? `<span class="telemetry-agent-stat"><i class="bi bi-clock-history"></i> Estado ${escapeHtml(updatedAt)}</span>` : ""}
+                        <span class="telemetry-agent-stat"><i class="bi bi-shield-check"></i> Supervisor ${supervisorAvailable ? "disponible" : "no disponible"}</span>
+                        ${supervisorHeartbeatAt ? `<span class="telemetry-agent-stat"><i class="bi bi-cpu"></i> Supervisor ${escapeHtml(supervisorHeartbeatAt)}</span>` : ""}
+                        <span class="telemetry-agent-stat"><i class="bi bi-box"></i> Proceso ${escapeHtml(processLabel)}</span>
+                        ${workerProcessId > 0 ? `<span class="telemetry-agent-stat"><i class="bi bi-hash"></i> PID ${workerProcessId}</span>` : ""}
+                        ${lastCommand ? `<span class="telemetry-agent-stat"><i class="bi bi-terminal"></i> ${escapeHtml(lastCommand)}${lastCommandBy ? ` por ${escapeHtml(lastCommandBy)}` : ""}${lastCommandAt ? ` (${escapeHtml(lastCommandAt)})` : ""}</span>` : ""}
+                        ${snapshotId !== noSnapshotId ? `<span class="telemetry-agent-stat"><i class="bi bi-database-check"></i> Snapshot ${escapeHtml(snapshotId)}</span>` : ""}
+                    </div>
+                    ${lastError ? `<div class="telemetry-agent-notice"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(lastError)}</div>` : ""}
+                    ${agentActionFeedback ? `<div class="telemetry-agent-feedback ${agentActionFeedbackIsError ? "is-error" : ""}">${escapeHtml(agentActionFeedback)}</div>` : ""}
+                    <div class="telemetry-agent-controls">
+                        ${canManageAgentLifecycle ? `
+                            <div class="telemetry-agent-control-group">
+                                <div class="telemetry-agent-control-title">
+                                    <span><i class="bi bi-box me-1"></i>Proceso del agente</span>
+                                    <span class="badge bg-${processTone}">${escapeHtml(processLabel)}</span>
+                                </div>
+                                <div class="telemetry-agent-control-actions">
+                                    <button type="button" class="btn btn-sm btn-success" data-lifecycle-action="start" ${canStart && controlAvailable ? "" : "disabled"}>
+                                        <i class="bi bi-play-fill me-1"></i>Iniciar agente
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-lifecycle-action="stop" ${canStop && controlAvailable ? "" : "disabled"}>
+                                        <i class="bi bi-stop-fill me-1"></i>Detener agente
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-light" data-lifecycle-action="restart" ${canRestart && controlAvailable ? "" : "disabled"}>
+                                        <i class="bi bi-arrow-repeat me-1"></i>Reiniciar agente
+                                    </button>
+                                </div>
+                                ${!controlAvailable ? `<div class="telemetry-agent-notice mt-2">El control remoto requiere el supervisor actualizado y agent-lifecycle.key en la carpeta del agente.</div>` : ""}
+                            </div>` : ""}
+                        <div class="telemetry-agent-control-group">
+                            <div class="telemetry-agent-control-title">
+                                <span><i class="bi bi-radar me-1"></i>Escaneo actual</span>
+                                <span class="badge bg-${stateTone}">${escapeHtml(state || "idle")}</span>
+                            </div>
+                            <div class="telemetry-agent-control-actions">
+                                <button type="button" class="btn btn-sm btn-outline-light" data-control-action="pause" ${isConnected && state === "running" ? "" : "disabled"}>
+                                    <i class="bi bi-pause-fill me-1"></i>Pausar escaneo
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-light" data-control-action="resume" ${isConnected && state === "paused" ? "" : "disabled"}>
+                                    <i class="bi bi-play-fill me-1"></i>Reanudar escaneo
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" data-control-action="stop" ${isConnected && (state === "running" || state === "paused" || state === "pending" || state === "stopping") ? "" : "disabled"}>
+                                    <i class="bi bi-stop-fill me-1"></i>Detener escaneo
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>`;
 
@@ -2580,19 +2776,6 @@
             } else {
                 runningBanner?.classList.add("d-none");
             }
-
-            if (pauseButton) {
-                pauseButton.disabled = !(isConnected && state === "running");
-            }
-
-            if (resumeButton) {
-                resumeButton.disabled = !(isConnected && state === "paused");
-            }
-
-            if (stopButton) {
-                stopButton.disabled = !(isConnected && (state === "running" || state === "paused" || state === "pending" || state === "stopping"));
-            }
-
         };
 
         const loadAgentStatus = (reloadWhenCompleted = false) => {

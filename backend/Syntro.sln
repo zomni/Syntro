@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Syntro.API", "Syntro.API\Sy
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Syntro.API.Tests", "Syntro.API.Tests\Syntro.API.Tests.csproj", "{FD2D0CD5-BB47-47DA-8D72-ED529E58809E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Syntro.NetworkCollector.Tests", "..\tools\Syntro.NetworkCollector.Tests\Syntro.NetworkCollector.Tests.csproj", "{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{FD2D0CD5-BB47-47DA-8D72-ED529E58809E}.Release|x64.Build.0 = Release|Any CPU
 		{FD2D0CD5-BB47-47DA-8D72-ED529E58809E}.Release|x86.ActiveCfg = Release|Any CPU
 		{FD2D0CD5-BB47-47DA-8D72-ED529E58809E}.Release|x86.Build.0 = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|x64.Build.0 = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Debug|x86.Build.0 = Debug|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|x64.ActiveCfg = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|x64.Build.0 = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|x86.ActiveCfg = Release|Any CPU
+		{4B2F2D91-2F9C-4C7C-9D3A-7A5A4D7E1B20}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
