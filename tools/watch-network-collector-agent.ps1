@@ -152,7 +152,9 @@ try {
     Start-ScheduledTask -TaskName $TaskName -ErrorAction Stop
     Save-RestartBudget -Restarts (@($recent) + @((Get-Date).ToUniversalTime()))
     Write-WatchdogLog "Tarea reiniciada ($reason, latido=$ageText)."
-    exit 3
+    # 0 porque el watchdog cumplio su trabajo. Un codigo distinto aqui se registra como
+    # fallo en el historial de Programador de tareas y ensucia la operacion normal.
+    exit 0
 }
 catch {
     Write-WatchdogLog "No se pudo iniciar la tarea: $($_.Exception.Message)"

@@ -72,6 +72,36 @@ if (superviseMode)
     return 0;
 }
 
+// Solo puede existir un worker por organizacion. Stop-ScheduledTask mata el supervisor pero
+// deja vivo a su hijo, y al reinstalar o relanzar la tarea se acumulaba un segundo worker que
+// compitia por el mismo scan-request.json y podia disparar escaneos duplicados. Se usa un
+// bloqueo de archivo y no un mutex con nombre porque un mutex "Global\" exige SeCreateGlobalPrivilege
+// y el collector corre con RunLevel Limited; el bloqueo de archivo si funciona entre sesiones.
+if (!superviseMode)
+{
+    var lockPath = Path.Combine(ResolveSharedPath(options), "agent-worker.lock");
+    try
+    {
+        var lockStream = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        using (var writer = new StreamWriter(lockStream, null, 1024, leaveOpen: true))
+        {
+            writer.AutoFlush = true;
+            writer.WriteLine($"{{\"processId\":{Environment.ProcessId},\"startedAtUtc\":\"{DateTime.UtcNow:O}\"}}");
+        }
+
+        SingleInstanceGuard.LockFile = lockStream;
+    }
+    catch (IOException)
+    {
+        Console.Error.WriteLine($"Ya hay un worker activo para '{options.CampusKey}' ({lockPath} esta bloqueado). Saliendo para no duplicar el escaneo.");
+        return 3;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"No se pudo tomar el cerrojo de instancia unica: {ex.Message}. Se continua sin el.");
+    }
+}
+
 ProbeCredential? credential = null;
 if ((options.ResolveSessions || options.ResolveHardware) && options.PromptForCredential)
 {
@@ -441,6 +471,10 @@ static async Task RunAgentLoopAsync(CollectorOptions options, Collector collecto
         {
         }
     }
+
+    // El archivo de cerrojo se mantiene abierto mientras el proceso siga vivo; el sistema
+    // libera el bloqueo al salir, y se hereda como abandonado si el proceso muere de golpe.
+    SingleInstanceGuard.Hold();
 }
 
 static async Task<AgentStatus?> TryReadStatusAsync(string statusPath, CancellationToken cancellationToken)
@@ -723,9 +757,20 @@ internal sealed class AgentControlMonitor
     }
 }
 
-internal sealed class Collector
+// Conserva el cerrojo de instancia unica en un miembro estatico para que las funciones locales
+// estaticas del programa (que no pueden capturar variables locales) puedan mantenerlo abierto.
+internal static class SingleInstanceGuard
 {
-    private readonly CollectorOptions _options;
+    public static FileStream? LockFile { get; set; }
+
+    public static void Hold()
+    {
+        GC.KeepAlive(LockFile);
+    }
+}
+
+internal sealed class Collector
+{    private readonly CollectorOptions _options;
     private readonly ProbeCredential? _credential;
     private int _wmiResolutionFailures;
 
