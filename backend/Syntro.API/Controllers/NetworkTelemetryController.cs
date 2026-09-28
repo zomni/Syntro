@@ -35,6 +35,16 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(model);
     }
 
+    [HttpGet("building-match")]
+    public async Task<IActionResult> BuildingMatch(
+        [FromQuery] Guid? organizationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        var campusKeys = await ResolveCampusKeysAsync(organizationId, cancellationToken);
+        var result = await _service.GetLatestBuildingMatchSummariesAsync(campusKeys, cancellationToken);
+        return Ok(result);
+    }
+
     [HttpGet("latest")]
     public async Task<IActionResult> Latest(
         [FromQuery] int take = 10,

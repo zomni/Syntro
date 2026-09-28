@@ -1738,36 +1738,6 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   return html;
 };
 
-const buildViewSelectorHtml = (featureId, currentView, canViewEquipment = true) => {
-  const views = [
-    { key: "summary", label: "Resumen" },
-    { key: "rooms", label: "Salas" },
-    { key: "history", label: "Historial" },
-  ];
-
-  if (canViewEquipment) views.splice(2, 0, { key: "devices", label: "Equipos" });
-
-  return `
-    <div style="margin-top:10px;">
-      <div style="${chipRowStyle}">
-        ${views
-          .map(
-            (view) => `
-          <button
-            class="floorButton"
-            style="${getChipButtonStyle(currentView === view.key, true)}"
-            onclick="window.setPopupView && window.setPopupView('${escapeHtml(featureId)}','${escapeHtml(view.key)}')"
-          >
-            ${escapeHtml(view.label)}
-          </button>
-        `,
-          )
-          .join("")}
-      </div>
-    </div>
-  `;
-};
-
 const refreshCurrentPopup = async () => {
   if (!currentOpenLayer || !currentOpenLayer.feature) return;
 
@@ -1986,6 +1956,8 @@ const getFeaturePopupHtml = async (feature) => {
     `;
   }
 
+  currentView = "devices";
+
   const [buildingDetail, allRooms, backendInventoryItems, buildingActivityItems] = await Promise.all([
     loadBuildingDetail(building),
     loadRoomsForBuilding(building),
@@ -2013,7 +1985,6 @@ const getFeaturePopupHtml = async (feature) => {
   `;
 
 detailsHtml += buildFloorSelectorHtml(building, currentFloor);
-  detailsHtml += buildViewSelectorHtml(featureId, currentView, canViewEquipment);
 
   let contentHtml = "";
   if (currentView === "summary") {
@@ -2181,7 +2152,7 @@ const loadBuildingMatchData = async () => {
   if (buildingMatchData) return buildingMatchData;
   if (buildingMatchDataPromise) return buildingMatchDataPromise;
 
-  buildingMatchDataPromise = fetch(`${BACKEND_API_URL}/api/network-telemetry/status?take=10`, {
+  buildingMatchDataPromise = fetch(`${BACKEND_API_URL}/api/network-telemetry/building-match`, {
     cache: "no-store",
     credentials: "include",
   })
@@ -2463,7 +2434,7 @@ const resetHighlight = (e) => {
 
 export const onEachFeature = (feature, layer) => {
   if (feature.properties.isClickable) {
-    layer.bindPopup("Cargando información...");
+    layer.bindPopup("Cargando información...", { className: "building-panel-popup" });
 
     if (layer.getPopup()) {
       layer.getPopup().options.autoPan = true;
@@ -2472,6 +2443,7 @@ export const onEachFeature = (feature, layer) => {
     }
 
         layer.on("popupopen", async () => {
+      document.body.classList.add("map-building-panel");
       suspendMapBoundsForPopup();
       setCurrentOpenFeatureId(feature?.properties?.id || null);
       currentOpenLayer = layer;
@@ -2486,6 +2458,8 @@ export const onEachFeature = (feature, layer) => {
     });
 
     layer.on("popupclose", () => {
+      document.body.classList.remove("map-building-panel");
+
       if (currentOpenLayer === layer) {
         clearCurrentOpenFeatureId();
       }

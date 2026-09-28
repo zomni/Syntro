@@ -243,6 +243,14 @@ public class NetworkTelemetryBuildingRiskSummaryViewModel
     public double MatchRate { get; set; }
 }
 
+public class NetworkTelemetryBuildingMatchSummariesResult
+{
+    public Guid SnapshotId { get; set; }
+    public DateTime? ObservedAtUtc { get; set; }
+    public IReadOnlyList<NetworkTelemetryBuildingRiskSummaryViewModel> BuildingRiskSummaries { get; set; } =
+        Array.Empty<NetworkTelemetryBuildingRiskSummaryViewModel>();
+}
+
 public class NetworkTelemetrySubnetRiskSummaryViewModel
 {
     public string SubnetCidr { get; set; } = string.Empty;

@@ -2105,149 +2105,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     background: var(--pi-primary-hover);
 }
 
-.network-telemetry-toggle {
-    display: inline-flex;
-    gap: 8px;
-    align-items: center;
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.network-telemetry-toggle.is-active {
-    border-color: var(--pi-primary);
-    background: var(--pi-primary);
-    color: var(--pi-surface);
-    box-shadow: 0 10px 24px rgba(var(--pi-primary-rgb), 0.24);
-}
-
-.network-telemetry-panel {
-    position: relative;
-    width: 100%;
-    box-sizing: border-box;
-    max-height: min(420px, calc(100vh - 180px));
-    overflow: hidden;
-    padding: 12px;
-    border-radius: 14px;
-    border: 1px solid rgba(var(--pi-ink-rgb), 0.12);
-    background: rgba(var(--pi-surface-rgb), 0.98);
-    box-shadow: 0 14px 32px rgba(var(--pi-ink-rgb), 0.18);
-    color: var(--pi-gray-800);
-    font-family: sans-serif;
-}
-
-.network-telemetry-panel-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
-}
-
-.network-telemetry-panel-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--pi-primary-deep);
-}
-
-.network-telemetry-panel-subtitle {
-    margin-top: 3px;
-    color: var(--pi-gray-500);
-    font-size: 11px;
-}
-
-.network-telemetry-panel-refresh {
-    width: auto;
-    padding: 7px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--pi-primary);
-    background: var(--pi-surface);
-    color: var(--pi-primary-deep);
-    cursor: pointer;
-    font: 700 11px/1.1 sans-serif;
-    white-space: nowrap;
-}
-
-.network-telemetry-panel-refresh:hover {
-    background: var(--pi-primary-soft);
-}
-
-.network-telemetry-panel-summary {
-    margin-top: 10px;
-}
-
-.network-telemetry-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-}
-
-.network-telemetry-summary-grid > div {
-    padding: 8px 9px;
-    border-radius: 10px;
-    background: var(--pi-surface-soft);
-    border: 1px solid rgba(var(--pi-gray-400-rgb), 0.16);
-}
-
-.network-telemetry-summary-grid span {
-    display: block;
-    color: var(--pi-gray-500);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.network-telemetry-summary-grid strong {
-    display: block;
-    margin-top: 3px;
-    font-size: 12px;
-}
-
-.network-telemetry-summary-notes {
-    margin-top: 8px;
-    color: var(--pi-gray-700);
-    font-weight: 600;
-}
-
-.network-telemetry-panel-list {
-    margin-top: 10px;
-    display: grid;
-    gap: 8px;
-    max-height: none;
-    overflow: visible;
-}
-
-.network-telemetry-top-header {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    min-height: 40px;
-    margin: 0;
-    padding: 0 34px 0 14px;
-    color: var(--pi-primary-deep);
-    background: rgba(var(--pi-surface-rgb), 0.96);
-    border: 1px solid rgba(var(--pi-primary-rgb), 0.28);
-    border-radius: 10px;
-    box-shadow: 0 10px 24px rgba(var(--pi-ink-rgb), 0.14);
-    text-align: left;
-    cursor: pointer;
-    list-style: none;
-}
-
-.network-telemetry-summary-capture {
-    grid-column: 1 / -1;
-}
-
-.network-telemetry-summary-users {
-    grid-column: 2;
-    grid-row: 1;
-}
-
-.network-telemetry-summary-capture strong {
-    overflow: hidden;
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
 .session-mode-visibility {
     flex: 0 0 auto;
     width: 32px;
@@ -2400,131 +2257,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     border-radius: 50%;
     background: currentColor;
     box-shadow: 10px 9px 0 0 currentColor;
-}
-
-.network-telemetry-top-header::-webkit-details-marker {
-    display: none;
-}
-
-.network-telemetry-top-risks[open] .network-telemetry-top-header {
-    border-color: var(--pi-primary);
-    background: var(--pi-primary);
-    color: var(--pi-surface);
-    box-shadow: 0 10px 24px rgba(var(--pi-primary-rgb), 0.24);
-}
-
-.network-telemetry-top-risks[open] .network-telemetry-top-header::after {
-    transform: translateY(-35%) rotate(225deg);
-}
-
-.network-telemetry-top-risks-content {
-    display: grid;
-    gap: 8px;
-    margin-top: 8px;
-    max-height: min(260px, max(120px, calc(100vh - 400px)));
-    overflow-y: auto;
-}
-
-.network-telemetry-risk-score {
-    min-width: 32px;
-    text-align: center;
-}
-
-.network-telemetry-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: var(--pi-surface-soft);
-    border: 1px solid rgba(var(--pi-gray-400-rgb), 0.16);
-}
-
-.network-telemetry-item-rank {
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 800;
-    background: var(--pi-gray-300);
-    color: var(--pi-gray-600);
-}
-
-.network-telemetry-item-rank.critical {
-    background: var(--pi-danger-soft);
-    color: var(--pi-danger-darker);
-}
-
-.network-telemetry-item-rank.high {
-    background: var(--pi-orange-soft-2);
-    color: var(--pi-orange-dark);
-}
-
-.network-telemetry-item-rank.medium {
-    background: var(--pi-warning-soft);
-    color: var(--pi-amber-dark);
-}
-
-.network-telemetry-item-rank.low {
-    background: var(--pi-info-soft);
-    color: var(--pi-info);
-}
-
-.network-telemetry-item-content {
-    flex: 1;
-    min-width: 0;
-}
-
-.network-telemetry-item-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    align-items: center;
-}
-
-.network-telemetry-item-meta,
-.network-telemetry-item-reasons {
-    margin-top: 4px;
-    color: var(--pi-gray-600);
-    font-size: 11px;
-}
-
-.network-telemetry-risk {
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.network-telemetry-risk.critical {
-    background: var(--pi-danger-soft);
-    color: var(--pi-danger-darker);
-}
-
-.network-telemetry-risk.high {
-    background: var(--pi-orange-soft-2);
-    color: var(--pi-orange-dark);
-}
-
-.network-telemetry-risk.medium {
-    background: var(--pi-warning-soft);
-    color: var(--pi-amber-dark);
-}
-
-.network-telemetry-risk.low {
-    background: var(--pi-info-soft);
-    color: var(--pi-info);
-}
-
-.network-telemetry-empty {
-    color: var(--pi-gray-500);
-    font-size: 12px;
 }
 
 .route-planner-panel {
@@ -2891,14 +2623,12 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     line-height: 1.4;
 }
 
-.route-planner-card:has(.route-planner-panel:not([hidden])) .route-planner-toggle,
-.network-telemetry-group:has(.network-telemetry-panel:not([hidden])) .network-telemetry-toggle {
+.route-planner-card:has(.route-planner-panel:not([hidden])) .route-planner-toggle {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-.route-planner-card:has(.route-planner-panel:not([hidden])) .route-planner-panel,
-.network-telemetry-group:has(.network-telemetry-panel:not([hidden])) .network-telemetry-panel {
+.route-planner-card:has(.route-planner-panel:not([hidden])) .route-planner-panel {
     margin-top: -1px;
     border-top: 0;
     border-top-left-radius: 0;
@@ -3051,10 +2781,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
         padding: 10px;
     }
 
-    .network-telemetry-panel {
-        max-height: min(360px, calc(100vh - 180px));
-    }
-
     .admin-map-tools-panel {
         width: min(200px, calc(100vw - 16px));
     }
@@ -3077,7 +2803,6 @@ body.map-ui-minimal .session-mode-badge {
 --------------------------------------------------------------------------- */
 body.map-ui-wayfinding #session-inventory-link,
 body.map-ui-wayfinding #admin-map-tools-panel,
-body.map-ui-wayfinding .network-telemetry-group,
 body.map-ui-wayfinding .session-mode-badge,
 body.map-ui-wayfinding .building-equipment-bubble,
 body.map-ui-wayfinding .building-match-bubble {
@@ -3135,4 +2860,43 @@ body.map-ui-wayfinding #route-planner-toggle {
     min-height: 32px;
     padding: 0 12px;
     font-size: 12px;
+}
+
+/* ---------------------------------------------------------------------------
+   Building panel: popup de edificio acoplado como panel fijo a la derecha.
+--------------------------------------------------------------------------- */
+.building-panel-popup {
+    position: fixed !important;
+    top: 92px !important;
+    right: 14px !important;
+    bottom: 14px !important;
+    left: auto !important;
+    width: min(390px, calc(100vw - 28px)) !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 !important;
+    transform: none !important;
+    z-index: 1500;
+    overflow: hidden;
+    border-radius: 16px;
+    box-shadow: 0 18px 40px rgba(var(--pi-ink-rgb), 0.28);
+}
+
+.building-panel-popup .leaflet-popup-content-wrapper {
+    border-radius: 16px;
+}
+
+.building-panel-popup .leaflet-popup-content {
+    margin: 16px 18px;
+}
+
+.building-panel-popup .leaflet-popup-tip {
+    display: none !important;
+}
+
+body.map-building-panel #top-actions,
+body.map-building-panel .map-equipment-type-filter,
+body.map-building-panel #route-planner-card,
+body.map-building-panel #bLoc {
+    display: none !important;
 }

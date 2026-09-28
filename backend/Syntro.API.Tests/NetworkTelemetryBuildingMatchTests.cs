@@ -163,6 +163,61 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         Assert.Equal(97.6, summary.MatchRate);
     }
 
+    [Fact]
+    public async Task GetLatestBuildingMatchSummariesAsync_ReturnsLatestSnapshotSummariesOnly()
+    {
+        var older = new NetworkTelemetrySnapshot
+        {
+            CampusKey = "test-campus",
+            SourceName = "test",
+            SourceType = "wmi",
+            Status = "completed",
+            ObservedAtUtc = DateTime.UtcNow.AddMinutes(-20)
+        };
+        var latest = new NetworkTelemetrySnapshot
+        {
+            CampusKey = "test-campus",
+            SourceName = "test",
+            SourceType = "wmi",
+            Status = "completed",
+            ObservedAtUtc = DateTime.UtcNow
+        };
+        _context.NetworkTelemetrySnapshots.AddRange(older, latest);
+        await _context.SaveChangesAsync();
+
+        var importedItem = Guid.NewGuid();
+        _context.NetworkTelemetryObservations.AddRange(
+            Device(latest.Id, "SR-BLD-LATEST", importedInventoryItemId: importedItem),
+            Device(latest.Id, "SR-BLD-LATEST", importedInventoryItemId: importedItem),
+            Device(latest.Id, "SR-BLD-LATEST"),
+            Device(older.Id, "SR-BLD-OLD", importedInventoryItemId: importedItem));
+        await _context.SaveChangesAsync();
+
+        var service = BuildService();
+
+        var result = await service.GetLatestBuildingMatchSummariesAsync(campusKeys: null);
+
+        Assert.Equal(latest.Id, result.SnapshotId);
+        Assert.Equal(latest.ObservedAtUtc, result.ObservedAtUtc);
+        var summary = Assert.Single(result.BuildingRiskSummaries);
+        Assert.Equal("SR-BLD-LATEST", summary.BuildingExternalId);
+        Assert.Equal(3, summary.DeviceCount);
+        Assert.Equal(2, summary.MatchedCount);
+        Assert.Equal(66.7, summary.MatchRate);
+    }
+
+    [Fact]
+    public async Task GetLatestBuildingMatchSummariesAsync_ReturnsEmptyWhenNoSnapshots()
+    {
+        var service = BuildService();
+
+        var result = await service.GetLatestBuildingMatchSummariesAsync(campusKeys: null);
+
+        Assert.Equal(Guid.Empty, result.SnapshotId);
+        Assert.Null(result.ObservedAtUtc);
+        Assert.Empty(result.BuildingRiskSummaries);
+    }
+
     private NetworkTelemetryService BuildService()
     {
         var config = TestConfiguration.FromSettings(new Dictionary<string, string?>());

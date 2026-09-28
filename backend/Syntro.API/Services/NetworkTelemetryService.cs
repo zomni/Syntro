@@ -1561,6 +1561,31 @@ public class NetworkTelemetryService
         return await BuildBuildingRiskSummariesAsync(query, cancellationToken);
     }
 
+    public async Task<NetworkTelemetryBuildingMatchSummariesResult> GetLatestBuildingMatchSummariesAsync(
+        IReadOnlyCollection<string>? campusKeys = null,
+        CancellationToken cancellationToken = default)
+    {
+        var latest = await ApplyCampusScope(
+                _context.NetworkTelemetrySnapshots.AsNoTracking(),
+                campusKeys)
+            .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
+            .ThenByDescending(snapshot => snapshot.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latest is null)
+        {
+            return new NetworkTelemetryBuildingMatchSummariesResult();
+        }
+
+        var summaries = await GetBuildingRiskSummariesAsync(latest.Id, campusKeys, cancellationToken);
+        return new NetworkTelemetryBuildingMatchSummariesResult
+        {
+            SnapshotId = latest.Id,
+            ObservedAtUtc = latest.ObservedAtUtc,
+            BuildingRiskSummaries = summaries
+        };
+    }
+
     private static string BuildSessionState(
         AuthUser user,
         DateTime? lastLoginAtUtc,

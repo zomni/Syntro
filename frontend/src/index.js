@@ -38,9 +38,6 @@ import { initWalkingRouteEditor } from "@app/walkingRouteEditor";
 // Persistent walking route visibility layer
 import { initWalkingRouteLayer } from "@app/walkingRouteLayer";
 
-// Network telemetry panel and heat overlay
-import { initNetworkTelemetryPanel } from "@app/networkTelemetryPanel";
-
 // Site zoom range (min/max) editing from the map
 import { initSiteViewportPanel } from "@app/siteViewportPanel";
 
@@ -131,7 +128,6 @@ window.addEventListener(identifiers.events.sitesLoaded, applyInitialCampus);
 initSessionModeBadge();
 initSessionExpiryOverlay();
 initWalkingRouteLayer();
-initNetworkTelemetryPanel();
 initManualBuildingEditor();
 initBuildingGeometryEditor();
 initCampusMarkerEditor();

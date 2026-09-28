@@ -105,6 +105,8 @@ export const renderWalkingRoutesLayer = async () => {
         }
       ).addTo(layer);
     }
+
+    layer.bringToFront();
   } catch (error) {
     console.error("Error mostrando rutas caminables:", error);
   } finally {

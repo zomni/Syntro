@@ -38,7 +38,6 @@ module.exports = {
       "@app/campusMarkerEditor": src("components", "campusMarkerEditor.js"),
       "@app/walkingRouteEditor": src("components", "walkingRouteEditor.js"),
       "@app/adminMapToolsPanel": src("components", "adminMapToolsPanel.js"),
-      "@app/networkTelemetryPanel": src("components", "networkTelemetryPanel.js"),
       "@app/siteViewportPanel": src("components", "siteViewportPanel.js"),
       "@app/roomEditor": src("components", "roomEditor.js"),
       "leaflet": src("lib", "leaflet", "leaflet.js"),
