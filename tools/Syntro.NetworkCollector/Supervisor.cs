@@ -429,6 +429,7 @@ internal static class AgentSupervisorFileStore
 internal sealed class AgentSupervisor
 {
     private static readonly TimeSpan ProcessStopTimeout = TimeSpan.FromSeconds(5);
+    private const int AliveLogIntervalSeconds = 300;
     private static readonly TimeSpan[] RestartBackoff =
     [
         TimeSpan.FromSeconds(5),
@@ -455,6 +456,7 @@ internal sealed class AgentSupervisor
     private DateTime? _workerStartedAtUtc;
     private DateTime? _workerStoppedAtUtc;
     private bool _expectedWorkerExit;
+    private DateTime? _lastAliveLogAtUtc;
 
     public AgentSupervisor(CollectorOptions options, string configPath)
     {
@@ -472,6 +474,30 @@ internal sealed class AgentSupervisor
     }
 
     public async Task RunAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await RunCoreAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            _supervisorState = "failed";
+            SetError($"Supervisor terminado por error no controlado: {exception}");
+            try
+            {
+                await WriteStatusAsync(DateTime.UtcNow, CancellationToken.None);
+            }
+            catch (Exception statusException)
+            {
+                AppendLog($"Status write failed: {statusException.Message}");
+            }
+        }
+    }
+
+    private async Task RunCoreAsync(CancellationToken cancellationToken)
     {
         Directory.CreateDirectory(_sharedPath);
         _state = LoadState();
@@ -491,6 +517,7 @@ internal sealed class AgentSupervisor
                 await DetectUnexpectedWorkerExitAsync(now);
                 await ReconcileAsync(now);
                 await WriteStatusAsync(DateTime.UtcNow, cancellationToken);
+                LogAliveIfDue(now);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -1038,6 +1065,19 @@ internal sealed class AgentSupervisor
         {
             SetError($"State write failed: {exception.Message}");
         }
+    }
+
+    // Una muerte por control event externo no deja ningun rastro en el log, asi que
+    // dejamos evidencia periodica de que el supervisor sigue vivo hasta el ultimo momento.
+    private void LogAliveIfDue(DateTime nowUtc)
+    {
+        if (_lastAliveLogAtUtc is not null && (nowUtc - _lastAliveLogAtUtc.Value).TotalSeconds < AliveLogIntervalSeconds)
+        {
+            return;
+        }
+
+        _lastAliveLogAtUtc = nowUtc;
+        AppendLog($"Supervisor alive. State={_supervisorState} Process={_processState} Worker={(_worker is null ? "-" : _worker.Id.ToString())}");
     }
 
     private void SetError(string error)

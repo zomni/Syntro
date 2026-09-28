@@ -329,7 +329,7 @@ static async Task RunAgentLoopAsync(CollectorOptions options, Collector collecto
 
                 var scanMode = NormalizeCollectorScanMode(scanRequest.ScanMode);
                 var ingestRequest = await collector.BuildRequestAsync(scanMode, scanRequest.TriggerType, controlMonitor, scanTimeoutCts.Token, progressPublisher.ReportAsync, scanRequest.CampusKey);
-                await AppendAgentLogAsync(logPath, $"Scan built. Devices={ingestRequest.Devices.Count} Users={ingestRequest.Users.Count}", cancellationToken);
+                await AppendAgentLogAsync(logPath, $"Scan built. Devices={ingestRequest.Devices.Count} Users={ingestRequest.Users.Count} WmiFailures={collector.WmiResolutionFailures}", cancellationToken);
                 await progressPublisher.FlushAsync();
                 var ingestResult = await PostToApiAsync(options, ingestRequest, scanTimeoutCts.Token);
                 var completedAt = DateTime.UtcNow;
@@ -727,6 +727,24 @@ internal sealed class Collector
 {
     private readonly CollectorOptions _options;
     private readonly ProbeCredential? _credential;
+    private int _wmiResolutionFailures;
+
+    public int WmiResolutionFailures => _wmiResolutionFailures;
+
+    // Un fallo de WMI remoto por equipo era completamente silencioso, asi que una perdida
+    // de permisos (por ejemplo al cambiar el tipo de logon de la tarea) se manifestaba solo
+    // como una caida de conteos. Lo reportamos de forma acotada para que quede en el log.
+    private void RecordWmiResolutionFailure(string operation, Exception exception)
+    {
+        _wmiResolutionFailures++;
+        if (_wmiResolutionFailures % 50 != 1)
+        {
+            return;
+        }
+
+        Console.WriteLine(
+            $"WMI '{operation}' fallo {_wmiResolutionFailures} veces en este escaneo. Ultimo error: {exception.Message}");
+    }
 
     public Collector(CollectorOptions options, ProbeCredential? credential)
     {
@@ -1038,8 +1056,9 @@ internal sealed class Collector
                 return [new InteractiveSession(username, "active", $"WMI: {raw}", host)];
             }
         }
-        catch
+        catch (Exception exception)
         {
+            RecordWmiResolutionFailure("Win32_ComputerSystem/identidad", exception);
         }
 
         return [];
@@ -1242,8 +1261,9 @@ internal sealed class Collector
                 }
             }
         }
-        catch
+        catch (Exception exception)
         {
+            RecordWmiResolutionFailure("inventario de hardware", exception);
         }
     }
 

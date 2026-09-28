@@ -297,6 +297,41 @@ public sealed class NetworkTelemetryAgentBridgeServiceTests : IDisposable
         Assert.Contains("stale", status.LastError, StringComparison.OrdinalIgnoreCase);
     }
 
+    // El caso que confundia al operador: el supervisor murio pero su ultimo estado escrito
+    // dizia "running". La API debe seguir exponiendo ese dato como ultimo conocido y marcar
+    // el supervisor como no disponible, para que la vista no lo pinte como vivo.
+    [Fact]
+    public async Task GetStatusAsync_StaleSupervisorRunning_QuedaMarcadoComoNoDisponible()
+    {
+        var service = CreateService(supervisorTimeoutSeconds: 1);
+        var campusPath = service.GetSharedPath("sotero");
+        Directory.CreateDirectory(campusPath);
+        await File.WriteAllTextAsync(
+            service.GetLifecycleKeyPath("sotero"),
+            Convert.ToBase64String(Encoding.UTF8.GetBytes("test-lifecycle-key")));
+        await File.WriteAllTextAsync(
+            service.GetSupervisorStatusPath("sotero"),
+            JsonSerializer.Serialize(new NetworkTelemetryAgentSupervisorStatus
+            {
+                AgentId = "agent-1",
+                SupervisorState = "running",
+                ProcessState = "running",
+                DesiredState = "running",
+                WorkerProcessId = 36320,
+                SupervisorHeartbeatAtUtc = DateTime.UtcNow.AddMinutes(-2),
+                UpdatedAtUtc = DateTime.UtcNow.AddMinutes(-2)
+            }, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var status = await service.GetStatusAsync("sotero");
+
+        Assert.False(status.IsSupervisorAvailable);
+        Assert.False(status.IsConnected);
+        Assert.False(status.ControlAvailable);
+        Assert.Equal("running", status.ProcessState);
+        Assert.Equal(36320, status.WorkerProcessId);
+        Assert.Contains("stale", status.LastError, StringComparison.OrdinalIgnoreCase);
+    }
+
     private NetworkTelemetryAgentBridgeService CreateService(int supervisorTimeoutSeconds = 30)
     {
         Directory.CreateDirectory(_rootPath);

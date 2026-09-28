@@ -2602,7 +2602,7 @@
                         ? "warning text-dark"
                         : "info";
             const processState = String(status?.processState || "unknown").toLowerCase();
-            const processLabel = {
+            const processLabelFor = {
                 starting: "Iniciando",
                 running: "En ejecucion",
                 stopping: "Deteniendo",
@@ -2612,7 +2612,7 @@
                 mixed: "Multiple",
                 unavailable: "No disponible"
             }[processState] || "Desconocido";
-            const processTone = processState === "running"
+            const processToneFor = processState === "running"
                 ? "success"
                 : processState === "failed"
                     ? "danger"
@@ -2620,6 +2620,10 @@
                         ? "info"
                         : "secondary";
             const supervisorAvailable = !!status?.isSupervisorAvailable;
+            // Sin supervisor disponible el estado del proceso es el ultimo conocido, no el
+            // actual. Mostrarlo como vivo en verde inducia a pensar que el agente trabaja.
+            const processLabel = supervisorAvailable ? processLabelFor : `Sin senal (ultimo: ${processLabelFor})`;
+            const processTone = supervisorAvailable ? processToneFor : "secondary";
             const controlAvailable = !!status?.controlAvailable;
             const canStart = !!status?.canStart;
             const canStop = !!status?.canStop;
@@ -2678,7 +2682,7 @@
                         <span class="telemetry-agent-stat"><i class="bi bi-shield-check"></i> Supervisor ${supervisorAvailable ? "disponible" : "no disponible"}</span>
                         ${supervisorHeartbeatAt ? `<span class="telemetry-agent-stat"><i class="bi bi-cpu"></i> Supervisor ${escapeHtml(supervisorHeartbeatAt)}</span>` : ""}
                         <span class="telemetry-agent-stat"><i class="bi bi-box"></i> Proceso ${escapeHtml(processLabel)}</span>
-                        ${workerProcessId > 0 ? `<span class="telemetry-agent-stat"><i class="bi bi-hash"></i> PID ${workerProcessId}</span>` : ""}
+                        ${workerProcessId > 0 ? `<span class="telemetry-agent-stat"><i class="bi bi-hash"></i> ${supervisorAvailable ? "PID" : "Ultimo PID"} ${workerProcessId}</span>` : ""}
                         ${lastCommand ? `<span class="telemetry-agent-stat"><i class="bi bi-terminal"></i> ${escapeHtml(lastCommand)}${lastCommandBy ? ` por ${escapeHtml(lastCommandBy)}` : ""}${lastCommandAt ? ` (${escapeHtml(lastCommandAt)})` : ""}</span>` : ""}
                         ${snapshotId !== noSnapshotId ? `<span class="telemetry-agent-stat"><i class="bi bi-database-check"></i> Snapshot ${escapeHtml(snapshotId)}</span>` : ""}
                     </div>
