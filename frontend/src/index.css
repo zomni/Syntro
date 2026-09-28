@@ -2928,6 +2928,7 @@ body.map-ui-wayfinding #route-planner-toggle {
 body.map-building-panel #top-actions,
 body.map-building-panel .map-equipment-type-filter,
 body.map-building-panel #route-planner-card,
+body.map-building-panel #searchContainer,
 body.map-building-panel #bLoc {
     display: none !important;
 }

@@ -100,6 +100,8 @@ if (!window.closeBuildingPanel) {
 }
 
 map.on("click", (event) => {
+  if (buildingPanelMapFrozen) return;
+
   const originalTarget = event?.originalEvent?.target;
   const clickedInsideFeature =
     originalTarget?.closest?.(".leaflet-interactive") ||
@@ -2086,6 +2088,8 @@ export const style = (feature) => {
 };
 
 let buildingPanelMapFrozen = false;
+let buildingViewPreviousMaxZoom = null;
+const MAX_BUILDING_VIEW_ZOOM = 22;
 
 const freezeMapForBuildingPanel = () => {
   if (buildingPanelMapFrozen) return;
@@ -2111,19 +2115,27 @@ const unfreezeMapForBuildingPanel = () => {
       }
     }
   );
+
+  if (buildingViewPreviousMaxZoom !== null) {
+    map.setMaxZoom(buildingViewPreviousMaxZoom);
+    buildingViewPreviousMaxZoom = null;
+  }
 };
 
-const frameBuildingToLeftArea = (layer, maxZoom = 20) => {
+const frameBuildingToLeftArea = (layer) => {
   const bounds = layer.getBounds();
   const mapSize = map.getSize();
   const panelWidth = Math.min(440, mapSize.x - 28);
   const rightReserve = panelWidth + 28;
   const leftAreaWidth = Math.max(180, mapSize.x - rightReserve);
 
+  buildingViewPreviousMaxZoom = map.getMaxZoom();
+  map.setMaxZoom(MAX_BUILDING_VIEW_ZOOM);
+
   map.fitBounds(bounds, {
-    maxZoom,
-    paddingTopLeft: [84, 20],
-    paddingBottomRight: [rightReserve, 20],
+    maxZoom: MAX_BUILDING_VIEW_ZOOM,
+    paddingTopLeft: [12, 12],
+    paddingBottomRight: [rightReserve, 12],
     animate: false,
   });
 
@@ -2132,6 +2144,7 @@ const frameBuildingToLeftArea = (layer, maxZoom = 20) => {
 
 export const openBuildingPopupLayer = (layer, options = {}) => {
   if (!layer) return false;
+  if (buildingPanelMapFrozen) return false;
 
   const { zoom = true, rememberView = true, maxZoom = 20 } = options;
 
@@ -2145,7 +2158,7 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
   suspendMapBoundsForPopup();
 
   if (zoom && typeof layer.getBounds === "function") {
-    frameBuildingToLeftArea(layer, maxZoom);
+    frameBuildingToLeftArea(layer);
   } else if (zoom && typeof layer.getLatLng === "function") {
     map.setView(layer.getLatLng(), maxZoom);
   }
@@ -2158,6 +2171,7 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
 };
 
 const zoomToFeaturePoint = (e) => {
+  if (buildingPanelMapFrozen) return;
   map.setView([e.latlng.lat, e.latlng.lng], 19);
 };
 
