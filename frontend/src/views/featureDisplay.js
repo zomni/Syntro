@@ -2190,19 +2190,37 @@ const createBuildingViewMap = (layer) => {
 
     const viewSize = buildingViewMap.getSize();
     const rightReserve = Math.min(440, viewSize.x - 28) + 40;
-    const viewZoom = buildingViewMap.getZoom();
+    const leftBoxX = Math.max(100, viewSize.x - rightReserve);
     const minEdge = 20;
-    let deltaX = (viewSize.x - rightReserve) / 2 - viewSize.x / 2;
+    const availW = leftBoxX - 2 * minEdge;
+    const availH = viewSize.y - 2 * minEdge;
+
+    const zCur = buildingViewMap.getZoom();
+    const projNW = buildingViewMap.project(bounds.getNorthWest(), zCur);
+    const projSE = buildingViewMap.project(bounds.getSouthEast(), zCur);
+    const boundsW = Math.abs(projSE.x - projNW.x);
+    const boundsH = Math.abs(projSE.y - projNW.y);
+    let viewZoom = MAX_BUILDING_VIEW_ZOOM;
+    if (boundsW > 0 && boundsH > 0) {
+      viewZoom = Math.max(
+        buildingViewMap.getMinZoom(),
+        Math.min(
+          MAX_BUILDING_VIEW_ZOOM,
+          zCur + Math.log2(availW / boundsW),
+          zCur + Math.log2(availH / boundsH)
+        )
+      );
+    }
+    viewZoom = Math.floor(viewZoom);
+    buildingViewMap.setView(bounds.getCenter(), viewZoom, { animate: false });
 
     const nwPoint = buildingViewMap.latLngToContainerPoint(bounds.getNorthWest());
     const sePoint = buildingViewMap.latLngToContainerPoint(bounds.getSouthEast());
-    if (nwPoint.x + deltaX < minEdge) {
-      deltaX = minEdge - nwPoint.x;
-    } else if (sePoint.x + deltaX > viewSize.x - minEdge) {
-      deltaX = viewSize.x - minEdge - sePoint.x;
-    }
+    const width = Math.abs(sePoint.x - nwPoint.x);
+    const targetLeft = minEdge + (availW - width) / 2;
+    let deltaX = targetLeft - nwPoint.x;
 
-    if (deltaX) {
+    if (Math.abs(deltaX) > 0.5) {
       const centerPixel = buildingViewMap
         .project(buildingViewMap.getCenter(), viewZoom)
         .add([deltaX, 0]);
@@ -2212,7 +2230,7 @@ const createBuildingViewMap = (layer) => {
     }
 
     console.info(
-      `[mapa] vista edificio: zoom ${viewZoom}, shift (${deltaX},0), rightReserve ${rightReserve}`
+      `[mapa] vista edificio: zoom ${viewZoom}, shift (${deltaX},0), rightReserve ${rightReserve}, leftBox ${leftBoxX}`
     );
 
     console.info(
