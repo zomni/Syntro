@@ -2946,11 +2946,30 @@ body.map-building-panel .building-panel-popup {
     bottom: 0 !important;
     width: 30vw !important;
     max-width: none !important;
-    height: 100vh;
+    height: 100vh !important;
     max-height: none !important;
     border-radius: 0;
     box-shadow: none;
     border-left: 1px solid rgba(15, 50, 75, 0.15);
+}
+
+body.map-building-panel .building-panel-popup .leaflet-popup-content-wrapper {
+    height: 100% !important;
+    border-radius: 0;
+    overflow: hidden;
+}
+
+body.map-building-panel .building-panel-popup .leaflet-popup-content {
+    height: 100vh !important;
+    margin: 0 !important;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+body.map-building-panel .building-panel-popup .leaflet-popup-content [style*="68vh"] {
+    height: 100% !important;
+    max-height: none !important;
+    box-sizing: border-box;
 }
 
 /* ---------------------------------------------------------------------------
