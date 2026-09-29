@@ -2135,33 +2135,44 @@ const frameBuildingToLeftArea = (layer) => {
   const rightReserve = panelWidth + 28;
   const leftAreaWidth = Math.max(180, mapSize.x - rightReserve);
 
+  const beforeZoom = map.getZoom();
   buildingViewPreviousMaxZoom = map.getMaxZoom();
   map.setMaxZoom(MAX_BUILDING_VIEW_ZOOM);
 
-  map.fitBounds(bounds, {
-    maxZoom: MAX_BUILDING_VIEW_ZOOM,
-    padding: [20, 20],
-    animate: false,
-  });
+  const fitZoom = Math.min(MAX_BUILDING_VIEW_ZOOM, map.getBoundsZoom(bounds, false, [20, 20]));
+  map.setView(bounds.getCenter(), fitZoom, { animate: false });
 
   const northWest = map.project(bounds.getNorthWest(), map.getZoom());
   const southEast = map.project(bounds.getSouthEast(), map.getZoom());
   const buildingW = southEast.x - northWest.x;
+  const buildingH = southEast.y - northWest.y;
 
   let shiftX = leftAreaWidth / 2 - mapSize.x / 2;
+  let shiftY = 0;
 
-  const minLeft = 20;
-  const maxRight = mapSize.x - 20;
+  const minEdge = 20;
   const shiftedLeft = northWest.x + shiftX;
-  const shiftedRight = shiftedLeft + buildingW;
-
-  if (shiftedLeft < minLeft) {
-    shiftX = minLeft - northWest.x;
-  } else if (shiftedRight > maxRight) {
-    shiftX = maxRight - northWest.x - buildingW;
+  if (shiftedLeft < minEdge) {
+    shiftX = minEdge - northWest.x;
+  } else if (shiftedLeft + buildingW > mapSize.x - minEdge) {
+    shiftX = mapSize.x - minEdge - northWest.x - buildingW;
   }
 
-  map.panBy([shiftX, 0], { animate: false });
+  const shiftedTop = northWest.y + shiftY;
+  if (shiftedTop < minEdge) {
+    shiftY = minEdge - northWest.y;
+  } else if (shiftedTop + buildingH > mapSize.y - minEdge) {
+    shiftY = mapSize.y - minEdge - northWest.y - buildingH;
+  }
+
+  if (shiftX || shiftY) {
+    const centerPoint = map.project(map.getCenter(), map.getZoom()).add([shiftX, shiftY]);
+    map.setView(map.unproject(centerPoint, map.getZoom()), map.getZoom(), { animate: false });
+  }
+
+  console.info(
+    `[mapa] encuadre edificio: zoom ${beforeZoom} → ${map.getZoom()} (fit ${fitZoom}), shift (${shiftX},${shiftY})`
+  );
 };
 
 export const openBuildingPopupLayer = (layer, options = {}) => {
@@ -2179,14 +2190,17 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
 
   suspendMapBoundsForPopup();
 
-  if (zoom && typeof layer.getBounds === "function") {
-    frameBuildingToLeftArea(layer);
-  } else if (zoom && typeof layer.getLatLng === "function") {
-    map.setView(layer.getLatLng(), maxZoom);
-  }
+  const hasBounds = zoom && typeof layer.getBounds === "function";
+  const hasPoint = zoom && typeof layer.getLatLng === "function";
 
   if (typeof layer.openPopup === "function") {
     layer.openPopup();
+  }
+
+  if (hasBounds) {
+    frameBuildingToLeftArea(layer);
+  } else if (hasPoint) {
+    map.setView(layer.getLatLng(), maxZoom);
   }
 
   return true;
@@ -2225,6 +2239,7 @@ const handleFeatureClick = (e) => {
     maxZoom: 20,
     padding: [40, 40],
   });
+  console.info("[mapa] clic edificio → openBuildingPopupLayer (zoom:true)");
 };
 
 const normalizeMatchRate = (value) => {
