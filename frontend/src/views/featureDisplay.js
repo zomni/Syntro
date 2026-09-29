@@ -2145,6 +2145,8 @@ const createBuildingViewMap = (layer) => {
   try {
     buildingViewContainer = document.createElement("div");
     buildingViewContainer.className = "building-view-map";
+    const panelWidth = Math.min(440, window.innerWidth - 28) + 28;
+    buildingViewContainer.style.right = Math.max(200, window.innerWidth - 200, panelWidth) + "px";
     document.body.appendChild(buildingViewContainer);
 
     buildingViewMap = L.map(buildingViewContainer, {
@@ -2188,57 +2190,10 @@ const createBuildingViewMap = (layer) => {
       buildingViewMap?.invalidateSize();
     });
 
-    const viewSize = buildingViewMap.getSize();
-    const rightReserve = Math.min(440, viewSize.x - 28) + 40;
-    const leftBoxX = Math.max(100, viewSize.x - rightReserve);
-    const minEdge = 20;
-    const availW = leftBoxX - 2 * minEdge;
-    const availH = viewSize.y - 2 * minEdge;
-
-    const zCur = buildingViewMap.getZoom();
-    const projNW = buildingViewMap.project(bounds.getNorthWest(), zCur);
-    const projSE = buildingViewMap.project(bounds.getSouthEast(), zCur);
-    const boundsW = Math.abs(projSE.x - projNW.x);
-    const boundsH = Math.abs(projSE.y - projNW.y);
-    let viewZoom = MAX_BUILDING_VIEW_ZOOM;
-    if (boundsW > 0 && boundsH > 0) {
-      viewZoom = Math.max(
-        buildingViewMap.getMinZoom(),
-        Math.min(
-          MAX_BUILDING_VIEW_ZOOM,
-          zCur + Math.log2(availW / boundsW),
-          zCur + Math.log2(availH / boundsH)
-        )
-      );
-    }
-    viewZoom = Math.floor(viewZoom);
-    buildingViewMap.setView(bounds.getCenter(), viewZoom, { animate: false });
-
-    const nwPoint = buildingViewMap.latLngToContainerPoint(bounds.getNorthWest());
-    const sePoint = buildingViewMap.latLngToContainerPoint(bounds.getSouthEast());
-    const width = Math.abs(sePoint.x - nwPoint.x);
-    const targetLeft = minEdge + (availW - width) / 2;
-    let deltaX = targetLeft - nwPoint.x;
-
-    if (Math.abs(deltaX) > 0.5) {
-      const centerPixel = buildingViewMap
-        .project(buildingViewMap.getCenter(), viewZoom)
-        .add([deltaX, 0]);
-      buildingViewMap.setView(buildingViewMap.unproject(centerPixel, viewZoom), viewZoom, {
-        animate: false,
-      });
-    }
-
     console.info(
-      `[mapa] vista edificio: zoom ${viewZoom}, shift (${deltaX},0), rightReserve ${rightReserve}, leftBox ${leftBoxX}`
-    );
-
-    console.info(
-      "[mapa] vista edificio creada: center=" +
-        bounds.getCenter().toString() +
-        " ancho=" +
-        Math.round(bounds.getNorthEast().distanceTo(bounds.getSouthEast())) +
-        "m"
+      `[mapa] vista edificio creada: center=${bounds.getCenter().toString()} ancho=${Math.round(
+        bounds.getNorthEast().distanceTo(bounds.getSouthEast())
+      )}m zoom=${buildingViewMap.getZoom()}`
     );
   } catch (err) {
     console.error("[mapa] vista edificio ERROR:", err);

@@ -2941,7 +2941,9 @@ body.map-building-panel #bLoc {
 --------------------------------------------------------------------------- */
 .building-view-map {
     position: fixed;
-    inset: 0;
+    left: 0;
+    top: 0;
+    bottom: 0;
     z-index: 1400;
     background: #0d1b2a;
 }
