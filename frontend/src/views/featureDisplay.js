@@ -1609,18 +1609,24 @@ const buildBuildingDetailHtml = (buildingDetail) => {
   return html || "Sin datos adicionales.";
 };
 
-const buildDevicesSummaryHtml = (devices, floorLabel) => {
-  if (!devices.length) {
-    return `No hay equipos cargados para ${escapeHtml(floorLabel)}.`;
-  }
+const PC_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`;
 
+const PRINTER_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`;
+
+const buildDevicesSummaryHtml = (devices) => {
   const counts = countDevicesByType(devices);
 
   return `
-    ${buildKeyValueRow("PCs", counts.pc)}
-    ${buildKeyValueRow("Impresoras", counts.printer)}
-    ${buildKeyValueRow("Escáneres", counts.scanner)}
-    ${buildKeyValueRow("Otros", counts.other)}
+    <div style="display:flex; align-items:center; gap:18px;">
+      <div style="display:flex; align-items:center; gap:6px;">
+        ${PC_ICON_SVG}
+        <span style="font-weight:600;">${counts.pc || 0}</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px;">
+        ${PRINTER_ICON_SVG}
+        <span style="font-weight:600;">${counts.printer || 0}</span>
+      </div>
+    </div>
   `;
 };
 
@@ -2043,10 +2049,10 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
 
     contentHtml = `
       <div style="${sectionBoxStyle}">
-        <div style="font-weight:600; margin-bottom:6px;">Equipos por tipo (${escapeHtml(devicesScopeLabel)})</div>
-        ${buildDevicesSummaryHtml(devicesForView, devicesScopeLabel)}
-        <div style="margin-top:10px; font-weight:600;">Equipos destacados</div>
-        ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize)}
+        ${buildDevicesSummaryHtml(devicesForView)}
+        <div style="margin-top:8px;">
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize)}
+        </div>
         <div style="margin-top:4px;">
           ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter)}
         </div>
@@ -2134,12 +2140,28 @@ const frameBuildingToLeftArea = (layer) => {
 
   map.fitBounds(bounds, {
     maxZoom: MAX_BUILDING_VIEW_ZOOM,
-    paddingTopLeft: [12, 12],
-    paddingBottomRight: [rightReserve, 12],
+    padding: [20, 20],
     animate: false,
   });
 
-  map.panBy([leftAreaWidth / 2 - mapSize.x / 2, 0], { animate: false });
+  const northWest = map.project(bounds.getNorthWest(), map.getZoom());
+  const southEast = map.project(bounds.getSouthEast(), map.getZoom());
+  const buildingW = southEast.x - northWest.x;
+
+  let shiftX = leftAreaWidth / 2 - mapSize.x / 2;
+
+  const minLeft = 20;
+  const maxRight = mapSize.x - 20;
+  const shiftedLeft = northWest.x + shiftX;
+  const shiftedRight = shiftedLeft + buildingW;
+
+  if (shiftedLeft < minLeft) {
+    shiftX = minLeft - northWest.x;
+  } else if (shiftedRight > maxRight) {
+    shiftX = maxRight - northWest.x - buildingW;
+  }
+
+  map.panBy([shiftX, 0], { animate: false });
 };
 
 export const openBuildingPopupLayer = (layer, options = {}) => {
