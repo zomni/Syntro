@@ -2969,6 +2969,8 @@ body.map-building-panel .building-panel-popup .leaflet-popup-content {
 body.map-building-panel .building-panel-popup .leaflet-popup-content [style*="68vh"] {
     height: 100% !important;
     max-height: none !important;
+    width: 100% !important;
+    max-width: none !important;
     box-sizing: border-box;
 }
 

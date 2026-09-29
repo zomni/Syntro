@@ -1613,21 +1613,179 @@ const PC_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="
 
 const PRINTER_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>`;
 
+const SCANNER_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="12" y1="7" x2="12" y2="17"/></svg>`;
+
+const OTHER_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`;
+
+const FLOOR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`;
+
+const ROOM_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
+
+const NETWORK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
+
+const PACKAGE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
+
+const DEVICE_TYPE_ICONS = {
+  pc: PC_ICON_SVG,
+  printer: PRINTER_ICON_SVG,
+  scanner: SCANNER_ICON_SVG,
+  other: OTHER_ICON_SVG,
+};
+
+const DEVICE_TYPE_COLORS = {
+  pc: "#2563eb",
+  printer: "#7c3aed",
+  scanner: "#0e7490",
+  other: "#64748b",
+};
+
+const DEVICE_TYPE_SINGULAR = {
+  pc: "PC",
+  printer: "Impresora",
+  scanner: "Escáner",
+  other: "Otro",
+};
+
+const CHIP_BASE_STYLE = `
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 8px; border-radius:999px;
+  font-size:11px; font-weight:600; line-height:1.5;
+  white-space:nowrap;
+`;
+
+const resizeIcon = (iconSvg, size = 13) =>
+  iconSvg.replace(/width="18"/, `width="${size}"`).replace(/height="18"/, `height="${size}"`);
+
+const getDeviceTypeIconHtml = (type, size = 13) => {
+  const key = normalizeDeviceType(type);
+  return resizeIcon(DEVICE_TYPE_ICONS[key] || DEVICE_TYPE_ICONS.other, size);
+};
+
+const getDeviceTypeColor = (type) =>
+  DEVICE_TYPE_COLORS[normalizeDeviceType(type)] || DEVICE_TYPE_COLORS.other;
+
+const buildDeviceTypeChipHtml = (type) => {
+  const key = normalizeDeviceType(type);
+  const color = getDeviceTypeColor(key);
+  const storedLabel = INVENTORY_CATEGORY_LABELS[key] || key;
+  const label = DEVICE_TYPE_SINGULAR[key] || storedLabel || type || "Otro";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:${color}1f; color:${color};">
+      ${getDeviceTypeIconHtml(key)}
+      ${escapeHtml(label)}
+    </span>
+  `;
+};
+
+const getStatusMeta = (status) => {
+  const raw = String(status || "").trim().toLowerCase();
+  if (!raw || /^(sin|unknown|desconocido|null|undefined)/.test(raw)) {
+    return { color: "#94a3b8", label: status || "Sin estado" };
+  }
+  if (/online|activo|alive|operativo|en.linea|up|ok|funcionando|conectado/.test(raw)) {
+    return { color: "#16a34a", label: "Online" };
+  }
+  if (/offline|inactivo|desconectado|falla|error|caido|caído|down|unavailable|sin servi/.test(raw)) {
+    return { color: "#dc2626", label: "Offline" };
+  }
+  if (/warning|warn|pendiente|parcial|mantenimiento|revisar/.test(raw)) {
+    return { color: "#d97706", label: "Pendiente" };
+  }
+  return { color: "#94a3b8", label: status || "Sin estado" };
+};
+
+const buildStatusBadgeHtml = (status) => {
+  const meta = getStatusMeta(status);
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:${meta.color}1f; color:${meta.color};">
+      <span style="width:8px; height:8px; border-radius:50%; background:${meta.color}; display:inline-block;"></span>
+      ${escapeHtml(meta.label)}
+    </span>
+  `;
+};
+
+const buildFloorBadgeHtml = (floor) => {
+  const value = Number(floor);
+  if (!Number.isFinite(value)) return "";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:#0f766e1f; color:#0f766e;">
+      ${resizeIcon(FLOOR_ICON_SVG)}
+      ${escapeHtml(String(value))}
+    </span>
+  `;
+};
+
+const buildRoomChipHtml = (roomName) => {
+  const label = String(roomName || "").trim() || "Sin sala";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:#0284c71f; color:#0284c7;">
+      ${resizeIcon(ROOM_ICON_SVG)}
+      ${escapeHtml(label)}
+    </span>
+  `;
+};
+
+const buildRoomTypeChipHtml = (type) => {
+  const label = String(type || "").trim() || "Sin tipo";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:#0284c71f; color:#0284c7;">
+      ${resizeIcon(ROOM_ICON_SVG)}
+      ${escapeHtml(label)}
+    </span>
+  `;
+};
+
+const buildIpLabelHtml = (ip) => {
+  const value = String(ip || "").trim();
+  if (!value || /^sin/i.test(value)) return "";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:#47556914; color:#475569; font-family:Consolas, Menlo, monospace;">
+      ${resizeIcon(NETWORK_ICON_SVG)}
+      ${escapeHtml(value)}
+    </span>
+  `;
+};
+
+const buildDeviceCountChipHtml = (count) => `
+  <span style="${CHIP_BASE_STYLE}; background:#64748b1f; color:#64748b;">
+    ${resizeIcon(PACKAGE_ICON_SVG)}
+    ${escapeHtml(String(count))} equipo(s)
+  </span>
+`;
+
+const buildChipsRowHtml = (...chips) => `
+  <div style="margin-top:6px; display:flex; flex-wrap:wrap; gap:5px; align-items:center;">
+    ${chips.filter(Boolean).join("")}
+  </div>
+`;
+
 const buildDevicesSummaryHtml = (devices) => {
   const counts = countDevicesByType(devices);
+  const presentTypes = INVENTORY_CATEGORY_ORDER.filter((type) => counts[type]);
+  const extraTypes = Object.keys(counts).filter(
+    (type) => !INVENTORY_CATEGORY_ORDER.includes(type) && counts[type]
+  );
+  const allTypes = presentTypes.concat(extraTypes);
 
-  return `
-    <div style="display:flex; align-items:center; gap:18px;">
-      <div style="display:flex; align-items:center; gap:6px;">
-        ${PC_ICON_SVG}
-        <span style="font-weight:600;">${counts.pc || 0}</span>
-      </div>
-      <div style="display:flex; align-items:center; gap:6px;">
-        ${PRINTER_ICON_SVG}
-        <span style="font-weight:600;">${counts.printer || 0}</span>
-      </div>
-    </div>
-  `;
+  if (!allTypes.length) {
+    return buildChipsRowHtml(`
+      <span style="${CHIP_BASE_STYLE}; background:#64748b1f; color:#64748b;">
+        ${getDeviceTypeIconHtml("other")}
+        <span style="font-weight:700;">0</span>
+      </span>
+    `);
+  }
+
+  return buildChipsRowHtml(
+    ...allTypes.map(
+      (type) => `
+        <span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">
+          ${getDeviceTypeIconHtml(type)}
+          <span style="font-weight:700;">${counts[type]}</span>
+        </span>
+      `
+    )
+  );
 };
 
 const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter) => {
@@ -1679,7 +1837,6 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
     const description = device.description || device.name || "Sin descripcion";
     const isHighlighted = highlightDevice === device;
     const deviceFloor = getDeviceFloor(device, roomsMap);
-    const floorText = Number.isFinite(deviceFloor) ? `Piso ${deviceFloor}` : "";
     const cardStyle = isHighlighted
       ? "margin-bottom:8px; padding:8px 10px; border:2px solid #2f7ea8; border-radius:8px; background:#f0f7fb;"
       : "margin-bottom:8px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fafafa;";
@@ -1695,9 +1852,13 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
         <div style="margin-top:2px; font-size:12px;">
           ${escapeHtml(description)}
         </div>
-        <div style="margin-top:2px; font-size:12px;">
-          ${escapeHtml(device.type || "sin_tipo")} · ${escapeHtml(floorText)}${floorText ? " · " : ""}${escapeHtml(roomName)} · IP: ${escapeHtml(device.ip || "sin IP")} · ${escapeHtml(device.status || "sin estado")}
-        </div>
+        ${buildChipsRowHtml(
+          buildDeviceTypeChipHtml(device.type),
+          buildFloorBadgeHtml(deviceFloor),
+          buildRoomChipHtml(roomName),
+          buildIpLabelHtml(device.ip),
+          buildStatusBadgeHtml(device.status)
+        )}
         <div style="margin-top:6px;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
         </div>
@@ -1758,6 +1919,7 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
         style="${getChipButtonStyle(isCurrent, false)}"
         onclick="window.selectBuildingFloor && window.selectBuildingFloor('${escapeHtml(String(floor))}')"
       >
+        ${resizeIcon(FLOOR_ICON_SVG, 12)}
         ${escapeHtml(String(floor))}
       </button>
     `;
@@ -1865,9 +2027,11 @@ const buildRoomsListWithButtonsHtml = (featureId, rooms, devices, floorLabel) =>
     html += `
       <div style="margin-bottom:10px; padding:10px; border:1px solid #ddd; border-radius:8px; background:#fafafa;">
         <div style="font-weight:600; margin-bottom:3px;">${escapeHtml(room.name || room.shortName || room.roomId)}</div>
-        <div style="font-size:12px; color:#444;">
-          ${escapeHtml(room.type || "sin_tipo")} · ${escapeHtml(room.status || "sin_estado")} · ${roomDevicesCount} equipo(s)
-        </div>
+        ${buildChipsRowHtml(
+          buildRoomTypeChipHtml(room.type),
+          buildStatusBadgeHtml(room.status),
+          buildDeviceCountChipHtml(roomDevicesCount)
+        )}
         <div style="margin-top:8px;">
           <button
             class="floorButton"
@@ -1924,9 +2088,11 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
       html += `
         <div style="margin-top:6px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fafafa;">
           <div style="font-weight:600;">${escapeHtml(device.name || device.deviceId)}</div>
-          <div style="font-size:12px; margin-top:2px;">
-            ${escapeHtml(device.type || "sin_tipo")} · IP: ${escapeHtml(device.ip || "sin IP")} · ${escapeHtml(device.status || "sin estado")}
-          </div>
+          ${buildChipsRowHtml(
+            buildDeviceTypeChipHtml(device.type),
+            buildIpLabelHtml(device.ip),
+            buildStatusBadgeHtml(device.status)
+          )}
         <div style="margin-top:6px;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
         </div>
