@@ -2145,8 +2145,6 @@ const createBuildingViewMap = (layer) => {
   try {
     buildingViewContainer = document.createElement("div");
     buildingViewContainer.className = "building-view-map";
-    const panelWidth = Math.min(440, window.innerWidth - 28) + 28;
-    buildingViewContainer.style.right = Math.max(200, window.innerWidth - 200, panelWidth) + "px";
     document.body.appendChild(buildingViewContainer);
 
     buildingViewMap = L.map(buildingViewContainer, {
@@ -2155,8 +2153,9 @@ const createBuildingViewMap = (layer) => {
       boxZoom: false,
       keyboard: false,
       scrollWheelZoom: false,
-      doubleClickZoom: false,
+      dragging: false,
       touchZoom: false,
+      doubleClickZoom: false,
       minZoom: 12,
       maxZoom: MAX_BUILDING_VIEW_ZOOM,
     });

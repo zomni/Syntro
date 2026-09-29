@@ -2936,6 +2936,24 @@ body.map-building-panel #bLoc {
 }
 
 /* ---------------------------------------------------------------------------
+   Building view: dos contenedores adyacentes de pantalla completa. Mapa 70%
+   (estatico, edificio con zoom) y ventana de info 30%, ambos de alto completo.
+--------------------------------------------------------------------------- */
+body.map-building-panel .building-panel-popup {
+    top: 0 !important;
+    right: 0 !important;
+    left: auto !important;
+    bottom: 0 !important;
+    width: 30vw !important;
+    max-width: none !important;
+    height: 100vh;
+    max-height: none !important;
+    border-radius: 0;
+    box-shadow: none;
+    border-left: 1px solid rgba(15, 50, 75, 0.15);
+}
+
+/* ---------------------------------------------------------------------------
    Building view: vista dedicada "foto/zoom" del edificio (estilo editor de salas).
    Se apoya debajo del panel de info (z-index 1500).
 --------------------------------------------------------------------------- */
@@ -2944,6 +2962,7 @@ body.map-building-panel #bLoc {
     left: 0;
     top: 0;
     bottom: 0;
+    right: 30vw;
     z-index: 1400;
     background: #0d1b2a;
 }
