@@ -2094,8 +2094,10 @@ export const style = (feature) => {
 };
 
 let buildingPanelMapFrozen = false;
-let buildingViewPreviousMaxZoom = null;
+let buildingViewMap = null;
+let buildingViewContainer = null;
 const MAX_BUILDING_VIEW_ZOOM = 22;
+const BUILDING_VIEW_OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 const freezeMapForBuildingPanel = () => {
   if (buildingPanelMapFrozen) return;
@@ -2121,58 +2123,82 @@ const unfreezeMapForBuildingPanel = () => {
       }
     }
   );
+};
 
-  if (buildingViewPreviousMaxZoom !== null) {
-    map.setMaxZoom(buildingViewPreviousMaxZoom);
-    buildingViewPreviousMaxZoom = null;
+const destroyBuildingViewMap = () => {
+  if (buildingViewMap) {
+    buildingViewMap.remove();
+    buildingViewMap = null;
+  }
+  if (buildingViewContainer) {
+    buildingViewContainer.remove();
+    buildingViewContainer = null;
   }
 };
 
-const frameBuildingToLeftArea = (layer) => {
-  const bounds = layer.getBounds();
-  const mapSize = map.getSize();
-  const panelWidth = Math.min(440, mapSize.x - 28);
-  const rightReserve = panelWidth + 28;
-  const leftAreaWidth = Math.max(180, mapSize.x - rightReserve);
+const createBuildingViewMap = (layer) => {
+  destroyBuildingViewMap();
 
-  const beforeZoom = map.getZoom();
-  buildingViewPreviousMaxZoom = map.getMaxZoom();
-  map.setMaxZoom(MAX_BUILDING_VIEW_ZOOM);
+  const bounds = typeof layer.getBounds === "function" ? layer.getBounds() : null;
+  if (!bounds) return;
 
-  const fitZoom = Math.min(MAX_BUILDING_VIEW_ZOOM, map.getBoundsZoom(bounds, false, [20, 20]));
-  map.setView(bounds.getCenter(), fitZoom, { animate: false });
+  try {
+    buildingViewContainer = document.createElement("div");
+    buildingViewContainer.className = "building-view-map";
+    document.body.appendChild(buildingViewContainer);
 
-  const northWest = map.project(bounds.getNorthWest(), map.getZoom());
-  const southEast = map.project(bounds.getSouthEast(), map.getZoom());
-  const buildingW = southEast.x - northWest.x;
-  const buildingH = southEast.y - northWest.y;
+    buildingViewMap = L.map(buildingViewContainer, {
+      zoomControl: false,
+      attributionControl: false,
+      boxZoom: false,
+      keyboard: false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      touchZoom: false,
+      minZoom: 12,
+      maxZoom: MAX_BUILDING_VIEW_ZOOM,
+    });
 
-  let shiftX = leftAreaWidth / 2 - mapSize.x / 2;
-  let shiftY = 0;
+    L.tileLayer(BUILDING_VIEW_OSM_TILE_URL, {
+      maxNativeZoom: 19,
+      maxZoom: MAX_BUILDING_VIEW_ZOOM,
+      minZoom: 12,
+      keepBuffer: 8,
+      updateWhenIdle: false,
+      updateWhenZooming: true,
+    }).addTo(buildingViewMap);
 
-  const minEdge = 20;
-  const shiftedLeft = northWest.x + shiftX;
-  if (shiftedLeft < minEdge) {
-    shiftX = minEdge - northWest.x;
-  } else if (shiftedLeft + buildingW > mapSize.x - minEdge) {
-    shiftX = mapSize.x - minEdge - northWest.x - buildingW;
+    const outerRing =
+      typeof layer.getLatLngs === "function" && Array.isArray(layer.getLatLngs()[0])
+        ? layer.getLatLngs()[0]
+        : null;
+    if (outerRing) {
+      L.polygon(outerRing, {
+        color: "#1e40af",
+        weight: 3,
+        fillColor: "#1e40af",
+        fillOpacity: 0.08,
+        dashArray: "8 4",
+        interactive: false,
+      }).addTo(buildingViewMap);
+    }
+
+    buildingViewMap.fitBounds(bounds, { padding: [20, 20], maxZoom: MAX_BUILDING_VIEW_ZOOM });
+    buildingViewMap.whenReady(() => {
+      buildingViewMap?.invalidateSize();
+    });
+
+    console.info(
+      "[mapa] vista edificio creada: center=" +
+        bounds.getCenter().toString() +
+        " ancho=" +
+        Math.round(bounds.getNorthEast().distanceTo(bounds.getSouthEast())) +
+        "m"
+    );
+  } catch (err) {
+    console.error("[mapa] vista edificio ERROR:", err);
+    destroyBuildingViewMap();
   }
-
-  const shiftedTop = northWest.y + shiftY;
-  if (shiftedTop < minEdge) {
-    shiftY = minEdge - northWest.y;
-  } else if (shiftedTop + buildingH > mapSize.y - minEdge) {
-    shiftY = mapSize.y - minEdge - northWest.y - buildingH;
-  }
-
-  if (shiftX || shiftY) {
-    const centerPoint = map.project(map.getCenter(), map.getZoom()).add([shiftX, shiftY]);
-    map.setView(map.unproject(centerPoint, map.getZoom()), map.getZoom(), { animate: false });
-  }
-
-  console.info(
-    `[mapa] encuadre edificio: zoom ${beforeZoom} → ${map.getZoom()} (fit ${fitZoom}), shift (${shiftX},${shiftY})`
-  );
 };
 
 export const openBuildingPopupLayer = (layer, options = {}) => {
@@ -2198,7 +2224,7 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
   }
 
   if (hasBounds) {
-    frameBuildingToLeftArea(layer);
+    createBuildingViewMap(layer);
   } else if (hasPoint) {
     map.setView(layer.getLatLng(), maxZoom);
   }
@@ -2575,6 +2601,7 @@ export const onEachFeature = (feature, layer) => {
 
     layer.on("popupclose", () => {
       document.body.classList.remove("map-building-panel");
+      destroyBuildingViewMap();
       unfreezeMapForBuildingPanel();
 
       if (currentOpenLayer === layer) {

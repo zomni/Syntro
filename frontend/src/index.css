@@ -2934,3 +2934,18 @@ body.map-building-panel #searchContainer,
 body.map-building-panel #bLoc {
     display: none !important;
 }
+
+/* ---------------------------------------------------------------------------
+   Building view: vista dedicada "foto/zoom" del edificio (estilo editor de salas).
+   Se apoya debajo del panel de info (z-index 1500).
+--------------------------------------------------------------------------- */
+.building-view-map {
+    position: fixed;
+    inset: 0;
+    z-index: 1400;
+    background: #0d1b2a;
+}
+
+.building-view-map .leaflet-control-attribution {
+    display: none !important;
+}
