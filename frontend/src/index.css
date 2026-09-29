@@ -2935,6 +2935,23 @@ body.map-building-panel #bLoc {
     display: none !important;
 }
 
+body.map-building-panel .building-view-map {
+    animation: buildingPanelReveal 0.35s ease-out;
+}
+
+body.map-building-panel .building-panel-popup {
+    animation: buildingPanelReveal 0.35s ease-out;
+}
+
+@keyframes buildingPanelReveal {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
 /* ---------------------------------------------------------------------------
    Building view: dos contenedores adyacentes de pantalla completa. Mapa 70%
    (estatico, edificio con zoom) y ventana de info 30%, ambos de alto completo.

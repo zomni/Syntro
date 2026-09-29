@@ -2258,6 +2258,8 @@ export const style = (feature) => {
 let buildingPanelMapFrozen = false;
 let buildingViewMap = null;
 let buildingViewContainer = null;
+let buildingViewAnimateNext = false;
+let buildingViewFlyToken = 0;
 const MAX_BUILDING_VIEW_ZOOM = 22;
 const BUILDING_VIEW_OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
 
@@ -2366,7 +2368,7 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
   if (!layer) return false;
   if (buildingPanelMapFrozen) return false;
 
-  const { zoom = true, rememberView = true, maxZoom = 20 } = options;
+  const { zoom = true, rememberView = true, maxZoom = 20, animate = false } = options;
 
   if (rememberView) {
     popupReturnView = {
@@ -2374,6 +2376,8 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
       zoom: map.getZoom(),
     };
   }
+
+  buildingViewAnimateNext = Boolean(animate);
 
   suspendMapBoundsForPopup();
 
@@ -2420,6 +2424,7 @@ const handleFeatureClick = (e) => {
   openBuildingPopupLayer(e?.target, {
     zoom: true,
     rememberView: true,
+    animate: true,
     maxZoom: 20,
     padding: [40, 40],
   });
@@ -2564,6 +2569,7 @@ const createMatchBubbleForLayer = async (feature, layer) => {
     openBuildingPopupLayer(layer, {
       zoom: true,
       rememberView: true,
+      animate: true,
       maxZoom: 20,
       padding: [40, 40],
     });
@@ -2672,6 +2678,7 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
     openBuildingPopupLayer(layer, {
       zoom: true,
       rememberView: true,
+      animate: true,
       maxZoom: 20,
       padding: [40, 40],
     });
@@ -2740,25 +2747,72 @@ export const onEachFeature = (feature, layer) => {
       layer.getPopup().options.closeOnClick = false;
     }
 
+    if (feature.geometry.type === "Polygon") {
+      layer.off("click");
+    }
+
     layer.on("popupopen", async () => {
-      document.body.classList.add("map-building-panel");
+      const animateOpen = buildingViewAnimateNext;
+      buildingViewAnimateNext = false;
+
       suspendMapBoundsForPopup();
       setCurrentOpenFeatureId(feature?.properties?.id || null);
       currentOpenLayer = layer;
       setSelectedLayer(layer);
       dockBuildingPopup(layer);
       freezeMapForBuildingPanel();
-      createBuildingViewMap(layer);
 
       if (!popupViewState[feature.properties.id]) {
         popupViewState[feature.properties.id] = null;
       }
 
-      const popupHtml = await getFeaturePopupHtml(feature);
-      layer.setPopupContent(popupHtml);
+      const htmlPromise = getFeaturePopupHtml(feature);
+
+      const shouldAnimate =
+        animateOpen &&
+        typeof layer.getBounds === "function" &&
+        !(typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+
+      if (shouldAnimate) {
+        const token = ++buildingViewFlyToken;
+        const bounds = layer.getBounds();
+
+        await new Promise((resolve) => {
+          let done = false;
+          const finish = () => {
+            if (done) return;
+            done = true;
+            map.off("moveend", finish);
+            window.clearTimeout(fallbackTimer);
+            resolve();
+          };
+          const fallbackTimer = window.setTimeout(finish, 1700);
+          map.once("moveend", finish);
+          map.flyToBounds(bounds, {
+            padding: [60, 100],
+            duration: 0.9,
+            easeLinearity: 0.22,
+            maxZoom: 20,
+          });
+        });
+
+        if (token !== buildingViewFlyToken || currentOpenLayer !== layer || !buildingPanelMapFrozen) {
+          return;
+        }
+
+        document.body.classList.add("map-building-panel");
+        createBuildingViewMap(layer);
+      } else {
+        document.body.classList.add("map-building-panel");
+        createBuildingViewMap(layer);
+      }
+
+      layer.setPopupContent(await htmlPromise);
     });
 
     layer.on("popupclose", () => {
+      buildingViewFlyToken += 1;
+      buildingViewAnimateNext = false;
       document.body.classList.remove("map-building-panel");
       destroyBuildingViewMap();
       unfreezeMapForBuildingPanel();
@@ -2781,10 +2835,10 @@ export const onEachFeature = (feature, layer) => {
         map.once("moveend", restoreOnce);
         map.flyTo(view.center, view.zoom, {
           animate: true,
-          duration: 0.45,
+          duration: 0.55,
           easeLinearity: 0.25,
         });
-        window.setTimeout(restoreOnce, 650);
+        window.setTimeout(restoreOnce, 750);
       } else {
         restoreMapBoundsAfterPopup();
       }
