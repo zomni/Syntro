@@ -2194,12 +2194,12 @@ const createBuildingViewMap = (layer) => {
     const minEdge = 20;
     let deltaX = (viewSize.x - rightReserve) / 2 - viewSize.x / 2;
 
-    const projectedNW = buildingViewMap.project(bounds.getNorthWest(), viewZoom);
-    const projectedSE = buildingViewMap.project(bounds.getSouthEast(), viewZoom);
-    if (projectedNW.x + deltaX < minEdge) {
-      deltaX = minEdge - projectedNW.x;
-    } else if (projectedSE.x + deltaX > viewSize.x - minEdge) {
-      deltaX = viewSize.x - minEdge - projectedSE.x;
+    const nwPoint = buildingViewMap.latLngToContainerPoint(bounds.getNorthWest());
+    const sePoint = buildingViewMap.latLngToContainerPoint(bounds.getSouthEast());
+    if (nwPoint.x + deltaX < minEdge) {
+      deltaX = minEdge - nwPoint.x;
+    } else if (sePoint.x + deltaX > viewSize.x - minEdge) {
+      deltaX = viewSize.x - minEdge - sePoint.x;
     }
 
     if (deltaX) {
