@@ -89,7 +89,7 @@ map.on(L.Draw.Event.CREATED, async function(e) {
     coord = [coord];
   }
   var featureName = await appPrompt("Enter marker/room name:");
-  var placeType = await appPrompt("Enter place type: \n (amusement_park, auditorium, bakery, break_room, building, bus_station, cafeteria, car_parking, casino, changing_room, cinema, class, classroom, computer_room, decoration, disabled_toilet, drinking_fountain, elevator, entranceexit, fast_food, fruits_and_vegetables, gym, hall, hotel, information_desk, library, liquor, meeting_area, meeting_available, meeting_point, meeting_room, men_restroom, menwomen_restroom, movie_rental, night_club, office-dark, office, park, pharmacy, printer, quiet_zone, ramp, reception, recycle, restaurant, restroom_2, room, school, seating_area, stairs, storage, studio_photo, technical_room, toilet_disabled, tv, university, welcome_house, wifi, women_restroom)");
+  var placeType = await appPrompt("Enter place type: \n (bus_station, cafeteria, car_parking, disabled_toilet, elevator, entranceexit, fast_food, fruits_and_vegetables, hall, information_desk, meeting_point, menwomen_restroom, park, pharmacy, printer, recycle, room, stairs, storage, technical_room, wifi)");
   layer.options.properties = new properties(
     geometry,
     coord,
