@@ -2188,6 +2188,33 @@ const createBuildingViewMap = (layer) => {
       buildingViewMap?.invalidateSize();
     });
 
+    const viewSize = buildingViewMap.getSize();
+    const rightReserve = Math.min(440, viewSize.x - 28) + 40;
+    const viewZoom = buildingViewMap.getZoom();
+    const minEdge = 20;
+    let deltaX = (viewSize.x - rightReserve) / 2 - viewSize.x / 2;
+
+    const projectedNW = buildingViewMap.project(bounds.getNorthWest(), viewZoom);
+    const projectedSE = buildingViewMap.project(bounds.getSouthEast(), viewZoom);
+    if (projectedNW.x + deltaX < minEdge) {
+      deltaX = minEdge - projectedNW.x;
+    } else if (projectedSE.x + deltaX > viewSize.x - minEdge) {
+      deltaX = viewSize.x - minEdge - projectedSE.x;
+    }
+
+    if (deltaX) {
+      const centerPixel = buildingViewMap
+        .project(buildingViewMap.getCenter(), viewZoom)
+        .add([deltaX, 0]);
+      buildingViewMap.setView(buildingViewMap.unproject(centerPixel, viewZoom), viewZoom, {
+        animate: false,
+      });
+    }
+
+    console.info(
+      `[mapa] vista edificio: zoom ${viewZoom}, shift (${deltaX},0), rightReserve ${rightReserve}`
+    );
+
     console.info(
       "[mapa] vista edificio creada: center=" +
         bounds.getCenter().toString() +
@@ -2216,16 +2243,13 @@ export const openBuildingPopupLayer = (layer, options = {}) => {
 
   suspendMapBoundsForPopup();
 
-  const hasBounds = zoom && typeof layer.getBounds === "function";
   const hasPoint = zoom && typeof layer.getLatLng === "function";
 
   if (typeof layer.openPopup === "function") {
     layer.openPopup();
   }
 
-  if (hasBounds) {
-    createBuildingViewMap(layer);
-  } else if (hasPoint) {
+  if (hasPoint) {
     map.setView(layer.getLatLng(), maxZoom);
   }
 
@@ -2590,6 +2614,7 @@ export const onEachFeature = (feature, layer) => {
       setSelectedLayer(layer);
       dockBuildingPopup(layer);
       freezeMapForBuildingPanel();
+      createBuildingViewMap(layer);
 
       if (!popupViewState[feature.properties.id]) {
         popupViewState[feature.properties.id] = null;
