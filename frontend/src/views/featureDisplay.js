@@ -1053,7 +1053,7 @@ const deviceMatchesQuery = (device, query, roomsMap) => {
   return tokens.every((token) => haystack.includes(token));
 };
 
-const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize) => {
+const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize, extraActions = "") => {
   const sizeOptions = [5, 10, 20, 50];
   const resolvedSize = Math.max(5, Number(pageSize) || 5);
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
@@ -1086,6 +1086,7 @@ const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize) => {
         ${buttonLabel}
       </button>
       ${inputHtml}
+      ${extraActions}
     </div>
     <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <div style="font-size:12px; color:#475569;">Mostrar</div>
@@ -2217,7 +2218,7 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
       <div style="${sectionBoxStyle}">
         ${buildDevicesSummaryHtml(devicesForView)}
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize)}
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml)}
         </div>
         <div style="margin-top:4px;">
           ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter)}
@@ -2241,11 +2242,6 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
     </div>
   `;
 
-  detailsHtml += `
-    <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px;">
-      ${adminActionsHtml}
-    </div>
-  `;
   detailsHtml += `</div>`;
 
   return detailsHtml;

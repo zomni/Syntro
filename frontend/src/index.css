@@ -2962,6 +2962,7 @@ body.map-building-panel .building-panel-popup .leaflet-popup-content-wrapper {
 body.map-building-panel .building-panel-popup .leaflet-popup-content {
     height: 100vh !important;
     margin: 0 !important;
+    padding: 16px 18px;
     box-sizing: border-box;
     overflow: hidden;
 }
