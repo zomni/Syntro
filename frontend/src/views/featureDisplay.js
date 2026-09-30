@@ -3092,12 +3092,12 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
   if (!featureId || typeof layer?.getBounds !== "function") return;
   if (isWayfindingMode()) return;
 
-  const session = await loadBackendSession();
-  if (!session?.isAuthenticated) return;
-
   const summaryMap = await loadBuildingEquipmentSummary();
   if (!layer?._map) return;
   ensureMapEquipmentTypeFilter(summaryMap);
+
+  const session = await loadBackendSession();
+  if (!session?.isAuthenticated) return;
 
   const summary = summaryMap.get(featureId);
   const selectedFloor = getSelectedMapFloor();
