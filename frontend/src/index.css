@@ -1824,6 +1824,54 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     transform: translateY(-1px);
 }
 
+.building-sector-contour {
+    filter: blur(1.2px);
+}
+
+html[data-admin-map-tool-mode="geometry-shape"] .building-sector-contour,
+html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
+    display: none;
+}
+
+.building-floor-total-bubble {
+    pointer-events: auto;
+    cursor: pointer;
+    z-index: 600;
+}
+
+html[data-admin-map-tool-mode="geometry-shape"] .building-floor-total-bubble,
+html[data-admin-map-tool-mode="geometry-move"] .building-floor-total-bubble {
+    display: none;
+}
+
+.building-floor-total-bubble button {
+    width: 44px;
+    height: 44px;
+    border: 2px solid rgba(var(--pi-surface-rgb), 0.95);
+    border-radius: 999px;
+    background: #0f766e;
+    box-shadow: 0 8px 18px rgba(var(--pi-ink-rgb), 0.26);
+    color: var(--pi-surface);
+    cursor: pointer;
+    font: 800 14px/1 sans-serif;
+    text-align: center;
+}
+
+.building-floor-total-bubble button:hover {
+    background: #115e59;
+    transform: translateY(-1px);
+}
+
+.room-editor-suggestion-tooltip {
+    background: #1f2937;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f9fafb;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
 .building-match-bubble {
     pointer-events: auto;
 }

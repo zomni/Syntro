@@ -9,7 +9,7 @@ const footerId = "admin-map-tools-footer";
 const sectionDefinitions = {
   dimensions: ["Dimensiones", "&#9638;"],
   buildings: ["Edificios", "&#9634;"],
-  rooms: ["Salas", "&#9635;"],
+  rooms: ["Sectores", "&#9635;"],
   routes: ["Rutas", "&#8734;"],
 };
 const activeModes = new Map([

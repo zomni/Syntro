@@ -12,10 +12,10 @@ import {
   buildSnapRefs,
   simplifyRing,
   distanceMeters,
-  generateContourRooms,
 } from "../utils/roomEditorGeometry.js";
+import { divideBuildingIntoSectors, sectorCountForArea } from "../utils/sectorDivision.js";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
-import { appConfirm } from "../utils/appDialog.js";
+import { appConfirm, appPrompt } from "../utils/appDialog.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -183,7 +183,7 @@ const listenForBuildingClick = () => {
 const openRoomEditor = async (buildingExternalId, feature) => {
   if (!buildingExternalId) return;
 
-  setAdminMapToolsStatus("Abriendo editor de salas...");
+  setAdminMapToolsStatus("Abriendo editor de sectores...");
 
   try {
     const buildingData = await fetchBuildingGeometry(buildingExternalId);
@@ -248,11 +248,11 @@ const openRoomEditor = async (buildingExternalId, feature) => {
     updatePopupContent();
     installKeyboardShortcuts();
 
-    setAdminMapToolsStatus("Editor de salas abierto. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
+    setAdminMapToolsStatus("Editor de sectores abierto. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
     requestAdminMapToolMode("room-edit");
   } catch (error) {
     console.error("Error opening room editor:", error);
-    setAdminMapToolsStatus("Error al abrir editor de salas.");
+    setAdminMapToolsStatus("Error al abrir editor de sectores.");
   }
 };
 
@@ -594,7 +594,7 @@ const applyBoxSelection = (bounds, ctrlAdd) => {
   currentEditorState._suppressDeselectClick = true;
   renderRooms();
   updatePopupContent();
-  setAdminMapToolsStatus(`${hitIds.length} sala(s) seleccionadas. Ctrl+drag agrega al marco, G para guardar.`);
+  setAdminMapToolsStatus(`${hitIds.length} sector(es) seleccionado(s). Ctrl+drag agrega al marco, G para guardar.`);
 };
 
 const handleMapDeselectClick = (e) => {
@@ -664,7 +664,7 @@ const updateTopBar = () => {
 
   const count = document.createElement("span");
   count.className = "room-editor-room-count";
-  count.textContent = `${roomCount} sala(s)`;
+  count.textContent = `${roomCount} sector(es)`;
   topBarEl.appendChild(count);
 
   const hint = document.createElement("span");
@@ -832,7 +832,7 @@ const updateBottomBar = () => {
   pasteBtn.type = "button";
   pasteBtn.className = "room-editor-tool-btn is-icon-only";
   pasteBtn.innerHTML = `<span>${ICONS.paste}</span>`;
-  pasteBtn.title = "Pegar sala (Ctrl+V)";
+  pasteBtn.title = "Pegar sector (Ctrl+V)";
   pasteBtn.disabled = !copiedRoomData;
   pasteBtn.addEventListener("click", () => pasteRoom());
   tools.appendChild(pasteBtn);
@@ -868,7 +868,7 @@ const updateBottomBar = () => {
 
   const sugItem = document.createElement("div");
   sugItem.className = "room-editor-dropdown-item";
-  sugItem.innerHTML = `${ICONS.suggest} Sugerir salas automaticamente`;
+  sugItem.innerHTML = `${ICONS.suggest} Sugerir sectores automaticamente`;
   sugItem.addEventListener("click", () => { runQuickSuggestion(); });
   dropdown.appendChild(sugItem);
 
@@ -1108,9 +1108,10 @@ const buildPropertiesPanel = (room) => {
         <input value="${escapeHtml(room.displayName || "")}" data-prop="displayName" />
       </label>
       <label>Tipo
-        <select data-prop="type">
-          <option value="sala" ${room.type === "sala" ? "selected" : ""}>Sala</option>
-          <option value="oficina" ${room.type === "oficina" ? "selected" : ""}>Oficina</option>
+<select data-prop="type">
+        <option value="sector" ${room.type === "sector" ? "selected" : ""}>Sector</option>
+        <option value="sala" ${room.type === "sala" ? "selected" : ""}>Sala</option>
+        <option value="oficina" ${room.type === "oficina" ? "selected" : ""}>Oficina</option>
           <option value="box" ${room.type === "box" ? "selected" : ""}>Box</option>
           <option value="bodega" ${room.type === "bodega" ? "selected" : ""}>Bodega</option>
           <option value="estacion_enfermeria" ${room.type === "estacion_enfermeria" ? "selected" : ""}>Est. Enfermeria</option>
@@ -1158,9 +1159,9 @@ const buildPropertiesPanel = (room) => {
       type="button"
       class="room-editor-tool-btn room-editor-delete-room-btn"
       data-action="delete-room"
-      title="Eliminar esta sala"
+      title="Eliminar este sector"
     >
-      <span>${ICONS.delete}</span> Eliminar sala
+      <span>${ICONS.delete}</span> Eliminar sector
     </button>
   `;
 
@@ -1190,7 +1191,7 @@ const buildPropertiesPanel = (room) => {
   if (deleteRoomBtn) {
     deleteRoomBtn.addEventListener("click", async () => {
       if (!currentEditorState?.selectedRoom) return;
-      if (!(await appConfirm("¿Eliminar esta sala?"))) return;
+      if (!(await appConfirm("¿Eliminar este sector?"))) return;
       deleteSelectedRoom();
       updateSidePanel();
     });
@@ -1928,7 +1929,7 @@ const selectOnlyRoom = (room) => {
   renderRooms();
   updateSidePanel();
   updateBottomBar();
-  setAdminMapToolsStatus(`1 sala seleccionada. Ctrl+click para agregar/quitar mas, Ctrl+arrastrar para mover, Shift+arrastrar para rotar, G para guardar.`);
+  setAdminMapToolsStatus(`1 sector seleccionado. Ctrl+click para agregar/quitar mas, Ctrl+arrastrar para mover, Shift+arrastrar para rotar, G para guardar.`);
 };
 
 const clearRoomSelection = () => {
@@ -1945,6 +1946,8 @@ const selectRoomEditorFloor = async (floor) => {
   currentEditorState.selectedRoomIds = [];
   currentEditorState.removedExternalIds = [];
   currentEditorState.removedMarkerExternalIds = [];
+  clearSuggestionPreviewLayers();
+  currentEditorState.suggestions = [];
   clearDrawState();
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
@@ -2302,12 +2305,12 @@ const startDrawHand = () => {
       const ratio = insideCount / closedRing.length;
       if (ratio < 0.5) {
         clearDrawState();
-        setAdminMapToolsStatus("Sala fuera del contorno del edificio. Ctrl+Z para deshacer.");
+        setAdminMapToolsStatus("Sector fuera del contorno del edificio. Ctrl+Z para deshacer.");
         createNewRoom(geoJsonCoords);
         return;
       }
       if (ratio < 1) {
-        setAdminMapToolsStatus("Parte de la sala fuera del contorno. Se guardara igual.");
+        setAdminMapToolsStatus("Parte del sector fuera del contorno. Se guardara igual.");
       }
     }
 
@@ -2399,9 +2402,9 @@ const buildNewRoomObject = (geoJsonCoords, extra = {}) => ({
   externalId: extra.externalId || `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
   buildingExternalId: currentEditorState.buildingExternalId,
   floor: currentEditorState.selectedFloor,
-  displayName: extra.displayName || `Sala ${currentEditorState.rooms.length + 1}`,
+  displayName: extra.displayName || `Sector ${currentEditorState.rooms.length + 1}`,
   shortName: "",
-  type: extra.type || "sala",
+  type: extra.type || "sector",
   unit: "",
   service: "",
   status: "active",
@@ -2431,7 +2434,7 @@ const createNewRoom = (geoJsonCoords) => {
   currentEditorState.mode = "select";
   renderRooms();
   updatePopupContent();
-  setAdminMapToolsStatus("Sala creada. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
+  setAdminMapToolsStatus("Sector creado. Ctrl+click para mover, Shift+click para rotar, Ctrl+Z para deshacer.");
 };
 
 const deleteSelectedRoom = () => {
@@ -2538,8 +2541,8 @@ const pasteRoom = () => {
     const newCoords = geom.coordinates[0].map((c) => [c[0] + OFFSET * (idx + 1), c[1] + OFFSET * (idx + 1)]);
     newCoords.push(newCoords[0]);
     createdRooms.push(buildNewRoomObject(newCoords, {
-      displayName: `Sala ${baseRoomsLen + 1 + idx}`,
-      type: src.type || "sala",
+      displayName: `Sector ${baseRoomsLen + 1 + idx}`,
+      type: src.type === "sala" ? "sector" : src.type || "sector",
     }));
   });
 
@@ -2851,7 +2854,7 @@ const saveRoomEditor = async () => {
   if (!currentEditorState) return;
 
   const savedBuildingId = currentEditorState.buildingExternalId;
-  setAdminMapToolsStatus("Guardando salas y marcas...");
+  setAdminMapToolsStatus("Guardando sectores y marcas...");
   showSaveToast("Guardando...");
 
   const errors = [];
@@ -2868,7 +2871,7 @@ const saveRoomEditor = async () => {
         credentials: "include",
       });
       if (!res.ok && res.status !== 404) {
-        let msg = `Error al eliminar la sala '${externalId}'.`;
+        let msg = `Error al eliminar el sector '${externalId}'.`;
         try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
         pushError(msg);
       }
@@ -2880,7 +2883,7 @@ const saveRoomEditor = async () => {
         credentials: "include",
       });
       if (!res.ok && res.status !== 404) {
-        let msg = `Error al eliminar la sala '${externalId}'.`;
+        let msg = `Error al eliminar el sector '${externalId}'.`;
         try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
         pushError(msg);
       }
@@ -2909,7 +2912,7 @@ const saveRoomEditor = async () => {
           }),
         });
         if (!res.ok) {
-          let msg = `Error al crear sala '${room.displayName}'.`;
+          let msg = `Error al crear sector '${room.displayName}'.`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
           pushError(msg);
         } else {
@@ -2942,7 +2945,7 @@ const saveRoomEditor = async () => {
           }),
         });
         if (!res.ok) {
-          let msg = `Error al actualizar sala '${room.displayName}'.`;
+          let msg = `Error al actualizar sector '${room.displayName}'.`;
           try { const b = await res.json(); if (b.message) msg += " " + b.message; } catch {}
           pushError(msg);
         } else if (currentEditorState.roomSignatures) {
@@ -2964,14 +2967,14 @@ const saveRoomEditor = async () => {
     currentEditorState.removedManualRoomExternalIds = [];
     currentEditorState.removedSyncedRoomExternalIds = [];
 
-    setAdminMapToolsStatus("Salas y marcadores guardados correctamente.");
+    setAdminMapToolsStatus("Sectores y marcadores guardados correctamente.");
 
     destroyPopup();
     clearRoomEditorState();
     requestAdminMapToolMode(null);
     setAdminMapToolsStatus("");
 
-    showSaveToast("Salas, marcas y marcadores guardados correctamente.");
+    showSaveToast("Sectores, marcas y marcadores guardados correctamente.");
 
     refreshCurrentMapData();
 
@@ -3048,9 +3051,9 @@ const pasteFloorLayout = () => {
       externalId: `MAN-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${created.length}`,
       buildingExternalId: currentEditorState.buildingExternalId,
       floor: currentEditorState.selectedFloor,
-      displayName: `Sala ${currentEditorState.rooms.length + created.length + 1}`,
+      displayName: `Sector ${currentEditorState.rooms.length + created.length + 1}`,
       shortName: "",
-      type: "sala",
+      type: "sector",
       unit: "",
       service: "",
       status: "active",
@@ -3072,7 +3075,7 @@ const pasteFloorLayout = () => {
     currentEditorState.isDirty = true;
     renderRooms();
     updatePopupContent();
-    setAdminMapToolsStatus(`${created.length} sala(s) pegada(s) en piso ${currentEditorState.selectedFloor}. Ctrl+Z para deshacer.`);
+    setAdminMapToolsStatus(`${created.length} sector(es) pegado(s) en piso ${currentEditorState.selectedFloor}. Ctrl+Z para deshacer.`);
   }
 };
 
@@ -3139,41 +3142,57 @@ const runQuickSuggestion = async () => {
 
   try {
     const buildingGeometry = currentEditorState.buildingGeometry;
-    if (!buildingGeometry?.coordinates?.[0]) {
+    const ring = buildingGeometry?.coordinates?.[0];
+    if (!ring || ring.length < 4) {
       setAdminMapToolsStatus("No se encontro la geometria del edificio.");
       return;
     }
 
-    const buildingAreaM2 = calculateAreaMeters(buildingGeometry.coordinates[0]);
-    const roomAreaM2 = 20;
-    const corridorFactor = 0.3;
-    const roomCount = Math.max(1, Math.floor((buildingAreaM2 * (1 - corridorFactor)) / roomAreaM2));
+    const buildingAreaM2 = calculateAreaMeters(ring);
+    const autoCount = sectorCountForArea(buildingAreaM2);
 
-    const suggestions = generateContourRooms(buildingGeometry, roomCount, {
-      roomDepth: 5,
-      corridorWidth: 1.5,
-    });
+    const preset = await appPrompt(
+      `Superficie del piso: ${Math.round(buildingAreaM2).toLocaleString("es")} m². Ingresa cuantos sectores quieres generar (2-12).`,
+      String(autoCount)
+    );
+
+    if (preset == null) {
+      setAdminMapToolsStatus("Generacion de sectores cancelada.");
+      return;
+    }
+
+    const count = Number(preset);
+    if (!Number.isFinite(count) || count < 2 || count > 12) {
+      setAdminMapToolsStatus("El numero de sectores debe estar entre 2 y 12.");
+      return;
+    }
+
+    const suggestions = divideBuildingIntoSectors(buildingGeometry, count, { minCount: 2, maxCount: 12 });
 
     if (!suggestions || suggestions.length === 0) {
-      setAdminMapToolsStatus("El edificio es muy pequeno para generar salas con los parametros actuales.");
+      setAdminMapToolsStatus("El edificio es muy pequeno para generar sectores con los parametros actuales.");
       return;
     }
 
     currentEditorState.suggestions = suggestions.map((s, i) => ({
       externalId: `SUG-${currentEditorState.buildingExternalId}-${currentEditorState.selectedFloor}-${Date.now()}-${i}`,
-      displayName: s.DisplayName,
-      type: s.Type,
-      coordinates: s.Coordinates,
+      displayName: s.displayName,
+      shortName: `S${String(i + 1).padStart(2, "0")}`,
+      type: s.type || "sector",
+      coordinates: s.coordinates,
+      areaM2: s.areaM2,
       approved: true,
     }));
 
     clearSuggestionPreviewLayers();
     renderSuggestionPreviewLayers();
     updateBottomBar();
-    setAdminMapToolsStatus(`${suggestions.length} sala(s) sugerida(s). Haz clic en el check para guardarlas.`);
+    setAdminMapToolsStatus(
+      `Se generaron ${suggestions.length} sector(es) dividiendo el piso por area. Haz clic en el check para guardarlos.`
+    );
   } catch (error) {
     console.error("Error running suggestion:", error);
-    setAdminMapToolsStatus("Error al generar sugerencias.");
+    setAdminMapToolsStatus("Error al generar sectores.");
   }
 };
 
@@ -3189,10 +3208,15 @@ const renderSuggestionPreviewLayers = () => {
       color: "#7c3aed",
       weight: 2,
       fillColor: "#7c3aed",
-      fillOpacity: 0.2,
-      dashArray: "6 4",
-      className: "room-editor-suggestion-layer",
+      fillOpacity: 0.04,
+      className: "room-editor-suggestion-layer building-sector-contour",
     }).addTo(popupMap);
+
+    const areaLabel = sug.areaM2 ? ` · ${Math.round(sug.areaM2).toLocaleString("es")} m²` : "";
+    layer.bindTooltip(`${sug.displayName || `Sector ${i + 1}`}${areaLabel}`, {
+      sticky: true,
+      className: "room-editor-suggestion-tooltip",
+    });
 
     layer.on("click", (e) => {
       L.DomEvent.stop(e);
@@ -3251,6 +3275,7 @@ const saveQuickSuggestions = async () => {
         rooms: approved.map((s) => ({
           externalId: s.externalId,
           displayName: s.displayName,
+          shortName: s.shortName || "",
           type: s.type,
           coordinates: s.coordinates,
         })),
@@ -3260,7 +3285,7 @@ const saveQuickSuggestions = async () => {
     if (!response.ok) throw new Error("Error al guardar sugerencias");
 
     const result = await response.json();
-    setAdminMapToolsStatus(`${result.savedCount} sala(s) sugerida(s) guardada(s).`);
+    setAdminMapToolsStatus(`${result.savedCount} sector(es) sugerido(s) guardado(s).`);
 
     clearSuggestionPreviewLayers();
     currentEditorState.suggestions = [];

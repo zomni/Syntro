@@ -344,7 +344,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
 
   var options = {
     geojsonServiceAddress: "http://yourGeoJsonSearchAddress",
-    placeholderMessage: "Edificios, Salas, Equipos",
+    placeholderMessage: "Edificios, Sectores, Equipos",
     searchButtonTitle: "Search",
     clearButtonTitle: "Clear",
     foundRecordsMessage: "showing results.",
@@ -884,7 +884,7 @@ export const loadSearchBox = (path, campus) => {
 
   var options = {
     geojsonServiceAddress: path,
-    placeholderMessage: "Edificios, Salas, Equipos",
+    placeholderMessage: "Edificios, Sectores, Equipos",
     searchButtonTitle: "Search",
     clearButtonTitle: "Clear",
     foundRecordsMessage: "showing results.",

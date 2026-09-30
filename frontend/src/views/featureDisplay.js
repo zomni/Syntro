@@ -12,6 +12,7 @@ import { appConfig } from "../config/appConfig.js";
 import { isWayfindingMode } from "../utils/wayfinding.js";
 import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
+import { pointInRing } from "../utils/roomEditorGeometry.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -846,6 +847,7 @@ const loadManualRoomsForBuilding = async (building) => {
       responsiblePerson: "",
       notes: room.notes || "",
       source: "manual",
+      geometryJson: room.geometryJson || "",
     }));
   } catch (error) {
     console.error(`Error cargando salas manuales del backend de ${building.id}:`, error);
@@ -1717,7 +1719,7 @@ const buildFloorBadgeHtml = (floor) => {
 };
 
 const buildRoomChipHtml = (roomName) => {
-  const label = String(roomName || "").trim() || "Sin sala";
+  const label = String(roomName || "").trim() || "Sin sector";
   return `
     <span style="${CHIP_BASE_STYLE}; background:#0284c71f; color:#0284c7;">
       ${resizeIcon(ROOM_ICON_SVG)}
@@ -1833,7 +1835,7 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
 
   for (const device of displayDevices) {
     const room = roomsMap.get(device.roomId);
-    const roomName = room?.name || room?.shortName || "Sin sala";
+    const roomName = room?.name || room?.shortName || "Sin sector";
     const title = device.serialNumber || device.name || device.deviceId || "Sin S/N";
     const description = device.description || device.name || "Sin descripcion";
     const isHighlighted = highlightDevice === device;
@@ -2000,6 +2002,12 @@ window.selectBuildingFloor = (targetFloor) => {
   popupDeviceState[featureId] = null;
   popupDeviceScopeState[featureId] = "";
   refreshCurrentPopup();
+
+  if (currentOpenLayer) {
+    renderFloorSectors(currentOpenLayer.feature).catch((error) =>
+      console.error("[mapa] error renderizando sectores al cambiar piso:", error)
+    );
+  }
 };
 
 window.selectRoomDetail = (featureId, roomId) => {
@@ -2017,7 +2025,7 @@ window.backToRoomsList = (featureId) => {
 
 const buildRoomsListWithButtonsHtml = (featureId, rooms, devices, floorLabel) => {
   if (!rooms.length) {
-    return `No hay salas cargadas para el piso ${escapeHtml(floorLabel)}.`;
+    return `No hay sectores cargados para el piso ${escapeHtml(floorLabel)}.`;
   }
 
   let html = "";
@@ -2047,7 +2055,7 @@ const buildRoomsListWithButtonsHtml = (featureId, rooms, devices, floorLabel) =>
   }
 
   if (rooms.length > 10) {
-    html += `... y ${rooms.length - 10} sala(s) más<br/>`;
+    html += `... y ${rooms.length - 10} sector(es) más<br/>`;
   }
 
   return html;
@@ -2080,7 +2088,7 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
     html += buildKeyValueRow("Notas", room.notes);
   }
 
-  html += `<div style="margin-top:10px; font-weight:600;">Equipos de la sala</div>`;
+  html += `<div style="margin-top:10px; font-weight:600;">Equipos del sector</div>`;
 
   if (!roomDevices.length) {
     html += `No hay equipos asociados.<br/>`;
@@ -2199,13 +2207,13 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
       const roomDevices = devicesInFloor.filter((device) => device.roomId === selectedRoomId);
 
       if (selectedRoom) {
-        contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Detalle de sala</div>`;
+        contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Detalle de sector</div>`;
         contentHtml += buildRoomDetailHtml(featureId, selectedRoom, roomDevices);
       } else {
-        contentHtml += `Sala no encontrada en este piso.`;
+        contentHtml += `Sector no encontrado en este piso.`;
       }
     } else {
-      contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Salas del piso ${escapeHtml(floorLabel)}</div>`;
+      contentHtml += `<div style="font-weight:600; margin-bottom:6px;">Sectores del piso ${escapeHtml(floorLabel)}</div>`;
       contentHtml += buildRoomsListWithButtonsHtml(featureId, roomsInFloor, devicesInFloor, floorLabel);
     }
 
@@ -2258,6 +2266,7 @@ export const style = (feature) => {
 let buildingPanelMapFrozen = false;
 let buildingViewMap = null;
 let buildingViewContainer = null;
+let buildingViewOverlay = null;
 let buildingViewAnimateNext = false;
 let buildingViewFlyToken = 0;
 const MAX_BUILDING_VIEW_ZOOM = 22;
@@ -2290,6 +2299,10 @@ const unfreezeMapForBuildingPanel = () => {
 };
 
 const destroyBuildingViewMap = () => {
+  if (buildingViewOverlay) {
+    buildingViewOverlay.clearLayers();
+    buildingViewOverlay = null;
+  }
   if (buildingViewMap) {
     buildingViewMap.remove();
     buildingViewMap = null;
@@ -2298,6 +2311,167 @@ const destroyBuildingViewMap = () => {
     buildingViewContainer.remove();
     buildingViewContainer = null;
   }
+};
+
+const parseRoomGeometryCoords = (geometryJson) => {
+  if (!geometryJson) return [];
+  try {
+    const geom = typeof geometryJson === "string" ? JSON.parse(geometryJson) : geometryJson;
+    if (geom?.type !== "Polygon" || !geom.coordinates?.[0]) return [];
+    return geom.coordinates[0].map((c) => [Number(c[0]), Number(c[1])]);
+  } catch (error) {
+    console.error("Error parseando geometria de sala:", error);
+    return [];
+  }
+};
+
+const ringCentroidLatLng = (latLngs) => {
+  const n = latLngs.length;
+  if (n < 3) return null;
+  const centerLat = latLngs.reduce((sum, p) => sum + p[0], 0) / n;
+  const lngScale = Math.cos((centerLat * Math.PI) / 180);
+  const pts = latLngs.map((p) => [p[1] * lngScale, p[0]]);
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const cross = pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+    twiceArea += cross;
+    cx += (pts[i][0] + pts[j][0]) * cross;
+    cy += (pts[i][1] + pts[j][1]) * cross;
+  }
+  if (Math.abs(twiceArea) < 1e-12) {
+    const lngs = latLngs.map((p) => p[1]);
+    const lats = latLngs.map((p) => p[0]);
+    return [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2];
+  }
+  return [cy / (3 * twiceArea), cx / (3 * twiceArea * lngScale)];
+};
+
+const createFloorTotalBubbleIcon = (count) =>
+  L.divIcon({
+    className: "building-floor-total-bubble",
+    html: `<button type="button" aria-label="${count} equipo(s) en el piso">${count}</button>`,
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+
+const placeFloorTotalBubble = (floorRing, floorTotal, floor, overlay, featureId) => {
+  if (!(floorTotal > 0) || floorRing.length < 3 || !buildingViewOverlay) return;
+  const anchors = buildingViewOverlay.getLayers().filter((l) => l.options?.icon && /building-equipment-bubble/.test(l.options.icon.className));
+  const bubblePoints = anchors.map((marker) => marker.getLatLng());
+  const [lat, lng] = ringCentroidLatLng(floorRing) || [floorRing[0][0], floorRing[0][1]];
+  const basePoint = buildingViewMap.latLngToContainerPoint([lat, lng]);
+  const offsets = [
+    [0, 0],
+    [-38, 0],
+    [38, 0],
+    [0, -38],
+    [0, 38],
+    [-38, -38],
+    [38, -38],
+    [-38, 38],
+    [38, 38],
+  ];
+  let chosen = [lat, lng];
+  for (const [dx, dy] of offsets) {
+    const candidate = buildingViewMap.containerPointToLatLng(L.point(basePoint.x + dx, basePoint.y + dy));
+    if (floorRing.length > 0 && !pointInRing(candidate, floorRing)) continue;
+    let collides = false;
+    for (const other of bubblePoints) {
+      const otherPoint = buildingViewMap.latLngToContainerPoint(other);
+      const dist = Math.hypot(basePoint.x + dx - otherPoint.x, basePoint.y + dy - otherPoint.y);
+      if (dist < 40) {
+        collides = true;
+        break;
+      }
+    }
+    if (!collides) {
+      chosen = [candidate.lat, candidate.lng];
+      break;
+    }
+  }
+  const marker = L.marker(chosen, { icon: createFloorTotalBubbleIcon(floorTotal) }).addTo(buildingViewOverlay);
+  marker.bindTooltip(`${floorTotal} equipo(s) en el piso ${floor}`, { sticky: true, direction: "top" });
+  marker.on("click", () => {
+    setPopupViewForFeature(featureId, "devices");
+    popupRoomState[featureId] = null;
+    popupDeviceScopeState[featureId] = "";
+    refreshCurrentPopup();
+  });
+};
+
+const renderFloorSectors = async (feature) => {
+  if (!buildingViewMap || !feature) return;
+
+  const featureId = feature?.properties?.id;
+  if (!featureId) return;
+
+  const building = await findBuildingInCatalog(feature);
+  if (!building) return;
+
+  const floor = popupFloorState[featureId] ?? (feature?.properties?.floor ?? 0);
+  const backendSession = await loadBackendSession();
+  const canViewEquipment = Boolean(backendSession?.isAuthenticated) && !isWayfindingMode();
+
+  if (buildingViewOverlay) {
+    buildingViewOverlay.clearLayers();
+    buildingViewOverlay.remove();
+    buildingViewOverlay = null;
+  }
+  buildingViewOverlay = L.layerGroup().addTo(buildingViewMap);
+
+  const [allRooms, backendInventoryItems] = await Promise.all([
+    loadRoomsForBuilding(building),
+    canViewEquipment ? loadBackendInventoryForBuilding(building) : Promise.resolve([]),
+  ]);
+  const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
+  const sectors = filterRoomsByFloor(allRooms, floor).filter(
+    (room) => room.type === "sector" && room.geometryJson
+  );
+  const devicesInFloor = filterDevicesByFloor(allDevices, sectors, allRooms, floor);
+
+  const sectorCountByRoom = new Map();
+  for (const sector of sectors) {
+    sectorCountByRoom.set(sector.roomId, 0);
+  }
+  for (const device of devicesInFloor) {
+    if (device.roomId && sectorCountByRoom.has(device.roomId)) {
+      sectorCountByRoom.set(device.roomId, sectorCountByRoom.get(device.roomId) + 1);
+    }
+  }
+
+  for (const sector of sectors) {
+    const coords = parseRoomGeometryCoords(sector.geometryJson);
+    if (coords.length < 3) continue;
+    const latLngs = coords.map((c) => [c[1], c[0]]);
+    L.polygon(latLngs, {
+      color: "#7c3aed",
+      weight: 1.5,
+      fillColor: "#7c3aed",
+      fillOpacity: 0.05,
+      className: "building-sector-contour",
+      interactive: false,
+    }).addTo(buildingViewOverlay);
+
+    const count = sectorCountByRoom.get(sector.roomId) || 0;
+    if (count > 0 && canViewEquipment) {
+      const centroid = ringCentroidLatLng(latLngs);
+      if (centroid) {
+        const marker = L.marker(centroid, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
+        marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
+        marker.on("click", () => {
+          window.selectRoomDetail && window.selectRoomDetail(featureId, sector.roomId);
+        });
+      }
+    }
+  }
+
+  if (!canViewEquipment) return;
+
+  const floorRing = feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
+  placeFloorTotalBubble(floorRing, devicesInFloor.length, floor, buildingViewOverlay, featureId);
 };
 
 const createBuildingViewMap = (layer) => {
@@ -2351,6 +2525,9 @@ const createBuildingViewMap = (layer) => {
     buildingViewMap.fitBounds(bounds, { padding: [20, 20], maxZoom: MAX_BUILDING_VIEW_ZOOM });
     buildingViewMap.whenReady(() => {
       buildingViewMap?.invalidateSize();
+      renderFloorSectors(layer?.feature).catch((error) =>
+        console.error("[mapa] error renderizando sectores de la vista edificio:", error)
+      );
     });
 
     console.info(
