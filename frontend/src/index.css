@@ -1834,10 +1834,11 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
 }
 
 .building-view-sector {
-    filter: blur(2.5px);
+    filter: blur(4px);
     cursor: pointer;
 }
 
+.building-view-sector.is-hover,
 .building-view-sector.is-active {
     filter: none;
 }

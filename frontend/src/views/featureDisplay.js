@@ -1262,6 +1262,16 @@ const createEquipmentBubbleIcon = (count) =>
 const updateBuildingEquipmentBubbles = () => {
   if (buildingMatchModeActive) return;
 
+  if (!window.syntroBackendSession?.isAuthenticated) {
+    buildingEquipmentBubbleEntries.forEach((entry) => {
+      if (entry.marker && map.hasLayer(entry.marker)) {
+        map.removeLayer(entry.marker);
+      }
+    });
+    buildingEquipmentBubbleEntries.clear();
+    return;
+  }
+
   const selectedFloor = getSelectedMapFloor();
   buildingEquipmentBubbleEntries.forEach((entry) => {
     const count = getSummaryCountForType(entry.summary, globalEquipmentTypeFilter, selectedFloor);
@@ -2509,44 +2519,91 @@ const createFloorTotalBubbleIcon = (count) =>
     iconAnchor: [22, 22],
   });
 
-const placeFloorTotalBubble = (floorRing, floorTotal, floor, overlay, featureId) => {
-  if (floorRing.length < 3 || !buildingViewOverlay) return;
+const SECTOR_BUBBLE_RADIUS_PX = 17;
+const FLOOR_BUBBLE_RADIUS_PX = 22;
+const BUBBLE_MIN_DISTANCE_PX = SECTOR_BUBBLE_RADIUS_PX + FLOOR_BUBBLE_RADIUS_PX + 4;
+
+const bubbleProbeOffsets = (radiusPx) => {
+  const offsets = [[0, 0]];
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (Math.PI * 2 * i) / 8;
+    offsets.push([Math.round(Math.cos(angle) * radiusPx), Math.round(Math.sin(angle) * radiusPx)]);
+  }
+  return offsets;
+};
+
+const bubbleCandidateOffsets = () => {
+  const offsets = [[0, 0]];
+  [12, 24, 36, 48, 64].forEach((radius) => {
+    for (let i = 0; i < 8; i += 1) {
+      const angle = (Math.PI * 2 * i) / 8;
+      offsets.push([Math.round(Math.cos(angle) * radius), Math.round(Math.sin(angle) * radius)]);
+    }
+  });
+  return offsets;
+};
+
+const isLatLngInsideRing = (latlng, ring) => pointInRing([latlng.lat, latlng.lng], ring);
+
+/**
+ * Devuelve un LatLng cuyo icono completo (centro + sondas) queda dentro del
+ * anillo del edificio, sin chocar con las burbujas ya colocadas.
+ */
+const resolveBubbleLatLng = ({ preferred, ring, avoidPoints = [], radiusPx, minDistancePx }) => {
+  if (!buildingViewMap || !Array.isArray(ring) || ring.length < 3) return null;
+
+  const baseLatLng = preferred || L.latLng(ring[0][0], ring[0][1]);
+  const basePoint = buildingViewMap.latLngToContainerPoint(baseLatLng);
+  if (!Number.isFinite(basePoint?.x) || !Number.isFinite(basePoint?.y)) return null;
+
+  const probes = bubbleProbeOffsets(radiusPx);
+  let fallback = null;
+
+  for (const [dx, dy] of bubbleCandidateOffsets()) {
+    const candidate = buildingViewMap.containerPointToLatLng(
+      L.point(basePoint.x + dx, basePoint.y + dy)
+    );
+    if (!isLatLngInsideRing(candidate, ring)) continue;
+
+    const fitsCompletely = probes.every(([px, py]) => {
+      const probe = buildingViewMap.containerPointToLatLng(L.point(basePoint.x + dx + px, basePoint.y + dy + py));
+      return isLatLngInsideRing(probe, ring);
+    });
+
+    const collides = avoidPoints.some((other) => {
+      const otherPoint = buildingViewMap.latLngToContainerPoint(other);
+      return Math.hypot(basePoint.x + dx - otherPoint.x, basePoint.y + dy - otherPoint.y) < minDistancePx;
+    });
+
+    if (fitsCompletely && !collides) return candidate;
+    if (!fallback && fitsCompletely) fallback = candidate;
+  }
+
+  return fallback;
+};
+
+const placeFloorTotalBubble = (floorRing, floorTotal, floor, featureId) => {
+  if (!buildingViewOverlay || floorRing.length < 3) return;
+
   const anchors = buildingViewOverlay
     .getLayers()
     .filter((l) => l.options?.icon && /building-equipment-bubble/.test(l.options.icon?.options?.className || ""));
-  const bubblePoints = anchors.map((marker) => marker.getLatLng());
-  const [lat, lng] = ringCentroidLatLng(floorRing) || [floorRing[0][0], floorRing[0][1]];
-  const basePoint = buildingViewMap.latLngToContainerPoint([lat, lng]);
-  const offsets = [
-    [0, 0],
-    [-38, 0],
-    [38, 0],
-    [0, -38],
-    [0, 38],
-    [-38, -38],
-    [38, -38],
-    [-38, 38],
-    [38, 38],
-  ];
-  let chosen = [lat, lng];
-  for (const [dx, dy] of offsets) {
-    const candidate = buildingViewMap.containerPointToLatLng(L.point(basePoint.x + dx, basePoint.y + dy));
-    if (floorRing.length > 0 && !pointInRing(candidate, floorRing)) continue;
-    let collides = false;
-    for (const other of bubblePoints) {
-      const otherPoint = buildingViewMap.latLngToContainerPoint(other);
-      const dist = Math.hypot(basePoint.x + dx - otherPoint.x, basePoint.y + dy - otherPoint.y);
-      if (dist < 40) {
-        collides = true;
-        break;
-      }
-    }
-    if (!collides) {
-      chosen = [candidate.lat, candidate.lng];
-      break;
-    }
-  }
-  const marker = L.marker(chosen, { icon: createFloorTotalBubbleIcon(floorTotal) }).addTo(buildingViewOverlay);
+  const avoidPoints = anchors.map((marker) => marker.getLatLng());
+
+  const centroid = ringCentroidLatLng(floorRing);
+  const target = resolveBubbleLatLng({
+    preferred: centroid ? L.latLng(centroid[0], centroid[1]) : null,
+    ring: floorRing,
+    avoidPoints,
+    radiusPx: FLOOR_BUBBLE_RADIUS_PX,
+    minDistancePx: BUBBLE_MIN_DISTANCE_PX,
+  });
+  if (!target) return;
+
+  const marker = L.marker(target, {
+    icon: createFloorTotalBubbleIcon(floorTotal),
+    zIndexOffset: 1000,
+  }).addTo(buildingViewOverlay);
   marker.bindTooltip(`${floorTotal} equipo(s) en el piso ${floor}`, { sticky: true, direction: "top" });
   marker.on("click", () => {
     window.clearSectorFilter && window.clearSectorFilter(featureId);
@@ -2594,53 +2651,107 @@ const renderFloorSectors = async (feature) => {
   }
 
   const activeSectorFilter = popupSectorFilterState[featureId] || "";
+  const sectorPolygons = [];
+  const sectorBubblePoints = [];
 
   for (const sector of sectors) {
     const coords = parseRoomGeometryCoords(sector.geometryJson);
     if (coords.length < 3) continue;
     const latLngs = coords.map((c) => [c[1], c[0]]);
     const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
-    if (!isActive) {
-      L.polygon(latLngs, {
-        color: "#b794f6",
-        weight: 1,
-        fillColor: "#b794f6",
-        fillOpacity: 0.03,
-        className: "building-view-sector",
-        interactive: true,
-      })
-        .addTo(buildingViewOverlay)
-        .on("click", () => {
-          window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
-        });
-    } else {
-      L.polygon(latLngs, {
-        color: "#6d28d9",
-        weight: 2.5,
-        fillColor: "#6d28d9",
-        fillOpacity: 0.14,
-        className: "building-view-sector is-active",
-        interactive: true,
-      })
-        .addTo(buildingViewOverlay)
-        .on("click", () => {
-          window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
-        });
-    }
+
+    const baseStyle = {
+      color: "#c4b5fd",
+      weight: 1,
+      fillColor: "#c4b5fd",
+      fillOpacity: 0.04,
+      opacity: 0.75,
+    };
+    const activeStyle = {
+      color: "#6d28d9",
+      weight: 2.5,
+      fillColor: "#6d28d9",
+      fillOpacity: 0.14,
+      opacity: 1,
+    };
+    const hoverStyle = {
+      color: "#7c3aed",
+      weight: 2.2,
+      fillColor: "#7c3aed",
+      fillOpacity: 0.12,
+      opacity: 1,
+    };
+
+    const polygon = L.polygon(latLngs, {
+      ...(isActive ? activeStyle : baseStyle),
+      className: isActive ? "building-view-sector is-active" : "building-view-sector",
+      interactive: true,
+    }).addTo(buildingViewOverlay);
+
+    const setHover = (hovering) => {
+      if (hovering) {
+        polygon.setStyle(hoverStyle);
+        polygon.getElement()?.classList?.add("is-hover");
+        polygon.bringToFront();
+      } else {
+        polygon.setStyle(isActive ? activeStyle : baseStyle);
+        polygon.getElement()?.classList?.remove("is-hover");
+      }
+    };
+
+    polygon.on("mouseover", () => setHover(true));
+    polygon.on("mouseout", () => setHover(false));
+    polygon.on("click", () => {
+      window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
+    });
+
+    sectorPolygons.push({ roomId: sector.roomId, polygon });
+
+    if (!canViewEquipment) continue;
 
     const count = sectorCountByRoom.get(sector.roomId) || 0;
     const centroid = ringCentroidLatLng(latLngs);
-    if (centroid) {
-      const marker = L.marker(centroid, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
-      marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
-      marker.on("click", () => {
-        window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
-      });
-    }
+    const bubblePoint = resolveBubbleLatLng({
+      preferred: centroid ? L.latLng(centroid[0], centroid[1]) : null,
+      ring: latLngs,
+      avoidPoints: sectorBubblePoints,
+      radiusPx: SECTOR_BUBBLE_RADIUS_PX,
+      minDistancePx: SECTOR_BUBBLE_RADIUS_PX * 2 + 6,
+    });
+    if (!bubblePoint) continue;
+
+    sectorBubblePoints.push(bubblePoint);
+
+    const marker = L.marker(bubblePoint, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
+    marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
+    marker.on("click", () => {
+      window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
+    });
+    marker.on("mouseover", () => {
+      const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
+      if (entry?.polygon) {
+        entry.polygon.setStyle(hoverStyle);
+        entry.polygon.getElement()?.classList?.add("is-hover");
+        entry.polygon.bringToFront();
+      }
+    });
+    marker.on("mouseout", () => {
+      const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
+      if (!entry?.polygon) return;
+      if (activeSectorFilter && activeSectorFilter === sector.roomId) {
+        entry.polygon.setStyle(activeStyle);
+      } else {
+        entry.polygon.setStyle(baseStyle);
+      }
+      entry.polygon.getElement()?.classList?.remove("is-hover");
+    });
   }
 
-  const floorRing = feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
-  placeFloorTotalBubble(floorRing, devicesInFloor.length, floor, buildingViewOverlay, featureId);
+  if (!canViewEquipment) return;
+
+  const floorRing =
+    feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
+  placeFloorTotalBubble(floorRing, devicesInFloor.length, floor, featureId);
 };
 
 const createBuildingViewMap = (layer) => {
@@ -2980,6 +3091,9 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
   const featureId = feature?.properties?.id;
   if (!featureId || typeof layer?.getBounds !== "function") return;
   if (isWayfindingMode()) return;
+
+  const session = await loadBackendSession();
+  if (!session?.isAuthenticated) return;
 
   const summaryMap = await loadBuildingEquipmentSummary();
   if (!layer?._map) return;
