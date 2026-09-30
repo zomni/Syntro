@@ -280,6 +280,8 @@ const popupDevicePageSizeState = {};
 const popupDeviceSearchOpenState = {};
 const popupDeviceTypeFilterState = {};
 const popupDeviceScopeState = {};
+const popupSectorFilterState = {};
+const popupSectorFilterOpenState = {};
 let loadedEquipmentRevision = null;
 let pendingEquipmentRevision = null;
 let latestEquipmentSyncState = null;
@@ -1055,7 +1057,16 @@ const deviceMatchesQuery = (device, query, roomsMap) => {
   return tokens.every((token) => haystack.includes(token));
 };
 
-const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize, extraActions = "") => {
+const buildDeviceControlsHtml = (
+  featureId,
+  query,
+  isOpen,
+  pageSize,
+  extraActions = "",
+  sectorOptions = [],
+  sectorFilter = "",
+  filtersOpen = false
+) => {
   const sizeOptions = [5, 10, 20, 50];
   const resolvedSize = Math.max(5, Number(pageSize) || 5);
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
@@ -1078,6 +1089,70 @@ const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize, extraAction
       </button>`;
   }
 
+  const hasSectorFilters = sectorOptions.length > 0;
+  const activeSector = hasSectorFilters ? sectorOptions.find((s) => s.roomId === sectorFilter) : null;
+
+  let filtersButtonHtml = "";
+  let activeFilterBannerHtml = "";
+  let filtersPanelHtml = "";
+
+  if (hasSectorFilters) {
+    filtersButtonHtml = `
+      <button
+        class="floorButton"
+        style="${getChipButtonStyle(Boolean(activeSector) || filtersOpen, false)}"
+        onclick="window.toggleSectorFilters && window.toggleSectorFilters('${escapeHtml(featureId)}')"
+      >
+        ${resizeIcon(PACKAGE_ICON_SVG)} Filtros
+      </button>`;
+
+    if (activeSector) {
+      activeFilterBannerHtml = `
+        <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <span style="${CHIP_BASE_STYLE}; background:#6d28d91f; color:#6d28d9;">
+            ${resizeIcon(ROOM_ICON_SVG)}
+            ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
+          </span>
+          <button
+            class="floorButton"
+            style="${getActionButtonStyle()}"
+            onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+          >
+            Quitar filtro
+          </button>
+        </div>`;
+    }
+
+    if (filtersOpen) {
+      const allChips = `
+        <button
+          class="floorButton"
+          style="${getChipButtonStyle(!activeSector, true)}"
+          onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+        >
+          Todos los sectores
+        </button>`;
+      const sectorChips = sectorOptions
+        .map(
+          (s) => `
+            <button
+              class="floorButton"
+              style="${getChipButtonStyle(activeSector?.roomId === s.roomId, true)}"
+              onclick="window.setSectorFilter && window.setSectorFilter('${escapeHtml(featureId)}', '${escapeHtml(s.roomId)}')"
+            >
+              ${escapeHtml(s.name)} · ${s.count}
+            </button>`
+        )
+        .join("");
+      filtersPanelHtml = `
+        <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <div style="font-size:12px; color:#475569;">Filtrar por sector</div>
+          ${allChips}
+          ${sectorChips}
+        </div>`;
+    }
+  }
+
   return `
     <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <button
@@ -1088,8 +1163,11 @@ const buildDeviceControlsHtml = (featureId, query, isOpen, pageSize, extraAction
         ${buttonLabel}
       </button>
       ${inputHtml}
+      ${filtersButtonHtml}
       ${extraActions}
     </div>
+    ${activeFilterBannerHtml}
+    ${filtersPanelHtml}
     <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <div style="font-size:12px; color:#475569;">Mostrar</div>
       ${sizeButtons}
@@ -1791,19 +1869,23 @@ const buildDevicesSummaryHtml = (devices) => {
   );
 };
 
-const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter) => {
+const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "") => {
   const roomsMap = buildRoomsMap(allRooms);
   const activeQuery = String(query || "").trim();
   const activeType = String(typeFilter || "all").trim().toLowerCase();
+  const activeSectorFilter = String(sectorFilter || "").trim();
   const sourceDevices = activeQuery ? allDevices : devicesInFloor;
+  const sectorScopedDevices = activeSectorFilter
+    ? sourceDevices.filter((device) => device.roomId === activeSectorFilter)
+    : sourceDevices;
 
-  if (!sourceDevices.length) {
-    return `No hay equipos cargados para ${escapeHtml(floorLabel)}.`;
+  if (!sectorScopedDevices.length) {
+    return `No hay equipos en el sector seleccionado para ${escapeHtml(floorLabel)}.`;
   }
 
   const queryFilteredDevices = activeQuery
-    ? sourceDevices.filter((device) => deviceMatchesQuery(device, activeQuery, roomsMap))
-    : sourceDevices;
+    ? sectorScopedDevices.filter((device) => deviceMatchesQuery(device, activeQuery, roomsMap))
+    : sectorScopedDevices;
 
   const filteredDevices = activeType && activeType !== "all"
     ? queryFilteredDevices.filter((device) => normalizeDeviceType(device?.type) === activeType)
@@ -1993,6 +2075,46 @@ window.setDeviceTypeFilter = (featureId, type) => {
   refreshCurrentPopup();
 };
 
+window.toggleSectorFilters = (featureId) => {
+  if (!featureId) return;
+  popupSectorFilterOpenState[featureId] = !popupSectorFilterOpenState[featureId];
+  popupViewState[featureId] = "devices";
+  refreshCurrentPopup();
+};
+
+window.setSectorFilter = (featureId, roomId) => {
+  if (!featureId) return;
+  const active = popupSectorFilterState[featureId];
+  if (roomId && roomId === active) {
+    popupSectorFilterState[featureId] = "";
+  } else {
+    popupSectorFilterState[featureId] = roomId || "";
+  }
+  popupSectorFilterOpenState[featureId] = false;
+  popupRoomState[featureId] = null;
+  popupDeviceScopeState[featureId] = "";
+  popupViewState[featureId] = "devices";
+  refreshCurrentPopup();
+  if (currentOpenLayer) {
+    renderFloorSectors(currentOpenLayer.feature).catch((error) =>
+      console.error("[mapa] error renderizando sectores al filtrar:", error)
+    );
+  }
+};
+
+window.clearSectorFilter = (featureId) => {
+  if (!featureId) return;
+  popupSectorFilterState[featureId] = "";
+  popupSectorFilterOpenState[featureId] = false;
+  popupViewState[featureId] = "devices";
+  refreshCurrentPopup();
+  if (currentOpenLayer) {
+    renderFloorSectors(currentOpenLayer.feature).catch((error) =>
+      console.error("[mapa] error renderizando sectores al limpiar filtro:", error)
+    );
+  }
+};
+
 window.selectBuildingFloor = (targetFloor) => {
   const featureId = currentOpenFeatureId;
   if (!featureId) return;
@@ -2001,6 +2123,8 @@ window.selectBuildingFloor = (targetFloor) => {
   popupRoomState[featureId] = null;
   popupDeviceState[featureId] = null;
   popupDeviceScopeState[featureId] = "";
+  popupSectorFilterState[featureId] = "";
+  popupSectorFilterOpenState[featureId] = false;
   refreshCurrentPopup();
 
   if (currentOpenLayer) {
@@ -2219,17 +2343,45 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
 
     contentHtml += `</div>`;
   } else if (currentView === "devices") {
-    const devicesForView = deviceScope === "building" ? allDevices : devicesInFloor;
-    const devicesScopeLabel = deviceScope === "building" ? "edificio completo" : `piso ${floorLabel}`;
+    const sectorCounts = new Map();
+    for (const room of roomsInFloor) {
+      if (room.type === "sector") sectorCounts.set(room.roomId, 0);
+    }
+    for (const device of devicesInFloor) {
+      if (device.roomId && sectorCounts.has(device.roomId)) {
+        sectorCounts.set(device.roomId, sectorCounts.get(device.roomId) + 1);
+      }
+    }
+    const sectorOptions = roomsInFloor
+      .filter((room) => room.type === "sector")
+      .map((room) => ({
+        roomId: room.roomId,
+        name: room.name || "Sector",
+        count: sectorCounts.get(room.roomId) || 0,
+      }));
+    const activeSectorFilter = popupSectorFilterState[featureId] || "";
+    const sectorFiltersOpen = Boolean(popupSectorFilterOpenState[featureId]);
+    const scopeDevices = deviceScope === "building" ? allDevices : devicesInFloor;
+    const devicesForView = activeSectorFilter
+      ? scopeDevices.filter((device) => device.roomId === activeSectorFilter)
+      : scopeDevices;
+    const activeSectorOption = activeSectorFilter
+      ? sectorOptions.find((s) => s.roomId === activeSectorFilter)
+      : null;
+    const devicesScopeLabel = activeSectorOption
+      ? `sector ${activeSectorOption.name}`
+      : deviceScope === "building"
+        ? "edificio completo"
+        : `piso ${floorLabel}`;
 
     contentHtml = `
       <div style="${sectionBoxStyle}">
         ${buildDevicesSummaryHtml(devicesForView)}
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml)}
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptions, activeSectorFilter, sectorFiltersOpen)}
         </div>
         <div style="margin-top:4px;">
-          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter)}
+          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter)}
         </div>
       </div>
     `;
@@ -2358,8 +2510,10 @@ const createFloorTotalBubbleIcon = (count) =>
   });
 
 const placeFloorTotalBubble = (floorRing, floorTotal, floor, overlay, featureId) => {
-  if (!(floorTotal > 0) || floorRing.length < 3 || !buildingViewOverlay) return;
-  const anchors = buildingViewOverlay.getLayers().filter((l) => l.options?.icon && /building-equipment-bubble/.test(l.options.icon.className));
+  if (floorRing.length < 3 || !buildingViewOverlay) return;
+  const anchors = buildingViewOverlay
+    .getLayers()
+    .filter((l) => l.options?.icon && /building-equipment-bubble/.test(l.options.icon?.options?.className || ""));
   const bubblePoints = anchors.map((marker) => marker.getLatLng());
   const [lat, lng] = ringCentroidLatLng(floorRing) || [floorRing[0][0], floorRing[0][1]];
   const basePoint = buildingViewMap.latLngToContainerPoint([lat, lng]);
@@ -2395,10 +2549,7 @@ const placeFloorTotalBubble = (floorRing, floorTotal, floor, overlay, featureId)
   const marker = L.marker(chosen, { icon: createFloorTotalBubbleIcon(floorTotal) }).addTo(buildingViewOverlay);
   marker.bindTooltip(`${floorTotal} equipo(s) en el piso ${floor}`, { sticky: true, direction: "top" });
   marker.on("click", () => {
-    setPopupViewForFeature(featureId, "devices");
-    popupRoomState[featureId] = null;
-    popupDeviceScopeState[featureId] = "";
-    refreshCurrentPopup();
+    window.clearSectorFilter && window.clearSectorFilter(featureId);
   });
 };
 
@@ -2442,33 +2593,51 @@ const renderFloorSectors = async (feature) => {
     }
   }
 
+  const activeSectorFilter = popupSectorFilterState[featureId] || "";
+
   for (const sector of sectors) {
     const coords = parseRoomGeometryCoords(sector.geometryJson);
     if (coords.length < 3) continue;
     const latLngs = coords.map((c) => [c[1], c[0]]);
-    L.polygon(latLngs, {
-      color: "#7c3aed",
-      weight: 1.5,
-      fillColor: "#7c3aed",
-      fillOpacity: 0.05,
-      className: "building-sector-contour",
-      interactive: false,
-    }).addTo(buildingViewOverlay);
+    const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
+    if (!isActive) {
+      L.polygon(latLngs, {
+        color: "#b794f6",
+        weight: 1,
+        fillColor: "#b794f6",
+        fillOpacity: 0.03,
+        className: "building-view-sector",
+        interactive: true,
+      })
+        .addTo(buildingViewOverlay)
+        .on("click", () => {
+          window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
+        });
+    } else {
+      L.polygon(latLngs, {
+        color: "#6d28d9",
+        weight: 2.5,
+        fillColor: "#6d28d9",
+        fillOpacity: 0.14,
+        className: "building-view-sector is-active",
+        interactive: true,
+      })
+        .addTo(buildingViewOverlay)
+        .on("click", () => {
+          window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
+        });
+    }
 
     const count = sectorCountByRoom.get(sector.roomId) || 0;
-    if (count > 0 && canViewEquipment) {
-      const centroid = ringCentroidLatLng(latLngs);
-      if (centroid) {
-        const marker = L.marker(centroid, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
-        marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
-        marker.on("click", () => {
-          window.selectRoomDetail && window.selectRoomDetail(featureId, sector.roomId);
-        });
-      }
+    const centroid = ringCentroidLatLng(latLngs);
+    if (centroid) {
+      const marker = L.marker(centroid, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
+      marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
+      marker.on("click", () => {
+        window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
+      });
     }
   }
-
-  if (!canViewEquipment) return;
 
   const floorRing = feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
   placeFloorTotalBubble(floorRing, devicesInFloor.length, floor, buildingViewOverlay, featureId);

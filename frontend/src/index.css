@@ -1833,6 +1833,20 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
     display: none;
 }
 
+.building-view-sector {
+    filter: blur(2.5px);
+    cursor: pointer;
+}
+
+.building-view-sector.is-active {
+    filter: none;
+}
+
+html[data-admin-map-tool-mode="geometry-shape"] .building-view-sector,
+html[data-admin-map-tool-mode="geometry-move"] .building-view-sector {
+    display: none;
+}
+
 .building-floor-total-bubble {
     pointer-events: auto;
     cursor: pointer;
