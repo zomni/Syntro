@@ -3214,6 +3214,7 @@ const handleFeatureClick = (e) => {
     maxZoom: 20,
     padding: [40, 40],
   });
+  clearHoveredLayer();
   console.info("[mapa] clic edificio → openBuildingPopupLayer (zoom:true)");
 };
 
@@ -3507,11 +3508,10 @@ const highlightFeature = (e) => {
 
 const resetHighlight = (e) => {
   var layer = e.target;
-  applyDefaultStyle(layer);
 
-  if (currentHoveredLayer === layer) {
-    currentHoveredLayer = null;
-  }
+  if (currentHoveredLayer !== layer) return;
+  applyDefaultStyle(layer);
+  currentHoveredLayer = null;
 };
 
 const dockBuildingPopup = (layer) => {
@@ -3623,6 +3623,7 @@ export const onEachFeature = (feature, layer) => {
       document.body.classList.remove("map-building-panel");
       destroyBuildingViewMap();
       unfreezeMapForBuildingPanel();
+      clearHoveredLayer();
 
       if (currentOpenLayer === layer) {
         clearCurrentOpenFeatureId();

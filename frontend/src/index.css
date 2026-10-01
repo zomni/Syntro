@@ -1037,7 +1037,7 @@ body.session-warning-open .leaflet-container {
 
 /* Botones y chips del contenedor de equipos del panel.
    El fondo y el color viven aqui (no en estilos inline) para que el hover
-   :hover de "Editar edificio en dashboard" (#f1f5f9) se vea de verdad. */
+   se vea de verdad: inline gana sobre cualquier :hover de la hoja de estilos. */
 .equipment-panel-action-button,
 .equipment-panel-chip-button {
     border: 2px solid #2f7ea8;
@@ -1047,8 +1047,8 @@ body.session-warning-open .leaflet-container {
 
 .equipment-panel-action-button:hover,
 .equipment-panel-chip-button:hover {
-    background: #f1f5f9;
-    color: #333;
+    background: #dbeafe;
+    color: #1d4ed8;
 }
 
 .equipment-panel-chip-button.is-active {
