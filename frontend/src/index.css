@@ -1035,6 +1035,70 @@ body.session-warning-open .leaflet-container {
     line-height: 1;
 }
 
+/* Botones y chips del contenedor de equipos del panel.
+   El fondo y el color viven aqui (no en estilos inline) para que el hover
+   :hover de "Editar edificio en dashboard" (#f1f5f9) se vea de verdad. */
+.equipment-panel-action-button,
+.equipment-panel-chip-button {
+    border: 2px solid #2f7ea8;
+    background: #fff;
+    color: #333;
+}
+
+.equipment-panel-action-button:hover,
+.equipment-panel-chip-button:hover {
+    background: #f1f5f9;
+    color: #333;
+}
+
+.equipment-panel-chip-button.is-active {
+    border-color: #444;
+    background: #e9ecef;
+}
+
+.equipment-panel-chip-button.is-active:hover {
+    background: #e9ecef;
+    color: #333;
+}
+
+/* Ghost del arrastre de equipos: badge "+" con el icono del tipo al lado.
+   Vive fuera de pantalla para que el navegador lo capture con setDragImage. */
+.equipment-drag-ghost {
+    position: fixed;
+    top: -1000px;
+    left: -1000px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.equipment-drag-ghost-plus {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border: 2px solid rgba(var(--pi-surface-rgb), 0.95);
+    border-radius: 999px;
+    background: #047857;
+    box-shadow: 0 8px 18px rgba(var(--pi-ink-rgb), 0.26);
+    color: var(--pi-surface);
+}
+
+.equipment-drag-ghost-type {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border: 2px solid rgba(var(--pi-surface-rgb), 0.95);
+    border-radius: 999px;
+    background: var(--pi-surface);
+    box-shadow: 0 8px 18px rgba(var(--pi-ink-rgb), 0.26);
+}
+
 .admin-map-tools-status {
     min-height: 24px;
     margin-top: 8px;

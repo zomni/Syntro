@@ -1086,7 +1086,7 @@ const buildDeviceControlsHtml = (
     const isActive = resolvedSize === size;
     sizeButtons += `
       <button
-        class="floorButton"
+        class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
         style="${getChipButtonStyle(isActive, true)}"
         onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', ${size})"
       >
@@ -1104,7 +1104,7 @@ const buildDeviceControlsHtml = (
   if (hasSectorFilters) {
     filtersButtonHtml = `
       <button
-        class="floorButton"
+        class="floorButton equipment-panel-chip-button${Boolean(activeSector) || filtersOpen ? " is-active" : ""}"
         style="${getChipButtonStyle(Boolean(activeSector) || filtersOpen, false)}"
         onclick="window.toggleSectorFilters && window.toggleSectorFilters('${escapeHtml(featureId)}')"
       >
@@ -1119,7 +1119,7 @@ const buildDeviceControlsHtml = (
             ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
           </span>
           <button
-            class="floorButton"
+            class="floorButton equipment-panel-action-button"
             style="${getActionButtonStyle()}"
             onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
           >
@@ -1131,7 +1131,7 @@ const buildDeviceControlsHtml = (
     if (filtersOpen) {
       const allChips = `
         <button
-          class="floorButton"
+          class="floorButton equipment-panel-chip-button${activeSector ? "" : " is-active"}"
           style="${getChipButtonStyle(!activeSector, true)}"
           onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
         >
@@ -1141,7 +1141,7 @@ const buildDeviceControlsHtml = (
         .map(
           (s) => `
             <button
-              class="floorButton"
+              class="floorButton equipment-panel-chip-button${activeSector?.roomId === s.roomId ? " is-active" : ""}"
               style="${getChipButtonStyle(activeSector?.roomId === s.roomId, true)}"
               onclick="window.setSectorFilter && window.setSectorFilter('${escapeHtml(featureId)}', '${escapeHtml(s.roomId)}')"
             >
@@ -1161,7 +1161,7 @@ const buildDeviceControlsHtml = (
   return `
     <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <button
-        class="floorButton"
+        class="floorButton equipment-panel-action-button"
         style="${getActionButtonStyle()}"
         onclick="window.toggleDeviceSearch && window.toggleDeviceSearch('${escapeHtml(featureId)}')"
       >
@@ -1585,9 +1585,6 @@ const getChipButtonStyle = (isActive = false, compact = false) => `
   height: auto;
   min-height: ${compact ? "34px" : "38px"};
   border-radius: 999px;
-  border: 2px solid ${isActive ? "#444" : "#2f7ea8"};
-  background: ${isActive ? "#e9ecef" : "#fff"};
-  color: #333;
   font-weight: ${isActive ? "700" : "600"};
   font-size: ${compact ? "12px" : "13px"};
   line-height: 1.15;
@@ -1607,9 +1604,6 @@ const getActionButtonStyle = () => `
   height: auto;
   min-height: 36px;
   border-radius: 999px;
-  border: 2px solid #2f7ea8;
-  background: #fff;
-  color: #333;
   font-weight: 600;
   font-size: 13px;
   line-height: 1.15;
@@ -1636,7 +1630,7 @@ const buildDashboardEquipmentLink = (identifier) => {
       href="${url}"
       target="syntro-dashboard"
       rel="noreferrer"
-      class="floorButton"
+      class="floorButton equipment-panel-action-button"
       style="${getActionButtonStyle()}"
       title="Ver en dashboard"
       aria-label="Ver en dashboard"
@@ -1659,7 +1653,7 @@ const buildDashboardBuildingEditLink = (buildingId) => {
       href="${url}"
       target="syntro-dashboard"
       rel="noreferrer"
-      class="floorButton dashboard-link building-tool-button is-icon-only popup-dashboard-edit-link"
+      class="floorButton equipment-panel-action-button dashboard-link building-tool-button is-icon-only popup-dashboard-edit-link"
       title="Editar edificio en dashboard"
       aria-label="Editar edificio en dashboard"
       onclick="return window.openSyntroDashboard(event, this.href)"
@@ -1722,6 +1716,8 @@ const ROOM_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height
 const NETWORK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
 
 const PACKAGE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
+
+const PLUS_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
 
 const DEVICE_TYPE_ICONS = {
   pc: PC_ICON_SVG,
@@ -1945,11 +1941,11 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
     const deviceFloor = getDeviceFloor(device, roomsMap);
     const itemId = canManageEquipment ? deviceItemIdOf(device) : "";
     const draggableAttrs = itemId
-      ? ` draggable="true" ondragstart="window.startEquipmentDrag && window.startEquipmentDrag(event, '${escapeHtml(itemId)}')"`
+      ? ` draggable="true" ondragstart="window.startEquipmentDrag && window.startEquipmentDrag(event, '${escapeHtml(itemId)}', '${escapeHtml(normalizeDeviceType(device.type))}')"`
       : "";
     const clearSectorHtml = canManageEquipment && device.roomId && itemId
       ? `<button
-           class="floorButton"
+           class="floorButton equipment-panel-action-button"
            style="${getActionButtonStyle()}"
            onclick="window.clearEquipmentSector && window.clearEquipmentSector('${escapeHtml(itemId)}')"
          >
@@ -2035,7 +2031,7 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
 
     html += `
       <button
-        class="floorButton"
+        class="floorButton equipment-panel-chip-button${isCurrent ? " is-active" : ""}"
         style="${getChipButtonStyle(isCurrent, false)}"
         onclick="window.selectBuildingFloor && window.selectBuildingFloor('${escapeHtml(String(floor))}')"
       >
@@ -2230,7 +2226,7 @@ const buildRoomsListWithButtonsHtml = (featureId, rooms, devices, floorLabel) =>
         )}
         <div style="margin-top:8px;">
           <button
-            class="floorButton"
+            class="floorButton equipment-panel-action-button"
             style="${getActionButtonStyle()}"
             onclick="window.selectRoomDetail && window.selectRoomDetail('${escapeHtml(featureId)}','${escapeHtml(room.roomId)}')"
           >
@@ -2254,7 +2250,7 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   let html = `
     <div style="margin-bottom:10px;">
       <button
-        class="floorButton"
+        class="floorButton equipment-panel-action-button"
         style="${getActionButtonStyle()}"
         onclick="window.backToRoomsList && window.backToRoomsList('${escapeHtml(featureId)}')"
       >
@@ -2565,6 +2561,8 @@ const unfreezeMapForBuildingPanel = () => {
 };
 
 const destroyBuildingViewMap = () => {
+  hoveredSectorRoomId = "";
+  hoveredSectorPolygon = null;
   if (buildingViewOverlay) {
     buildingViewOverlay.clearLayers();
     buildingViewOverlay = null;
@@ -2654,6 +2652,30 @@ let sectorDropTargets = {};
 let equipmentDragItemId = "";
 let equipmentDropTargetRoomId = "";
 let equipmentDropHandlersBound = false;
+let hoveredSectorRoomId = "";
+let hoveredSectorPolygon = null;
+
+const baseSectorStyle = {
+  color: "#a78bfa",
+  weight: 1.2,
+  fillColor: "#a78bfa",
+  fillOpacity: 0.05,
+  opacity: 0.85,
+};
+const activeSectorStyle = {
+  color: "#6d28d9",
+  weight: 2.5,
+  fillColor: "#6d28d9",
+  fillOpacity: 0.16,
+  opacity: 1,
+};
+const hoverSectorStyle = {
+  color: "#38bdf8",
+  weight: 2.5,
+  fillColor: "#38bdf8",
+  fillOpacity: 0.16,
+  opacity: 1,
+};
 
 const deviceItemIdOf = (device) => {
   const deviceId = String(device?.deviceId || "");
@@ -2807,13 +2829,38 @@ const refreshBuildingPanelAfterAssignment = async () => {
   );
 };
 
-window.startEquipmentDrag = (event, itemId) => {
+const createEquipmentDragGhost = (deviceType) => {
+  const typeKey = normalizeDeviceType(deviceType);
+  const typeIcon = DEVICE_TYPE_ICONS[typeKey] || DEVICE_TYPE_ICONS.other;
+  const ghost = document.createElement("div");
+  ghost.className = "equipment-drag-ghost";
+  ghost.setAttribute("aria-hidden", "true");
+  ghost.innerHTML = `
+    <span class="equipment-drag-ghost-plus">${resizeIcon(PLUS_ICON_SVG, 22)}</span>
+    <span class="equipment-drag-ghost-type" style="color:${getDeviceTypeColor(typeKey)};">${resizeIcon(typeIcon, 18)}</span>
+  `;
+  document.body.appendChild(ghost);
+  return ghost;
+};
+
+window.startEquipmentDrag = (event, itemId, deviceType) => {
   if (!itemId || !event?.dataTransfer) return;
   equipmentDragItemId = itemId;
+  let ghost = null;
   try {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", itemId);
+
+    ghost = createEquipmentDragGhost(deviceType);
+    event.dataTransfer.setDragImage(ghost, ghost.offsetWidth / 2, ghost.offsetHeight / 2);
+    const source = event.currentTarget;
+    source?.addEventListener?.(
+      "dragend",
+      () => ghost?.remove(),
+      { once: true }
+    );
   } catch (error) {
+    ghost?.remove();
     console.error("[mapa] error iniciando arrastre de equipo:", error);
   }
 };
@@ -2911,6 +2958,8 @@ const renderFloorSectors = async (feature) => {
     buildingViewOverlay.remove();
     buildingViewOverlay = null;
   }
+  hoveredSectorRoomId = "";
+  hoveredSectorPolygon = null;
   buildingViewOverlay = L.layerGroup().addTo(buildingViewMap);
 
   const [allRooms, backendInventoryItems] = await Promise.all([
@@ -2934,10 +2983,30 @@ const renderFloorSectors = async (feature) => {
   }
 
   const activeSectorFilter = popupSectorFilterState[featureId] || "";
-  const sectorPolygons = [];
   const sectorBubblePoints = [];
   const dropTargets = [];
   const canDropEquipment = canManageEquipmentAssignments(backendSession);
+  const sectorEntries = [];
+  hoveredSectorRoomId = "";
+  hoveredSectorPolygon = null;
+
+  const clearHoveredSector = () => {
+    if (!hoveredSectorPolygon) return;
+    hoveredSectorPolygon.setStyle(baseSectorStyle);
+    hoveredSectorPolygon.getElement()?.classList?.remove("is-hover");
+    hoveredSectorPolygon = null;
+    hoveredSectorRoomId = "";
+  };
+
+  const setHoveredSector = (roomId, polygon) => {
+    if (hoveredSectorRoomId === roomId && hoveredSectorPolygon === polygon) return;
+    clearHoveredSector();
+    hoveredSectorRoomId = roomId;
+    hoveredSectorPolygon = polygon;
+    polygon.setStyle(hoverSectorStyle);
+    polygon.getElement()?.classList?.add("is-hover");
+    polygon.bringToFront();
+  };
 
   for (const sector of sectors) {
     const coords = parseRoomGeometryCoords(sector.geometryJson);
@@ -2945,30 +3014,8 @@ const renderFloorSectors = async (feature) => {
     const latLngs = coords.map((c) => [c[1], c[0]]);
     const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
 
-    const baseStyle = {
-      color: "#a78bfa",
-      weight: 1.2,
-      fillColor: "#a78bfa",
-      fillOpacity: 0.05,
-      opacity: 0.85,
-    };
-    const activeStyle = {
-      color: "#6d28d9",
-      weight: 2.5,
-      fillColor: "#6d28d9",
-      fillOpacity: 0.16,
-      opacity: 1,
-    };
-    const hoverStyle = {
-      color: "#38bdf8",
-      weight: 2.5,
-      fillColor: "#38bdf8",
-      fillOpacity: 0.16,
-      opacity: 1,
-    };
-
     const polygon = L.polygon(latLngs, {
-      ...(isActive ? activeStyle : baseStyle),
+      ...(isActive ? activeSectorStyle : baseSectorStyle),
       className: isActive ? "building-view-sector is-active" : "building-view-sector",
       interactive: true,
     }).addTo(buildingViewOverlay);
@@ -2976,12 +3023,9 @@ const renderFloorSectors = async (feature) => {
     const setHover = (hovering) => {
       if (isActive) return;
       if (hovering) {
-        polygon.setStyle(hoverStyle);
-        polygon.getElement()?.classList?.add("is-hover");
-        polygon.bringToFront();
-      } else {
-        polygon.setStyle(baseStyle);
-        polygon.getElement()?.classList?.remove("is-hover");
+        setHoveredSector(sector.roomId, polygon);
+      } else if (hoveredSectorPolygon === polygon) {
+        clearHoveredSector();
       }
     };
 
@@ -2991,7 +3035,7 @@ const renderFloorSectors = async (feature) => {
       window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
     });
 
-    sectorPolygons.push({ roomId: sector.roomId, polygon });
+    sectorEntries.push({ roomId: sector.roomId, polygon, setHover });
 
     if (canDropEquipment) {
       dropTargets.push({ roomId: sector.roomId, ring: latLngs, polygon });
@@ -3018,20 +3062,12 @@ const renderFloorSectors = async (feature) => {
       window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
     });
     marker.on("mouseover", () => {
-      if (activeSectorFilter && activeSectorFilter === sector.roomId) return;
-      const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
-      if (entry?.polygon) {
-        entry.polygon.setStyle(hoverStyle);
-        entry.polygon.getElement()?.classList?.add("is-hover");
-        entry.polygon.bringToFront();
-      }
+      const entry = sectorEntries.find((item) => item.roomId === sector.roomId);
+      entry?.setHover(true);
     });
     marker.on("mouseout", () => {
-      if (activeSectorFilter && activeSectorFilter === sector.roomId) return;
-      const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
-      if (!entry?.polygon) return;
-      entry.polygon.setStyle(baseStyle);
-      entry.polygon.getElement()?.classList?.remove("is-hover");
+      const entry = sectorEntries.find((item) => item.roomId === sector.roomId);
+      entry?.setHover(false);
     });
   }
 
