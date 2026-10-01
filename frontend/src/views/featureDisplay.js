@@ -381,6 +381,11 @@ const updateBackendSessionCache = (session) => {
   window.syntroBackendSession = backendSessionCache;
 };
 
+const canManageEquipmentAssignments = (session) => {
+  const role = String(session?.role || "").toLowerCase();
+  return role === "admin" || role === "editor";
+};
+
 const loadBackendSession = async () => {
   const now = Date.now();
   if (backendSessionCache && now - backendSessionCacheAt < BACKEND_SESSION_CACHE_MS) {
@@ -1315,9 +1320,10 @@ const ensureWayfindingControls = () => {
   const topActions = document.getElementById("top-actions");
   if (!topActions) return;
 
-  let wrapper = document.getElementById("map-equipment-type-filter");
+  let wrapper = document.getElementById("map-wayfinding-controls");
   if (!wrapper) {
     wrapper = document.createElement("div");
+    wrapper.id = "map-wayfinding-controls";
     wrapper.className = "map-equipment-type-filter";
     L.DomEvent.disableClickPropagation(wrapper);
     L.DomEvent.disableScrollPropagation(wrapper);
@@ -1379,7 +1385,7 @@ export const initWayfindingControls = () => {
 const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const topActions = document.getElementById("top-actions");
   if (!topActions) return;
-  if (document.getElementById("map-equipment-type-filter")) {
+  if (document.getElementById("map-equipment-filters")) {
     syncFloorButtonsToFilter();
     return;
   }
@@ -1387,6 +1393,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const types = ["all", ...getAvailableSummaryTypes(summaryMap)];
 
   const wrapper = document.createElement("div");
+  wrapper.id = "map-equipment-filters";
   wrapper.className = "map-equipment-type-filter";
   L.DomEvent.disableClickPropagation(wrapper);
   L.DomEvent.disableScrollPropagation(wrapper);
@@ -1879,15 +1886,19 @@ const buildDevicesSummaryHtml = (devices) => {
   );
 };
 
-const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "") => {
+const UNASSIGNED_SECTOR_KEY = "__unassigned__";
+
+const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false) => {
   const roomsMap = buildRoomsMap(allRooms);
   const activeQuery = String(query || "").trim();
   const activeType = String(typeFilter || "all").trim().toLowerCase();
   const activeSectorFilter = String(sectorFilter || "").trim();
   const sourceDevices = activeQuery ? allDevices : devicesInFloor;
-  const sectorScopedDevices = activeSectorFilter
-    ? sourceDevices.filter((device) => device.roomId === activeSectorFilter)
-    : sourceDevices;
+  const sectorScopedDevices = activeSectorFilter === UNASSIGNED_SECTOR_KEY
+    ? sourceDevices.filter((device) => !device.roomId)
+    : activeSectorFilter
+      ? sourceDevices.filter((device) => device.roomId === activeSectorFilter)
+      : sourceDevices;
 
   if (!sectorScopedDevices.length) {
     return `No hay equipos en el sector seleccionado para ${escapeHtml(floorLabel)}.`;
@@ -1932,12 +1943,25 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
     const description = device.description || device.name || "Sin descripcion";
     const isHighlighted = highlightDevice === device;
     const deviceFloor = getDeviceFloor(device, roomsMap);
+    const itemId = canManageEquipment ? deviceItemIdOf(device) : "";
+    const draggableAttrs = itemId
+      ? ` draggable="true" ondragstart="window.startEquipmentDrag && window.startEquipmentDrag(event, '${escapeHtml(itemId)}')"`
+      : "";
+    const clearSectorHtml = canManageEquipment && device.roomId && itemId
+      ? `<button
+           class="floorButton"
+           style="${getActionButtonStyle()}"
+           onclick="window.clearEquipmentSector && window.clearEquipmentSector('${escapeHtml(itemId)}')"
+         >
+           Quitar sector
+         </button>`
+      : "";
     const cardStyle = isHighlighted
       ? "margin-bottom:8px; padding:8px 10px; border:2px solid #2f7ea8; border-radius:8px; background:#f0f7fb;"
       : "margin-bottom:8px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fafafa;";
 
     html += `
-      <div style="${cardStyle}">
+      <div style="${cardStyle}"${draggableAttrs}>
         ${
           isHighlighted
             ? `<div style="font-size:11px; font-weight:700; color:#1f2937; margin-bottom:4px;">Equipo buscado</div>`
@@ -1954,8 +1978,9 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
           buildIpLabelHtml(device.ip),
           buildStatusBadgeHtml(device.status)
         )}
-        <div style="margin-top:6px;">
+        <div style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
+          ${clearSectorHtml}
         </div>
       </div>
     `;
@@ -2024,12 +2049,40 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   return html;
 };
 
+const POPUP_SKELETON_DELAY_MS = 120;
+
+let popupRenderToken = 0;
+
+const renderPopupWithPartialLoading = async (layer) => {
+  const feature = layer?.feature;
+  if (!feature) return;
+
+  const token = ++popupRenderToken;
+  let shellTimer = null;
+  let settled = false;
+
+  const isCurrent = () => token === popupRenderToken && currentOpenLayer === layer;
+
+  const popupHtml = await getFeaturePopupHtml(feature, {
+    onShellReady: (shellHtml) => {
+      shellTimer = window.setTimeout(() => {
+        if (settled || !isCurrent()) return;
+        layer.setPopupContent(shellHtml);
+      }, POPUP_SKELETON_DELAY_MS);
+    },
+  });
+
+  settled = true;
+  if (shellTimer) window.clearTimeout(shellTimer);
+  if (!isCurrent()) return;
+
+  layer.setPopupContent(popupHtml);
+};
+
 const refreshCurrentPopup = async () => {
   if (!currentOpenLayer || !currentOpenLayer.feature) return;
 
-  currentOpenLayer.setPopupContent("Cargando información...");
-  const popupHtml = await getFeaturePopupHtml(currentOpenLayer.feature);
-  currentOpenLayer.setPopupContent(popupHtml);
+  await renderPopupWithPartialLoading(currentOpenLayer);
 };
 
 window.preparePopupNavigation = (featureId, viewKey, roomId = "", deviceKey = "") => {
@@ -2257,7 +2310,43 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const getFeaturePopupHtml = async (feature) => {
+const buildBuildingPanelPopupHtml = ({ featureName, building, currentFloor, hasView, contentHtml }) => `
+  <div style="${popupShellStyle}">
+    ${buildBuildingPanelHeaderHtml(featureName)}
+    ${buildFloorSelectorHtml(building, currentFloor)}
+    <div style="margin-top:8px;">
+      <div style="${hasView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
+        ${contentHtml}
+      </div>
+    </div>
+  </div>
+`;
+
+const buildPopupDataSkeletonHtml = () => `
+  <div style="${sectionBoxStyle}">
+    <div class="popup-data-skeleton" role="status" aria-live="polite">
+      <span class="popup-data-skeleton-spinner" aria-hidden="true"></span>
+      <span class="popup-data-skeleton-text">Cargando información...</span>
+      <span class="popup-data-skeleton-line" aria-hidden="true"></span>
+      <span class="popup-data-skeleton-line" aria-hidden="true"></span>
+      <span class="popup-data-skeleton-line is-short" aria-hidden="true"></span>
+    </div>
+  </div>
+`;
+
+const buildPopupLoadingShellHtml = (feature) => `
+  <div style="${popupShellStyle}">
+    ${feature?.properties?.name ? `<b>${escapeHtml(feature.properties.name)}</b>` : ""}
+    <div class="popup-data-skeleton" role="status" aria-live="polite">
+      <span class="popup-data-skeleton-spinner" aria-hidden="true"></span>
+      <span class="popup-data-skeleton-text">Cargando información...</span>
+      <span class="popup-data-skeleton-line" aria-hidden="true"></span>
+      <span class="popup-data-skeleton-line is-short" aria-hidden="true"></span>
+    </div>
+  </div>
+`;
+
+const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   const building = await findBuildingInCatalog(feature);
   const featureId = feature?.properties?.id || "Sin ID";
   const currentFloor = popupFloorState[featureId] ?? (feature?.properties?.floor ?? 0);
@@ -2296,6 +2385,18 @@ const getFeaturePopupHtml = async (feature) => {
 
   currentView = "devices";
 
+  if (typeof onShellReady === "function") {
+    onShellReady(
+      buildBuildingPanelPopupHtml({
+        featureName,
+        building,
+        currentFloor,
+        hasView: true,
+        contentHtml: buildPopupDataSkeletonHtml(),
+      })
+    );
+  }
+
   const [buildingDetail, allRooms, backendInventoryItems, buildingActivityItems] = await Promise.all([
     loadBuildingDetail(building),
     loadRoomsForBuilding(building),
@@ -2312,17 +2413,11 @@ const getFeaturePopupHtml = async (feature) => {
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
 
   const searchPopupContent = building?.searchPopupContent || "";
+  const canManageEquipment = canManageEquipmentAssignments(backendSession);
   const isBackendAdmin = Boolean(backendSession?.isAdmin);
   const adminActionsHtml = isBackendAdmin
     ? buildDashboardBuildingEditLink(featureId)
     : "";
-
-  let detailsHtml = `
-    <div style="${popupShellStyle}">
-      ${buildBuildingPanelHeaderHtml(featureName)}
-  `;
-
-detailsHtml += buildFloorSelectorHtml(building, currentFloor);
 
   let contentHtml = "";
   if (currentView === "summary") {
@@ -2372,11 +2467,17 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
     const activeSectorFilter = popupSectorFilterState[featureId] || "";
     const sectorFiltersOpen = Boolean(popupSectorFilterOpenState[featureId]);
     const scopeDevices = deviceScope === "building" ? allDevices : devicesInFloor;
-    const devicesForView = activeSectorFilter
-      ? scopeDevices.filter((device) => device.roomId === activeSectorFilter)
-      : scopeDevices;
+    const devicesForView = activeSectorFilter === UNASSIGNED_SECTOR_KEY
+      ? scopeDevices.filter((device) => !device.roomId)
+      : activeSectorFilter
+        ? scopeDevices.filter((device) => device.roomId === activeSectorFilter)
+        : scopeDevices;
+    const unassignedCount = scopeDevices.filter((device) => !device.roomId).length;
+    const sectorOptionsForFilter = canManageEquipment
+      ? [...sectorOptions, { roomId: UNASSIGNED_SECTOR_KEY, name: "Sin sector", count: unassignedCount }]
+      : sectorOptions;
     const activeSectorOption = activeSectorFilter
-      ? sectorOptions.find((s) => s.roomId === activeSectorFilter)
+      ? sectorOptionsForFilter.find((s) => s.roomId === activeSectorFilter)
       : null;
     const devicesScopeLabel = activeSectorOption
       ? `sector ${activeSectorOption.name}`
@@ -2387,11 +2488,18 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
     contentHtml = `
       <div style="${sectionBoxStyle}">
         ${buildDevicesSummaryHtml(devicesForView)}
+        ${
+          canManageEquipment
+            ? `<div style="margin-top:6px; font-size:11px; color:#475569;">
+                 Arrastra un equipo hasta un sector del mapa para asignarlo, o usa "Quitar sector" para dejarlos sin sector.
+               </div>`
+            : ""
+        }
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptions, activeSectorFilter, sectorFiltersOpen)}
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen)}
         </div>
         <div style="margin-top:4px;">
-          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter)}
+          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
         </div>
       </div>
     `;
@@ -2404,17 +2512,13 @@ detailsHtml += buildFloorSelectorHtml(building, currentFloor);
     `;
   }
 
-  detailsHtml += `
-    <div style="margin-top:8px;">
-      <div style="${currentView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
-        ${contentHtml}
-      </div>
-    </div>
-  `;
-
-  detailsHtml += `</div>`;
-
-  return detailsHtml;
+  return buildBuildingPanelPopupHtml({
+    featureName,
+    building,
+    currentFloor,
+    hasView: Boolean(currentView),
+    contentHtml,
+  });
 };
 
 export const filter = (feature) => {
@@ -2465,6 +2569,7 @@ const destroyBuildingViewMap = () => {
     buildingViewOverlay.clearLayers();
     buildingViewOverlay = null;
   }
+  teardownEquipmentDropTargets();
   if (buildingViewMap) {
     buildingViewMap.remove();
     buildingViewMap = null;
@@ -2544,6 +2649,184 @@ const bubbleCandidateOffsets = () => {
 };
 
 const isLatLngInsideRing = (latlng, ring) => pointInRing([latlng.lat, latlng.lng], ring);
+
+let sectorDropTargets = {};
+let equipmentDragItemId = "";
+let equipmentDropTargetRoomId = "";
+let equipmentDropHandlersBound = false;
+
+const deviceItemIdOf = (device) => {
+  const deviceId = String(device?.deviceId || "");
+  const prefix = "inventory-";
+  if (!deviceId.startsWith(prefix)) return "";
+  const candidate = deviceId.slice(prefix.length).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate)
+    ? candidate
+    : "";
+};
+
+const setEquipmentDropHighlight = (roomId) => {
+  if (equipmentDropTargetRoomId === roomId) return;
+
+  const targets = sectorDropTargets[currentOpenFeatureId] || [];
+  const previous = targets.find((target) => target.roomId === equipmentDropTargetRoomId);
+  previous?.polygon.getElement()?.classList?.remove("is-drop-target");
+
+  equipmentDropTargetRoomId = roomId;
+
+  if (!roomId) return;
+
+  const next = targets.find((target) => target.roomId === roomId);
+  next?.polygon.getElement()?.classList?.add("is-drop-target");
+  next?.polygon.bringToFront();
+};
+
+const findSectorTargetAtClientPoint = (clientX, clientY) => {
+  const targets = sectorDropTargets[currentOpenFeatureId] || [];
+  const container = buildingViewMap?.getContainer?.();
+  if (!targets.length || !buildingViewMap || !container) return null;
+
+  const rect = container.getBoundingClientRect();
+  const latLng = buildingViewMap.containerPointToLatLng(
+    L.point(clientX - rect.left, clientY - rect.top)
+  );
+
+  return targets.find((target) => pointInRing([latLng.lat, latLng.lng], target.ring)) || null;
+};
+
+const teardownEquipmentDropTargets = () => {
+  if (equipmentDropHandlersBound) {
+    const container = buildingViewMap?.getContainer?.();
+    container?.removeEventListener("dragover", onEquipmentDragOver);
+    container?.removeEventListener("dragleave", onEquipmentDragLeave);
+    container?.removeEventListener("drop", onEquipmentDrop);
+    equipmentDropHandlersBound = false;
+  }
+  equipmentDragItemId = "";
+  equipmentDropTargetRoomId = "";
+  sectorDropTargets = {};
+};
+
+const bindEquipmentDropTargets = () => {
+  const container = buildingViewMap?.getContainer?.();
+  if (!container || equipmentDropHandlersBound) return;
+
+  container.addEventListener("dragover", onEquipmentDragOver);
+  container.addEventListener("dragleave", onEquipmentDragLeave);
+  container.addEventListener("drop", onEquipmentDrop);
+  equipmentDropHandlersBound = true;
+};
+
+function onEquipmentDragOver(event) {
+  if (!equipmentDragItemId) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  setEquipmentDropHighlight(findSectorTargetAtClientPoint(event.clientX, event.clientY)?.roomId || "");
+}
+
+function onEquipmentDragLeave() {
+  setEquipmentDropHighlight("");
+}
+
+async function onEquipmentDrop(event) {
+  if (!equipmentDragItemId) return;
+  event.preventDefault();
+
+  const itemId = event.dataTransfer?.getData("text/plain") || equipmentDragItemId;
+  const target = findSectorTargetAtClientPoint(event.clientX, event.clientY);
+  setEquipmentDropHighlight("");
+
+  if (!target || !itemId) return;
+
+  equipmentDragItemId = "";
+  await assignEquipmentToSector(itemId, target.roomId);
+}
+
+let assignmentFeedbackTimer = null;
+
+const showAssignmentFeedback = (message, isError = false) => {
+  let container = document.getElementById("building-assignment-feedback");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "building-assignment-feedback";
+    container.className = "building-assignment-feedback";
+    document.body.appendChild(container);
+  }
+
+  container.textContent = message;
+  container.classList.toggle("is-error", Boolean(isError));
+  container.classList.add("is-visible");
+
+  window.clearTimeout(assignmentFeedbackTimer);
+  assignmentFeedbackTimer = window.setTimeout(() => {
+    container?.classList.remove("is-visible");
+  }, 4000);
+};
+
+const assignEquipmentToSector = async (itemId, roomExternalId) => {
+  if (!itemId) return false;
+
+  try {
+    const response = await fetch(`${BACKEND_API_URL}/api/inventory-assignments/items/${encodeURIComponent(itemId)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignedRoomExternalId: roomExternalId || "" }),
+    });
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || "No se pudo actualizar el equipo.");
+    }
+
+    showAssignmentFeedback(roomExternalId ? "Equipo movido al sector." : "Sector quitado al equipo.");
+    await refreshBuildingPanelAfterAssignment();
+    return true;
+  } catch (error) {
+    console.error("[mapa] error asignando equipo a sector:", error);
+    showAssignmentFeedback(error.message || "No se pudo actualizar el equipo.", true);
+    return false;
+  }
+};
+
+const refreshBuildingPanelAfterAssignment = async () => {
+  const featureId = currentOpenFeatureId;
+  const layer = currentOpenLayer;
+
+  if (featureId) {
+    const feature = layer?.feature;
+    if (feature) {
+      await renderFloorSectors(feature).catch((error) =>
+        console.error("[mapa] error refrescando sectores:", error)
+      );
+    }
+  }
+
+  await renderPopupWithPartialLoading(layer).catch((error) =>
+    console.error("[mapa] error refrescando panel:", error)
+  );
+};
+
+window.startEquipmentDrag = (event, itemId) => {
+  if (!itemId || !event?.dataTransfer) return;
+  equipmentDragItemId = itemId;
+  try {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", itemId);
+  } catch (error) {
+    console.error("[mapa] error iniciando arrastre de equipo:", error);
+  }
+};
+
+window.assignEquipmentToSector = (itemId, roomExternalId) => {
+  if (!itemId) return false;
+  return assignEquipmentToSector(itemId, roomExternalId);
+};
+
+window.clearEquipmentSector = async (itemId) => {
+  if (!itemId) return false;
+  return assignEquipmentToSector(itemId, "");
+};
 
 /**
  * Devuelve un LatLng cuyo icono completo (centro + sondas) queda dentro del
@@ -2653,6 +2936,8 @@ const renderFloorSectors = async (feature) => {
   const activeSectorFilter = popupSectorFilterState[featureId] || "";
   const sectorPolygons = [];
   const sectorBubblePoints = [];
+  const dropTargets = [];
+  const canDropEquipment = canManageEquipmentAssignments(backendSession);
 
   for (const sector of sectors) {
     const coords = parseRoomGeometryCoords(sector.geometryJson);
@@ -2661,11 +2946,11 @@ const renderFloorSectors = async (feature) => {
     const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
 
     const baseStyle = {
-      color: "#c4b5fd",
-      weight: 1,
-      fillColor: "#c4b5fd",
-      fillOpacity: 0.04,
-      opacity: 0.75,
+      color: "#a78bfa",
+      weight: 1.2,
+      fillColor: "#a78bfa",
+      fillOpacity: 0.05,
+      opacity: 0.85,
     };
     const activeStyle = {
       color: "#6d28d9",
@@ -2674,13 +2959,7 @@ const renderFloorSectors = async (feature) => {
       fillOpacity: 0.14,
       opacity: 1,
     };
-    const hoverStyle = {
-      color: "#7c3aed",
-      weight: 2.2,
-      fillColor: "#7c3aed",
-      fillOpacity: 0.12,
-      opacity: 1,
-    };
+    const hoverStyle = activeStyle;
 
     const polygon = L.polygon(latLngs, {
       ...(isActive ? activeStyle : baseStyle),
@@ -2706,6 +2985,10 @@ const renderFloorSectors = async (feature) => {
     });
 
     sectorPolygons.push({ roomId: sector.roomId, polygon });
+
+    if (canDropEquipment) {
+      dropTargets.push({ roomId: sector.roomId, ring: latLngs, polygon });
+    }
 
     if (!canViewEquipment) continue;
 
@@ -2745,6 +3028,11 @@ const renderFloorSectors = async (feature) => {
       }
       entry.polygon.getElement()?.classList?.remove("is-hover");
     });
+  }
+
+  if (dropTargets.length) {
+    sectorDropTargets[featureId] = dropTargets;
+    bindEquipmentDropTargets();
   }
 
   if (!canViewEquipment) return;
@@ -3050,7 +3338,7 @@ const createMatchBubbleForLayer = async (feature, layer) => {
 };
 
 const hideEquipmentTypeFilterWhileMatchActive = () => {
-  const filter = document.querySelector(".map-equipment-type-filter");
+  const filter = document.getElementById("map-equipment-filters");
   filter?.classList.toggle("building-match-active", buildingMatchModeActive);
 };
 
@@ -3195,7 +3483,7 @@ const dockBuildingPopup = (layer) => {
 
 export const onEachFeature = (feature, layer) => {
   if (feature.properties.isClickable) {
-    layer.bindPopup("Cargando información...", {
+    layer.bindPopup(buildPopupLoadingShellHtml(feature), {
       className: "building-panel-popup",
       minWidth: 320,
       maxWidth: 480,
@@ -3226,7 +3514,19 @@ export const onEachFeature = (feature, layer) => {
         popupViewState[feature.properties.id] = null;
       }
 
-      const htmlPromise = getFeaturePopupHtml(feature);
+      const token = ++popupRenderToken;
+      let shellTimer = null;
+      let popupSettled = false;
+      const isCurrentRender = () => token === popupRenderToken && currentOpenLayer === layer;
+
+      const htmlPromise = getFeaturePopupHtml(feature, {
+        onShellReady: (shellHtml) => {
+          shellTimer = window.setTimeout(() => {
+            if (popupSettled || !isCurrentRender()) return;
+            layer.setPopupContent(shellHtml);
+          }, POPUP_SKELETON_DELAY_MS);
+        },
+      });
 
       const shouldAnimate =
         animateOpen &&
@@ -3267,7 +3567,13 @@ export const onEachFeature = (feature, layer) => {
         createBuildingViewMap(layer);
       }
 
-      layer.setPopupContent(await htmlPromise);
+      popupSettled = true;
+      if (shellTimer) window.clearTimeout(shellTimer);
+
+      const finalHtml = await htmlPromise;
+      if (!isCurrentRender()) return;
+
+      layer.setPopupContent(finalHtml);
     });
 
     layer.on("popupclose", () => {

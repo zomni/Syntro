@@ -34,6 +34,7 @@ public class AdminController : Controller
     private readonly IPasswordHasher<AuthUser> _passwordHasher;
     private readonly BackendAuthService _authService;
     private readonly PackageRestoreProgressStore _packageProgress;
+    private readonly InventoryAssignmentService _inventoryAssignmentService;
     private const string ManualInventorySourceFile = "manual-admin";
     private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
     private const string DefaultPdfAllowedMimeTypes = "application/pdf,application/x-pdf";
@@ -49,7 +50,8 @@ public class AdminController : Controller
         SiteViewportOverridesService viewportOverridesService,
         IPasswordHasher<AuthUser> passwordHasher,
         BackendAuthService authService,
-        PackageRestoreProgressStore packageProgress)
+        PackageRestoreProgressStore packageProgress,
+        InventoryAssignmentService inventoryAssignmentService)
     {
         _context = context;
         _auditLogService = auditLogService;
@@ -62,6 +64,7 @@ public class AdminController : Controller
         _passwordHasher = passwordHasher;
         _authService = authService;
         _packageProgress = packageProgress;
+        _inventoryAssignmentService = inventoryAssignmentService;
     }
 
     public async Task<IActionResult> Index(
@@ -2906,45 +2909,16 @@ public class AdminController : Controller
             ModelState.AddModelError(string.Empty, pdfValidationError);
         }
 
-        var resolvedBuildingExternalId = assignedBuildingExternalId?.Trim() ?? string.Empty;
-        var resolvedRoomExternalId = assignedRoomExternalId?.Trim() ?? string.Empty;
-        var resolvedFloor = assignedFloor;
+        var assignment = await _inventoryAssignmentService.ResolveAssignmentAsync(
+            assignedRoomExternalId,
+            assignedBuildingExternalId,
+            assignedFloor,
+            strict: false,
+            cancellationToken);
 
-        if (!string.IsNullOrWhiteSpace(resolvedRoomExternalId))
-        {
-            var room = await _context.SyncedRooms
-                .AsNoTracking()
-                .FirstOrDefaultAsync(candidate => candidate.ExternalId == resolvedRoomExternalId && candidate.DeletedAtUtc == null, cancellationToken);
-
-            if (room != null)
-            {
-                resolvedRoomExternalId = room.ExternalId;
-                resolvedBuildingExternalId = room.BuildingExternalId;
-                resolvedFloor = room.ManualFloor ?? room.Floor;
-            }
-            else
-            {
-                var manualRoom = await _context.ManualRooms
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.ExternalId == resolvedRoomExternalId && r.DeletedAtUtc == null, cancellationToken);
-
-                if (manualRoom != null)
-                {
-                    resolvedBuildingExternalId = manualRoom.BuildingExternalId;
-                    resolvedFloor = manualRoom.Floor;
-                }
-                else
-                {
-                    resolvedRoomExternalId = string.Empty;
-                }
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(resolvedBuildingExternalId))
-        {
-            resolvedRoomExternalId = string.Empty;
-            resolvedFloor = null;
-        }
+        var resolvedBuildingExternalId = assignment.BuildingExternalId;
+        var resolvedRoomExternalId = assignment.RoomExternalId;
+        var resolvedFloor = assignment.Floor;
 
         item.SerialNumber = serialNumber?.Trim() ?? string.Empty;
         item.InferredCategory = normalizedCategory;

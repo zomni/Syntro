@@ -171,6 +171,7 @@ builder.Services.AddHostedService<DatabaseBackupHostedService>();
 builder.Services.AddScoped<FrontendSyncService>();
 builder.Services.AddScoped<ExcelInventoryImportService>();
 builder.Services.AddScoped<InventoryReconciliationService>();
+builder.Services.AddScoped<InventoryAssignmentService>();
 builder.Services.AddScoped<EquipmentDeliveryDocumentService>();
 builder.Services.AddScoped<NetworkTelemetryService>();
 builder.Services.AddScoped<NetworkTelemetryLiveScanService>();
