@@ -1114,7 +1114,7 @@ const buildDeviceControlsHtml = (
     if (activeSector) {
       activeFilterBannerHtml = `
         <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <span style="${CHIP_BASE_STYLE}; background:#6d28d91f; color:#6d28d9;">
+          <span style="${CHIP_BASE_STYLE}; background:#0ea5e91f; color:#0284c7;">
             ${resizeIcon(ROOM_ICON_SVG)}
             ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
           </span>
@@ -2953,10 +2953,10 @@ const renderFloorSectors = async (feature) => {
       opacity: 0.85,
     };
     const activeStyle = {
-      color: "#6d28d9",
+      color: "#38bdf8",
       weight: 2.5,
-      fillColor: "#6d28d9",
-      fillOpacity: 0.14,
+      fillColor: "#38bdf8",
+      fillOpacity: 0.16,
       opacity: 1,
     };
     const hoverStyle = activeStyle;
