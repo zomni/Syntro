@@ -2953,17 +2953,17 @@ const renderFloorSectors = async (feature) => {
       opacity: 0.85,
     };
     const activeStyle = {
-      color: "#38bdf8",
+      color: "#6d28d9",
       weight: 2.5,
-      fillColor: "#38bdf8",
+      fillColor: "#6d28d9",
       fillOpacity: 0.16,
       opacity: 1,
     };
     const hoverStyle = {
-      color: "#6d28d9",
+      color: "#38bdf8",
       weight: 2.5,
-      fillColor: "#6d28d9",
-      fillOpacity: 0.14,
+      fillColor: "#38bdf8",
+      fillOpacity: 0.16,
       opacity: 1,
     };
 
@@ -2974,12 +2974,13 @@ const renderFloorSectors = async (feature) => {
     }).addTo(buildingViewOverlay);
 
     const setHover = (hovering) => {
+      if (isActive) return;
       if (hovering) {
         polygon.setStyle(hoverStyle);
         polygon.getElement()?.classList?.add("is-hover");
         polygon.bringToFront();
       } else {
-        polygon.setStyle(isActive ? activeStyle : baseStyle);
+        polygon.setStyle(baseStyle);
         polygon.getElement()?.classList?.remove("is-hover");
       }
     };
@@ -3017,6 +3018,7 @@ const renderFloorSectors = async (feature) => {
       window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
     });
     marker.on("mouseover", () => {
+      if (activeSectorFilter && activeSectorFilter === sector.roomId) return;
       const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
       if (entry?.polygon) {
         entry.polygon.setStyle(hoverStyle);
@@ -3025,13 +3027,10 @@ const renderFloorSectors = async (feature) => {
       }
     });
     marker.on("mouseout", () => {
+      if (activeSectorFilter && activeSectorFilter === sector.roomId) return;
       const entry = sectorPolygons.find((item) => item.roomId === sector.roomId);
       if (!entry?.polygon) return;
-      if (activeSectorFilter && activeSectorFilter === sector.roomId) {
-        entry.polygon.setStyle(activeStyle);
-      } else {
-        entry.polygon.setStyle(baseStyle);
-      }
+      entry.polygon.setStyle(baseStyle);
       entry.polygon.getElement()?.classList?.remove("is-hover");
     });
   }
