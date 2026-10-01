@@ -1022,6 +1022,34 @@
                     var abortCtrl = new AbortController();
                     if (cancelBtn) cancelBtn.onclick = () => abortCtrl.abort();
 
+                    var GENERATION_SHARE = 0.9;
+                    var applyBarWidth = (value) => {
+                        var pct = Math.max(0, Math.min(100, value));
+                        var current = parseFloat(progressBar?.style.width) || 0;
+                        if (progressBar && pct > current) progressBar.style.width = pct + "%";
+                    };
+
+                    var downloadProgressPoll = null;
+                    var stopDownloadProgressPoll = () => {
+                        if (downloadProgressPoll) {
+                            clearInterval(downloadProgressPoll);
+                            downloadProgressPoll = null;
+                        }
+                    };
+
+                    var progressUrl = anchor.href.replace(/\/download(?:\?.*)?$/, "/download-progress");
+                    downloadProgressPoll = setInterval(async () => {
+                        try {
+                            var r = await fetch(progressUrl, { credentials: "include", headers: { "X-Requested-With": "XMLHttpRequest" } });
+                            var data = await r.json();
+                            if (!data || !data.active) return;
+                            applyBarWidth(Math.round((data.percent || 0) * GENERATION_SHARE));
+                            if (percentLabel && data.percent) percentLabel.textContent = Math.round((data.percent || 0) * GENERATION_SHARE) + "%";
+                            if (subtitleEl && data.message) subtitleEl.textContent = data.message;
+                            if (data.failed || data.done) stopDownloadProgressPoll();
+                        } catch (err) { }
+                    }, 700);
+
                     try {
                         var res = await fetch(anchor.href, {
                             credentials: "include",
@@ -1038,10 +1066,42 @@
                             throw new Error(msg);
                         }
 
-                        if (percentLabel) percentLabel.textContent = "Descargando archivo...";
+                        stopDownloadProgressPoll();
 
-                        var blob = await res.blob();
                         var fileName = "syntro-data-package.zip";
+                        var blob;
+
+                        var contentLengthHeader = res.headers.get("Content-Length");
+                        var totalBytes = contentLengthHeader ? parseInt(contentLengthHeader, 10) : 0;
+
+                        if (res.body && res.body.getReader && totalBytes > 0) {
+                            if (subtitleEl) subtitleEl.textContent = "Descargando el archivo...";
+                            var reader = res.body.getReader();
+                            var received = 0;
+                            var chunks = [];
+                            var transferSpan = 100 - (GENERATION_SHARE * 100);
+                            for (;;) {
+                                var step = await reader.read();
+                                if (step.done) break;
+                                if (step.value) {
+                                    chunks.push(step.value);
+                                    received += step.value.length;
+                                }
+                                var transferPct = Math.min(1, received / totalBytes);
+                                var overall = Math.round((GENERATION_SHARE * 100) + (transferPct * transferSpan));
+                                applyBarWidth(overall);
+                                if (percentLabel) {
+                                    var mbLoaded = (received / 1048576).toFixed(1);
+                                    var mbTotal = (totalBytes / 1048576).toFixed(1);
+                                    percentLabel.textContent = overall + "% \u2014 " + mbLoaded + " MB / " + mbTotal + " MB";
+                                }
+                            }
+                            blob = new Blob(chunks, { type: "application/zip" });
+                        } else {
+                            if (percentLabel) percentLabel.textContent = "Descargando archivo...";
+                            blob = await res.blob();
+                        }
+
                         var contentDisposition = res.headers.get("Content-Disposition");
                         if (contentDisposition) {
                             var m = /filename="?([^";]+)"?/.exec(contentDisposition);
@@ -1092,6 +1152,7 @@
                             }
                         }
                     } finally {
+                        stopDownloadProgressPoll();
                         packageDownloadInProgress = false;
                     }
                 });

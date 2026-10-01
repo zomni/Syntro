@@ -34,6 +34,7 @@ public class AdminController : Controller
     private readonly IPasswordHasher<AuthUser> _passwordHasher;
     private readonly BackendAuthService _authService;
     private readonly PackageRestoreProgressStore _packageProgress;
+    private readonly PackageExportProgressStore _packageExportProgress;
     private readonly InventoryAssignmentService _inventoryAssignmentService;
     private const string ManualInventorySourceFile = "manual-admin";
     private const string DeliveryFormPreviewCachePrefix = "delivery-form-preview:";
@@ -51,6 +52,7 @@ public class AdminController : Controller
         IPasswordHasher<AuthUser> passwordHasher,
         BackendAuthService authService,
         PackageRestoreProgressStore packageProgress,
+        PackageExportProgressStore packageExportProgress,
         InventoryAssignmentService inventoryAssignmentService)
     {
         _context = context;
@@ -64,6 +66,7 @@ public class AdminController : Controller
         _passwordHasher = passwordHasher;
         _authService = authService;
         _packageProgress = packageProgress;
+        _packageExportProgress = packageExportProgress;
         _inventoryAssignmentService = inventoryAssignmentService;
     }
 
@@ -1266,18 +1269,26 @@ public class AdminController : Controller
         var backendStaging = Path.Combine(stagingRoot, "backend-data");
         var frontendStaging = Path.Combine(stagingRoot, "frontend-data");
         var outputPath = Path.Combine(tempRoot, packageName);
+        var progressKey = User.Identity?.Name ?? "anonymous";
+
+        _packageExportProgress.Begin(progressKey);
 
         try
         {
             Directory.CreateDirectory(backendStaging);
             Directory.CreateDirectory(frontendStaging);
 
+            _packageExportProgress.Report(progressKey, "db", "Copiando la base de datos...", 12);
             await CreateConsistentDatabaseCopyAsync(
                 GetDatabaseFilePath(),
                 Path.Combine(backendStaging, "syntro.db"),
                 cancellationToken);
+            _packageExportProgress.Report(progressKey, "forms", "Copiando formularios PDF...", 40);
+
             CopyDirectoryIfExists(GetInventoryFormPdfDirectory(), Path.Combine(backendStaging, "inventory-forms"));
+            _packageExportProgress.Report(progressKey, "documents", "Copiando documentos...", 52);
             CopyDirectoryIfExists(GetInventoryDocumentsDirectory(), Path.Combine(backendStaging, "inventory-documents"));
+            _packageExportProgress.Report(progressKey, "keys", "Copiando claves y datos del mapa...", 64);
             CopyDirectoryIfExists(GetDataProtectionKeysDirectory(), Path.Combine(backendStaging, "data-protection-keys"));
 
             var frontendDataDirectory = ResolveFrontendDataDirectory();
@@ -1306,8 +1317,12 @@ public class AdminController : Controller
                 }
             }, new JsonSerializerOptions { WriteIndented = true });
 
+            _packageExportProgress.Report(progressKey, "manifest", "Escribiendo manifiesto...", 74);
             await System.IO.File.WriteAllTextAsync(Path.Combine(stagingRoot, "manifest.json"), manifest, cancellationToken);
+
+            _packageExportProgress.Report(progressKey, "zip", "Comprimiendo el paquete... (puede tardar varios minutos)", 78);
             ZipFile.CreateFromDirectory(stagingRoot, outputPath, CompressionLevel.Optimal, includeBaseDirectory: false);
+            _packageExportProgress.Report(progressKey, "audit", "Registrando la descarga...", 90);
 
             await _auditLogService.LogSecurityEventAsync(
                 actionType: "project-package-export",
@@ -1320,12 +1335,41 @@ public class AdminController : Controller
                 cancellationToken: cancellationToken);
 
             var bytes = await System.IO.File.ReadAllBytesAsync(outputPath, cancellationToken);
+            _packageExportProgress.Complete(progressKey);
             return File(bytes, "application/zip", packageName);
+        }
+        catch (Exception ex)
+        {
+            _packageExportProgress.Fail(progressKey, ex.Message);
+            throw;
         }
         finally
         {
             TryDeleteDirectory(tempRoot);
         }
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [HttpGet("/admin/project-package/download-progress")]
+    [HttpGet("/dashboard/project-package/download-progress")]
+    public IActionResult GetProjectPackageDownloadProgress()
+    {
+        var progressKey = User.Identity?.Name ?? "anonymous";
+        var entry = _packageExportProgress.Get(progressKey);
+        if (entry is null)
+        {
+            return Ok(new { active = false });
+        }
+
+        return Ok(new
+        {
+            active = true,
+            stage = entry.Stage,
+            message = entry.Message,
+            percent = entry.Percent,
+            done = entry.Done,
+            failed = entry.Failed
+        });
     }
 
     [Authorize(Roles = $"{AppRoles.Admin}")]
