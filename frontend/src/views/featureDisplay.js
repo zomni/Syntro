@@ -2959,7 +2959,13 @@ const renderFloorSectors = async (feature) => {
       fillOpacity: 0.16,
       opacity: 1,
     };
-    const hoverStyle = activeStyle;
+    const hoverStyle = {
+      color: "#6d28d9",
+      weight: 2.5,
+      fillColor: "#6d28d9",
+      fillOpacity: 0.14,
+      opacity: 1,
+    };
 
     const polygon = L.polygon(latLngs, {
       ...(isActive ? activeStyle : baseStyle),
