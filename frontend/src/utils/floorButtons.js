@@ -34,5 +34,12 @@ export const resolveFloorButtonId = (defaultFloor, floors) => {
   // Sin coincidencia, la planta base consolidada (piso 1) en vez del piso 0,
   // que ya no existe tras RemoveFloorZero.
   const baseIndex = floorList.findIndex((floor) => Number(floor) === BASE_FLOOR_NUMBER);
-  return baseIndex >= 0 ? `b${baseIndex}` : "b0";
+  if (baseIndex >= 0) {
+    return `b${baseIndex}`;
+  }
+
+  // Sin lista de plantas no hay ningun id derivable. `b0` es el id del primer
+  // boton que genera goToCampus.js, asi que es la unica referencia valida; los
+  // llamadores ya verifican que el boton exista antes de usarlo.
+  return "b0";
 };

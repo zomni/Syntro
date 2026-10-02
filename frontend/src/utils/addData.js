@@ -293,7 +293,7 @@ const loadManualFeaturesForFloor = async (floorNumber) => {
   return manualBuildings
     .filter((building) => {
       const floors = parseManualFloors(building.floorsJson);
-      return floors.length ? floors.includes(Number(floorNumber)) : Number(floorNumber) === 0;
+      return floors.length ? floors.includes(Number(floorNumber)) : Number(floorNumber) === BASE_FLOOR_NUMBER;
     })
     .map((building) => manualBuildingToFeature(building, floorNumber))
     .filter(Boolean);

@@ -172,8 +172,7 @@ export const goTo = (campus, options = {}) => {
     
     button.innerHTML = parseInt(campus_info["floors"][i]);
     button.classList.add("floorButton");
-    
-    button.hidden = parseInt(button.innerHTML, 10) === 0;
+
     const floorHost = isWayfindingMode()
       ? document.getElementById("floorButtons-container")
       : document.getElementById("map-floor-filter-buttons") || document.getElementById("floorButtons-container");
