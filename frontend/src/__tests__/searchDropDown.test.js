@@ -1,33 +1,132 @@
-import { computeDropDownPosition, resolveResultIcon } from "../utils/searchDropDown.js";
+import {
+  computeDropDownPosition,
+  resolveEquipmentType,
+  resolveResultIcon,
+  resolveResultKind,
+} from "../utils/searchDropDown.js";
+
+// Los tres tipos salen del description del índice de búsqueda, que ya usa ese formato:
+// "Edificio · BLD-001 · piso(s): 1", "Sala · Hospitalización · piso 1",
+// "Equipo · pc · Sala 101 · piso 1".
+describe("resolveResultKind", () => {
+  test("reconoce los tres tipos del índice estático", () => {
+    expect(resolveResultKind({ description: "Edificio · BLD-001 · piso(s): 1" })).toBe("building");
+    expect(resolveResultKind({ description: "Sala · Hospitalización · piso 1" })).toBe("sector");
+    expect(resolveResultKind({ description: "Equipo · pc · Sala 101 · piso 1" })).toBe("equipment");
+  });
+
+  test("el resultKind explícito manda sobre el description", () => {
+    // Los equipos de inventario no traen properties.description con prefijo.
+    expect(resolveResultKind({ resultKind: "equipment", description: "Informatica CASR" })).toBe(
+      "equipment"
+    );
+  });
+
+  test("no se rompe con propiedades vacías o ausentes", () => {
+    expect(resolveResultKind(undefined)).toBe("");
+    expect(resolveResultKind({})).toBe("");
+    expect(resolveResultKind({ properties: undefined })).toBe("");
+  });
+
+  test("devuelve vacío cuando no puede clasificar", () => {
+    expect(resolveResultKind({ description: "algo sin prefijo" })).toBe("");
+  });
+});
+
+describe("resolveEquipmentType", () => {
+  test("lee el tipo desde el description del índice estático", () => {
+    expect(resolveEquipmentType({ description: "Equipo · printer · Sala 101 · piso 1" })).toBe(
+      "printer"
+    );
+  });
+
+  test("usa el equipmentType explícito del endpoint de inventario", () => {
+    expect(resolveEquipmentType({ equipmentType: "pc" })).toBe("pc");
+  });
+
+  test("es case-insensitive", () => {
+    expect(resolveEquipmentType({ description: "Equipo · PC · Sala 101 · piso 1" })).toBe("pc");
+  });
+
+  test("devuelve vacío si no hay tipo", () => {
+    expect(resolveEquipmentType(undefined)).toBe("");
+    expect(resolveEquipmentType({ description: "Equipo" })).toBe("");
+  });
+});
 
 describe("resolveResultIcon", () => {
   // Regresión: ni cs_sotero_search.json ni el catálogo traen properties.image, así que
   // createDropDown pedía assets/icons_os/undefined y el fallback SPA del servidor
   // respondía 200 text/html con index.html. El <img> quedaba roto en todos los
   // resultados, no solo en los de equipos.
-  test("cae al ícono por defecto cuando no hay imagen", () => {
+  test("distingue edificio, sector y equipo", () => {
+    expect(resolveResultIcon({ description: "Edificio · BLD-001 · piso(s): 1" })).toBe("building.svg");
+    expect(resolveResultIcon({ description: "Sala · Hospitalización · piso 1" })).toBe("room.svg");
+  });
+
+  test("distingue los tipos de equipo", () => {
+    expect(resolveResultIcon({ description: "Equipo · pc · Sala 101 · piso 1" })).toBe(
+      "computer_room.svg"
+    );
+    expect(resolveResultIcon({ description: "Equipo · printer · Sala 101 · piso 1" })).toBe(
+      "printer.svg"
+    );
+  });
+
+  test("el equipo de inventario se tipea por InferredCategory", () => {
+    expect(resolveResultIcon({ resultKind: "equipment", equipmentType: "pc" })).toBe(
+      "computer_room.svg"
+    );
+    expect(resolveResultIcon({ resultKind: "equipment", equipmentType: "printer" })).toBe(
+      "printer.svg"
+    );
+  });
+
+  // El campus solo tiene pc e impresora, así que cualquier categoría desconocida cae al
+  // glifo genérico en vez de inventar un icono nuevo por cada una.
+  test("una categoría desconocida cae al ícono genérico de equipo", () => {
+    expect(resolveResultIcon({ resultKind: "equipment", equipmentType: "other" })).toBe("device.svg");
+    expect(resolveResultIcon({ resultKind: "equipment", equipmentType: "" })).toBe("device.svg");
+  });
+
+  // El índice todavía trae un par de entradas etiquetadas como phone, pero en este
+  // campus no existen teléfonos: tienen que verse como equipo genérico, no como icono
+  // de teléfono ni reventar.
+  test("un tipo que no corresponde a este campus no rompe el ícono", () => {
+    expect(resolveResultIcon({ description: "Equipo · phone · Sala 101 · piso 1" })).toBe(
+      "device.svg"
+    );
+  });
+
+  test("cae al ícono por defecto cuando no puede clasificar", () => {
     expect(resolveResultIcon(undefined)).toBe("building.svg");
     expect(resolveResultIcon(null)).toBe("building.svg");
-    expect(resolveResultIcon("")).toBe("building.svg");
-    expect(resolveResultIcon("   ")).toBe("building.svg");
+    expect(resolveResultIcon({})).toBe("building.svg");
   });
 
-  test("trata los strings 'undefined' y 'null' como ausentes", () => {
-    expect(resolveResultIcon("undefined")).toBe("building.svg");
-    expect(resolveResultIcon("null")).toBe("building.svg");
+  test("respeta un ícono propio si el room editor lo define", () => {
+    expect(resolveResultIcon({ image: "cafeteria.svg" })).toBe("cafeteria.svg");
+    expect(resolveResultIcon({ image: "hospital" })).toBe("hospital.svg");
   });
 
-  test("respeta una extensión válida", () => {
-    expect(resolveResultIcon("cafeteria.svg")).toBe("cafeteria.svg");
-    expect(resolveResultIcon("car_parking.png")).toBe("car_parking.png");
-  });
-
-  test("agrega .svg a los nombres sin extensión", () => {
-    expect(resolveResultIcon("hospital")).toBe("hospital.svg");
+  test("trata los strings 'undefined' y 'null' como ícono ausente", () => {
+    expect(resolveResultIcon({ image: "undefined" })).toBe("building.svg");
+    expect(resolveResultIcon({ image: "null" })).toBe("building.svg");
+    expect(resolveResultIcon({ image: "" })).toBe("building.svg");
   });
 
   test("nunca devuelve undefined", () => {
-    for (const value of [undefined, null, "", "  ", "undefined", "null", "x.svg"]) {
+    const cases = [
+      undefined,
+      null,
+      {},
+      { description: "" },
+      { resultKind: "equipment", equipmentType: "other" },
+      { image: "undefined" },
+      { description: "Edificio · CDT · piso(s): 1" },
+    ];
+
+    for (const value of cases) {
       expect(resolveResultIcon(value)).toBeTruthy();
     }
   });

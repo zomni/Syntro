@@ -282,7 +282,9 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
 
       const serial = item?.serialNumber || "";
       const deviceKey = serial || item?.itemNumber || item?.id || "";
-      const title = serial ? `S/N: ${serial}` : (item?.description || "Equipo");
+      // Solo la serie: el prefijo "S/N: " era ruido en el dropdown y todavia mas en el
+      // input, que se completa con el title al moverse con las flechas.
+      const title = serial || item?.description || "Equipo";
       const floorValue = Number.isFinite(Number(item?.assignedFloor)) ? Number(item.assignedFloor) : 0;
       const roomId = item?.assignedRoomExternalId || "";
       const view = "devices";
@@ -310,7 +312,8 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
           roomId,
           deviceKey,
           deviceSerial: serial,
-          image: buildingFeature.properties?.image,
+          resultKind: "equipment",
+          equipmentType: item?.inferredCategory || "",
         },
       });
 
@@ -494,7 +497,12 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
         // add delayKeyup to search box arguments = (callback function, timeout)
         switch (event.keyCode) {
           case 13: // enter
-            searchButtonClick(); // fix here when search button is clicked menu still open & same on search click
+            // Con un resultado resaltado confirma; si no hay ninguno, busca.
+            if (activeResult !== -1) {
+              commitResult(activeResult);
+            } else {
+              searchButtonClick();
+            }
             break;
           case 38: // up arrow
             prevResult();
@@ -716,19 +724,20 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     var loopCount = features.length; // Number of results got from Ajax call + Fuse search
 
     for (var i = 0; i < loopCount; i++) {
+      const properties = features[i]?.properties || {};
       var html =
         "<li id='listElement" + i + "' class='autocomplete-listResult'>";
       html +=
         "<span id='listElementContent" +
         i +
         "' class='autocomplete-content'><img src='assets/icons_os/" +
-        resolveResultIcon(features[i].properties.image) +
-        "' class='autocomplete-iconStyle' align='middle'>";
+        resolveResultIcon(properties) +
+        "' class='autocomplete-iconStyle' alt='' align='middle'>";
       html +=
         "<font size='2' color='#333' class='autocomplete-title'>" +
-        features[i].properties.title +
+        (properties.title || "") +
         "</font><font size='1' color='#8c8c8c'> " +
-        features[i].properties.description +
+        (properties.description || "") +
         "<font></span></li>";
       $("#resultList").append(html);
 
@@ -765,6 +774,25 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     }
   }
 
+  function commitResult(index) {
+    // Aplica el resultado: navega al piso y al edificio, y saca el dropdown para no
+    // tapar el mapa al que se acaba de llegar.
+    if (index === -1) {
+      return;
+    }
+
+    drawGeoJson(index);
+
+    // El input queda con el título del resultado elegido. Con las flechas ya venía de
+    // fillSearchBox, pero viniendo del click de mouse no, y ambos caminos deben
+    // terminar igual. Va antes del reset porque fillSearchBox lee activeResult.
+    fillSearchBox();
+
+    // Se resetea para que el proximo Enter vuelva a buscar en vez de re-confirmar.
+    activeResult = -1;
+    $("#resultsDiv").remove();
+  }
+
   function listElementMouseDown(listElement) {
     // Mouse down (click) on list element event
     var index = parseInt(listElement.id.substr(11));
@@ -780,9 +808,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
 
       $("#listElement" + index).removeClass("mouseover");
       $("#listElement" + index).addClass("active");
-      activeResult = index;
-      fillSearchBox();
-      drawGeoJson(activeResult);
+      commitResult(index);
     }
   }
 
@@ -843,6 +869,9 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     }
   }
 
+  // Moverse con las flechas solo mueve el resaltado y completa el input: antes se llamaba
+  // drawGeoJson desde aca y el mapa saltaba apenas se posaba el cursor sobre un
+  // resultado, sin dar chance de revisarlo. Ahora la navegacion la dispara el Enter.
   function nextResult() {
     // for down arrow
 
@@ -859,10 +888,6 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
       }
 
       fillSearchBox();
-
-      if (activeResult !== -1) {
-        drawGeoJson(activeResult);
-      }
     }
   }
 
@@ -884,10 +909,6 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
       }
 
       fillSearchBox();
-
-      if (activeResult !== -1) {
-        drawGeoJson(activeResult);
-      }
     }
   }
 
