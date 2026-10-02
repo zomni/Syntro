@@ -21,7 +21,7 @@ import { latlngBuildings, campusBuildings } from "../views/buildingsInfo.js"; //
 
 import { createSvgElement } from "../utils/tools.js"; // Create SVG empty element
 import { getCatalogFileName, getCurrentCampusKey } from "./campusConfig.js";
-import { computeAllowedBuildingIdsForFloor } from "./buildingCatalog.js";
+import { computeAllowedBuildingIdsForFloor, BASE_FLOOR_NUMBER } from "./buildingCatalog.js";
 import {
   loadManualBuildings,
   mergeCatalogWithSearch,
@@ -185,7 +185,7 @@ const cloneFeatureForFloor = (feature, floorNumber) => {
     properties: {
       ...(feature?.properties || {}),
       floor: Number(floorNumber),
-      footprintFloor: feature?.properties?.floor ?? 0,
+      footprintFloor: feature?.properties?.floor ?? BASE_FLOOR_NUMBER,
     },
   };
 };
@@ -195,9 +195,10 @@ const addBaseFootprintsForMissingBuildings = async (
   location,
   floorNumber,
   filteredJson,
-  allowedBuildingIds
+  allowedBuildingIds,
+  baseFloorFeatures
 ) => {
-  if (Number(floorNumber) === 0 || !allowedBuildingIds) {
+  if (!allowedBuildingIds) {
     return filteredJson;
   }
 
@@ -210,9 +211,19 @@ const addBaseFootprintsForMissingBuildings = async (
   }
 
   try {
-    const baseJson = await loadFloorGeoJson(school, location, 0);
-    const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location);
-    const fallbackFeatures = (enrichedBaseJson.features || [])
+    // La planta base es la 1 consolidada: el piso 0 ya no existe. Cuando estamos
+    // en la propia planta base reutilizamos las features que ya están en memoria en
+    // lugar de volver a pedir el mismo archivo.
+    let sourceFeatures;
+    if (Array.isArray(baseFloorFeatures)) {
+      sourceFeatures = baseFloorFeatures;
+    } else {
+      const baseJson = await loadFloorGeoJson(school, location, BASE_FLOOR_NUMBER);
+      const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location);
+      sourceFeatures = enrichedBaseJson.features || [];
+    }
+
+    const fallbackFeatures = sourceFeatures
       .filter((feature) => missingIds.has(feature?.properties?.id))
       .map((feature) => cloneFeatureForFloor(feature, floorNumber));
 
@@ -648,7 +659,8 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       location,
       floorNumber,
       filteredJson,
-      allowedBuildingIds
+      allowedBuildingIds,
+      Number(floorNumber) === BASE_FLOOR_NUMBER ? baseFeatures : null
     );
     const manualFeatures = await loadManualFeaturesForFloor(floorNumber);
 

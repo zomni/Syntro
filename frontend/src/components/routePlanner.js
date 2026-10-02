@@ -1,6 +1,8 @@
 import { getPrimaryCampusKey, getCatalogFileName } from "../utils/campusConfig.js";
 import { getActiveCampus } from "../utils/goToCampus.js";
 import { identifiers } from "../utils/identifiers.js";
+import { queryFloorButtons } from "../utils/floorButtons.js";
+import { BASE_FLOOR_NUMBER } from "../utils/buildingCatalog.js";
 import { map } from "../views/map.js";
 import { mergeCatalogWithSearch } from "@app/searchMetadata";
 import { clearRouteHighlight, closeCurrentPopup, setRouteHighlight } from "@app/featureDisplay";
@@ -143,9 +145,9 @@ const loadBuildingsCatalog = async () => {
 
   try {
     const campusKey = getActiveCampus() || getPrimaryCampusKey();
-    const response = await fetch(`${getCatalogFileName(campusKey)}?v=${Date.now()}`, {
-      cache: "no-store",
-    });
+    // Sin `?v=Date.now()` ni `no-store`: el catálogo es estático y se versiona en el
+    // despliegue. Antes se re-descargaban 45 KB en cada population de selectores.
+    const response = await fetch(getCatalogFileName(campusKey));
 
     if (!response.ok) {
       throw new Error("No se pudo cargar el catálogo de edificios");
@@ -258,7 +260,20 @@ const findNearestRouteNode = (latlng, nodes) => {
   return best ? { node: best, distance: bestDistance } : null;
 };
 
+// El grafo es derivado puro de la red y la red ya está memoizada: se cachea con
+// WeakMap para no reconstruirse en cada cálculo de ruta.
+const routeGraphCache = new WeakMap();
+
 const buildRouteGraph = (network) => {
+  if (!network || typeof network !== "object") {
+    return new Map();
+  }
+
+  const cached = routeGraphCache.get(network);
+  if (cached) {
+    return cached;
+  }
+
   const graph = new Map();
 
   for (const node of network.nodes) {
@@ -285,6 +300,7 @@ const buildRouteGraph = (network) => {
     graph.get(to).push(reverseEntry);
   }
 
+  routeGraphCache.set(network, graph);
   return graph;
 };
 
@@ -468,6 +484,27 @@ const populateBuildingSelectors = async (preserveSelection = true) => {
   updateSubmitState();
 };
 
+const COMBOBOX_DEBOUNCE_MS = 120;
+
+// renderComboboxOptions vacía el innerHTML y reconstruye hasta 80 opciones, así que
+// sin debounce se hacía eso en cada tecla y en cada focus.
+const comboboxTimers = new WeakMap();
+
+const scheduleComboboxRefresh = (hiddenInput, searchInput, optionsElement) => {
+  const pending = comboboxTimers.get(searchInput);
+  if (pending) {
+    window.clearTimeout(pending);
+  }
+
+  comboboxTimers.set(
+    searchInput,
+    window.setTimeout(() => {
+      comboboxTimers.delete(searchInput);
+      void refreshCombobox(hiddenInput, searchInput, optionsElement);
+    }, COMBOBOX_DEBOUNCE_MS)
+  );
+};
+
 const refreshCombobox = async (hiddenInput, searchInput, optionsElement) => {
   const buildings = await loadBuildingsCatalog();
   renderComboboxOptions(hiddenInput, searchInput, optionsElement, buildings, hiddenInput.value, searchInput.value);
@@ -477,12 +514,12 @@ const refreshCombobox = async (hiddenInput, searchInput, optionsElement) => {
 
 const bindComboboxEvents = (hiddenInput, searchInput, optionsElement) => {
   searchInput.addEventListener("focus", () => {
-    void refreshCombobox(hiddenInput, searchInput, optionsElement);
+    scheduleComboboxRefresh(hiddenInput, searchInput, optionsElement);
   });
 
   searchInput.addEventListener("input", () => {
     hiddenInput.value = "";
-    void refreshCombobox(hiddenInput, searchInput, optionsElement);
+    scheduleComboboxRefresh(hiddenInput, searchInput, optionsElement);
   });
 
   searchInput.addEventListener("keydown", (event) => {
@@ -548,41 +585,53 @@ const togglePanel = async (forceOpen) => {
 };
 
 const getFeatureLayerById = (featureId) => {
-  let matchedLayer = null;
+  return getFeatureLayersByIds([featureId]).get(featureId) || null;
+};
+
+// Resuelve varios ids en una sola pasada sobre las capas del mapa. Pedir origen y
+// destino por separado recorría el árbol de capas dos veces.
+const getFeatureLayersByIds = (featureIds) => {
+  const wanted = new Set((featureIds || []).filter(Boolean));
+  const matched = new Map();
+
+  if (wanted.size === 0) {
+    return matched;
+  }
+
+  const stillWanted = new Set(wanted);
+
+  const inspect = (layer) => {
+    const layerId = layer?.feature?.properties?.id;
+    if (layerId && stillWanted.has(layerId)) {
+      matched.set(layerId, layer);
+      stillWanted.delete(layerId);
+    }
+  };
 
   map.eachLayer((layer) => {
-    if (matchedLayer) {
+    if (stillWanted.size === 0) {
       return;
     }
 
-    if (layer?.feature?.properties?.id === featureId) {
-      matchedLayer = layer;
-      return;
-    }
+    inspect(layer);
 
-    if (typeof layer?.eachLayer === "function") {
+    if (stillWanted.size > 0 && typeof layer?.eachLayer === "function") {
       layer.eachLayer((childLayer) => {
-        if (matchedLayer) {
+        if (stillWanted.size === 0) {
           return;
         }
-
-        if (childLayer?.feature?.properties?.id === featureId) {
-          matchedLayer = childLayer;
-        }
+        inspect(childLayer);
       });
     }
   });
 
-  return matchedLayer;
+  return matched;
 };
 
-const getFloorButtons = () =>
-  Array.from(document.querySelectorAll("#floorButtons-container .floorButton")).filter(
-    (button) => button.id !== "bLoc"
-  );
+const getFloorButtons = () => queryFloorButtons();
 
 const getFloorButtonForValue = (floorValue) => {
-  const normalizedFloor = String(floorValue ?? "0").trim();
+  const normalizedFloor = String(floorValue ?? BASE_FLOOR_NUMBER).trim();
   return (
     getFloorButtons().find(
       (button) => String((button.textContent || "").trim()) === normalizedFloor
@@ -614,7 +663,7 @@ const activateOverviewFloor = (requestId, callback) => {
       return;
     }
 
-    const overviewButton = getFloorButtonForValue(0) || floorButtons[0] || null;
+    const overviewButton = getFloorButtonForValue(BASE_FLOOR_NUMBER) || floorButtons[0] || null;
 
     if (!overviewButton || overviewButton.classList.contains("selectedFloorButton")) {
       callback();
@@ -925,11 +974,13 @@ const handleSubmit = async () => {
       return;
     }
 
+    const routeLayers = getFeatureLayersByIds([originId, destinationId]);
+
     void renderRoute(
       originId,
       destinationId,
-      getFeatureLayerById(originId),
-      getFeatureLayerById(destinationId),
+      routeLayers.get(originId) || null,
+      routeLayers.get(destinationId) || null,
       requestId
     );
   });

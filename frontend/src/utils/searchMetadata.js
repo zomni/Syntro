@@ -2,10 +2,14 @@ import { BACKEND_API_URL } from "../views/map.js";
 
 import { getDataFileNames, getCurrentCampusKey } from "./campusConfig.js";
 
+import { BASE_FLOOR_NUMBER } from "./buildingCatalog.js";
+
 import { loadBuildingBackupBundle, resetBuildingBackupCache } from "./buildingBackupStorage.js?v=20260608b";
 
-const getSearchPath = (campusKey) =>
-  `${getDataFileNames(campusKey).search}?v=${Date.now()}`;
+// El índice se versiona en el despliegue, no en cada request: usar `?v=Date.now()`
+// junto con `no-store` obligaba a re-descargar ~146 KB en cada búsqueda y en cada
+// refresco de catálogo. La invalidación explícita queda en resetSearchMetadataCaches().
+const getSearchPath = (campusKey) => getDataFileNames(campusKey).search;
 
 let searchMetadataCache = new Map();
 let backendBuildingOverridesCache = new Map();
@@ -13,7 +17,7 @@ let manualBuildingsCache = new Map();
 let buildingGeometryOverridesCache = new Map();
 
 const isBuildingId = (id) => Boolean(String(id || "").trim());
-const DEFAULT_FLOOR = 0;
+const DEFAULT_FLOOR = BASE_FLOOR_NUMBER;
 
 const uniqueSortedFloors = (floors) =>
   [...new Set((floors || []).map((floor) => Number(floor)).filter((floor) => Number.isFinite(floor)))]
@@ -71,7 +75,7 @@ const extractBuildingMetadata = (feature) => {
     title: properties.title || "",
     description: properties.description || "",
     popupContent: properties.popupContent || "",
-    floor: properties.floor ?? 0,
+    floor: properties.floor ?? BASE_FLOOR_NUMBER,
     floors: parseFloorsFromMetadata(properties),
     searchText: properties.searchText || "",
     geometry: feature?.geometry || null,
@@ -244,6 +248,20 @@ const applyBackendOverrideToFeature = (feature, backendOverride) => {
   };
 };
 
+const buildSearchMetadataCache = (campus, json) => {
+  const features = Array.isArray(json?.features) ? json.features : [];
+  const metadataById = new Map();
+
+  for (const feature of features) {
+    const metadata = extractBuildingMetadata(feature);
+    if (!metadata) continue;
+    metadataById.set(metadata.id, metadata);
+  }
+
+  searchMetadataCache.set(campus, metadataById);
+  return searchMetadataCache.get(campus);
+};
+
 export const loadSearchMetadata = async (campus = getCurrentCampusKey()) => {
   const cached = searchMetadataCache.get(campus);
   if (cached) {
@@ -251,31 +269,31 @@ export const loadSearchMetadata = async (campus = getCurrentCampusKey()) => {
   }
 
   try {
-    const response = await fetch(getSearchPath(campus), {
-      cache: "no-store",
-    });
+    const response = await fetch(getSearchPath(campus));
 
     if (!response.ok) {
       throw new Error("No se pudo cargar el índice de búsqueda");
     }
 
     const json = await response.json();
-    const features = Array.isArray(json?.features) ? json.features : [];
-    const metadataById = new Map();
-
-    for (const feature of features) {
-      const metadata = extractBuildingMetadata(feature);
-      if (!metadata) continue;
-      metadataById.set(metadata.id, metadata);
-    }
-
-    searchMetadataCache.set(campus, metadataById);
-    return searchMetadataCache.get(campus);
+    return buildSearchMetadataCache(campus, json);
   } catch (error) {
     console.error("Error cargando metadatos desde el índice de búsqueda:", error);
     searchMetadataCache.set(campus, new Map());
     return searchMetadataCache.get(campus);
   }
+};
+
+// El buscador ya descarga el índice completo por su cuenta (el plugin lo pide como
+// "geojsonServiceAddress"). Con este hook se reutiliza ese mismo payload en lugar de
+// volver a bajarlo: antes cada pulsación pagaba ~146 KB dos veces.
+export const primeSearchMetadata = (features, campus = getCurrentCampusKey()) => {
+  const cached = searchMetadataCache.get(campus);
+  if (cached && cached.size > 0) {
+    return cached;
+  }
+
+  return buildSearchMetadataCache(campus, { features });
 };
 
 export const mergeCatalogWithSearch = async (catalog, campus = getCurrentCampusKey()) => {

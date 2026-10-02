@@ -7,6 +7,8 @@ import { map } from "../views/map.js";
 import { openBuildingPopupLayer, setCurrentOpenFeatureId } from "@app/featureDisplay";
 import { getPrimaryCampusKey, getCurrentCampusKey } from "./campusConfig.js";
 import { hasCampus } from "../config/siteConfig.js";
+import { queryFloorButtons } from "./floorButtons.js";
+import { BASE_FLOOR_NUMBER } from "./buildingCatalog.js";
 
 const url = new URL(window.location.href);
 const MAX_ATTEMPTS = 48;
@@ -57,13 +59,10 @@ const getFeatureLayerById = (featureId) => {
   return matchedLayer;
 };
 
-const getFloorButtons = () =>
-  Array.from(document.querySelectorAll("#floorButtons-container .floorButton")).filter(
-    (button) => button.id !== "bLoc"
-  );
+const getFloorButtons = () => queryFloorButtons();
 
 const getFloorButtonForValue = (floorValue) => {
-  const normalizedFloor = String(floorValue ?? "0").trim();
+  const normalizedFloor = String(floorValue ?? BASE_FLOOR_NUMBER).trim();
   return (
     getFloorButtons().find(
       (button) => String((button.textContent || "").trim()) === normalizedFloor
@@ -152,7 +151,7 @@ const loadFeatureFromUrl = () => {
   goTo(getDeepLinkCampus());
 
   waitForFloorButtons((floorButtons) => {
-    const fallbackFloorButton = getFloorButtonForValue(0) || floorButtons[0] || null;
+    const fallbackFloorButton = getFloorButtonForValue(BASE_FLOOR_NUMBER) || floorButtons[0] || null;
     const requestedFloorButton = getFloorButtonForValue(requestedFloor) || fallbackFloorButton;
 
     if (!requestedFloorButton) {

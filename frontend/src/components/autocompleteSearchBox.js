@@ -8,7 +8,9 @@
 
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
 import { openBuildingPopupLayer, setCurrentOpenFeatureId } from "@app/featureDisplay";
-import { mergeGeoJsonWithSearch } from "@app/searchMetadata";
+import { mergeGeoJsonWithSearch, primeSearchMetadata } from "@app/searchMetadata";
+import { queryFloorButtons } from "../utils/floorButtons.js";
+import { BASE_FLOOR_NUMBER } from "../utils/buildingCatalog.js";
 
 // import "../lib/jquery/jquery-3.6.0.min.js"; // Not working with webpack
 
@@ -361,6 +363,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
   var lastSearch = ""; // Current search box input value
   var searchLayer; // A layer to show the search results
   var features = [];
+  var activeSearchXhr = null;
   var collapseOnBlur = true;
   const MAX_ATTEMPTS = 40;
   const RETRY_DELAY_MS = 250;
@@ -394,13 +397,10 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     return matchedLayer;
   };
 
-  const getFloorButtons = () =>
-    Array.from(document.querySelectorAll("#floorButtons-container .floorButton")).filter(
-      (button) => button.id !== "bLoc"
-    );
+  const getFloorButtons = () => queryFloorButtons();
 
   const getFloorButtonForValue = (floorValue) => {
-    const normalizedFloor = String(floorValue ?? "0").trim();
+    const normalizedFloor = String(floorValue ?? BASE_FLOOR_NUMBER).trim();
     return (
       getFloorButtons().find(
         (button) => String((button.textContent || "").trim()) === normalizedFloor
@@ -581,20 +581,33 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
       return;
     }
 
+    // Una búsqueda nueva invalida la que esté en vuelo: sin esto las respuestas
+    // compiten entre sí y la más lenta puede pisar a la más reciente.
+    if (activeSearchXhr) {
+      activeSearchXhr.abort();
+      activeSearchXhr = null;
+    }
+
+    const requestedSearch = lastSearch;
+
     var data = {
       search: lastSearch,
       limit: limitToSend,
     };
 
-    $.ajax({
+    activeSearchXhr = $.ajax({
       // HERE IS EVERYTHING,  USE FUSE JS FUNCTION TO SELECT THE ELEMENTS
       url: options.geojsonServiceAddress,
       type: "GET",
       data: data,
       dataType: "json",
       success: async function (json) {
-        const enrichedJson = await mergeGeoJsonWithSearch(json);
-        const query = String(lastSearch ?? "").trim().toLowerCase();
+        // Esta petición ya trae el índice completo: se reaprovecha para los
+        // metadatos en vez de volver a descargarlo dentro de mergeGeoJsonWithSearch.
+        primeSearchMetadata(json?.features, options.place);
+
+        const enrichedJson = await mergeGeoJsonWithSearch(json, options.place);
+        const query = String(requestedSearch ?? "").trim().toLowerCase();
         const rawFeatures = enrichedJson?.features || [];
 
         const simpleMatches = query
@@ -617,22 +630,55 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
 
         const matchedFeatures = simpleMatches.length > 0
           ? simpleMatches.slice(0, options.limit)
-          : fuseSearch(enrichedJson, lastSearch, options.limit);
+          : fuseSearch(enrichedJson, requestedSearch, options.limit);
 
         const buildingLookup = new Map(
           (enrichedJson?.features || []).map((feature) => [feature?.properties?.id, feature])
         );
-        const equipmentFeatures = await fetchEquipmentMatches(lastSearch, buildingLookup, options.limit);
 
-        const combined = [...equipmentFeatures, ...matchedFeatures];
-        resultCount = combined.length;
-        features = combined;
+        // Los edificios se pintan de inmediato y los equipos se anexan cuando
+        // lleguen: antes el dropdown esperaba al endpoint de inventario.
+        if (isSuperseded(requestedSearch)) {
+          return;
+        }
+
+        features = matchedFeatures;
+        resultCount = features.length;
+        createDropDown();
+
+        const equipmentFeatures = await fetchEquipmentMatches(
+          requestedSearch,
+          buildingLookup,
+          options.limit
+        );
+
+        if (isSuperseded(requestedSearch) || equipmentFeatures.length === 0) {
+          return;
+        }
+
+        features = [...equipmentFeatures, ...matchedFeatures];
+        resultCount = features.length;
         createDropDown();
       },
-      error: function () {
+      complete: function () {
+        activeSearchXhr = null;
+      },
+      error: function (jqXhr) {
+        if (jqXhr && jqXhr.statusText === "abort") {
+          return;
+        }
         processNoRecordsFoundOrError();
       },
     });
+  }
+
+  function isSuperseded(requestedSearch) {
+    // El usuario siguió escribiendo (o limpió la caja) mientras esperábamos: el
+    // resultado que llegó ya no corresponde a lo que hay en pantalla. Se compara
+    // contra el input en vivo y no contra lastSearch, que recién se actualiza
+    // cuando vence el debounce de delayKeyup.
+    const currentValue = String($("#searchBox")[0]?.value ?? "").trim();
+    return String(requestedSearch ?? "").trim() !== currentValue;
   }
 
   function createDropDown() {
@@ -748,7 +794,8 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     setCurrentOpenFeatureId(featureId);
 
     waitForFloorButtons((floorButtons) => {
-      const fallbackFloorButton = getFloorButtonForValue(0) || floorButtons[0] || null;
+      const fallbackFloorButton =
+        getFloorButtonForValue(BASE_FLOOR_NUMBER) || floorButtons[0] || null;
       const requestedFloorButton = getFloorButtonForValue(requestedFloor) || fallbackFloorButton;
 
       if (!requestedFloorButton) {
