@@ -11,6 +11,7 @@ import { openBuildingPopupLayer, setCurrentOpenFeatureId } from "@app/featureDis
 import { mergeGeoJsonWithSearch, primeSearchMetadata } from "@app/searchMetadata";
 import { queryFloorButtons } from "../utils/floorButtons.js";
 import { BASE_FLOOR_NUMBER } from "../utils/buildingCatalog.js";
+import { computeDropDownPosition, resolveResultIcon } from "../utils/searchDropDown.js";
 
 // import "../lib/jquery/jquery-3.6.0.min.js"; // Not working with webpack
 
@@ -681,23 +682,36 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     return String(requestedSearch ?? "").trim() !== currentValue;
   }
 
+  // El contenedor del buscador es una pastilla con overflow:hidden (index.css), asi que
+  // un dropdown colgado dentro queda recortado a los 44px de alto y no se ve nada. Se cuelga
+  // en body y se posiciona con el rect real del input.
+  const getDropDownHost = () => document.body;
+
+  const positionDropDown = () => {
+    const input = $("#searchBox")[0];
+    const dropDown = $("#resultsDiv")[0];
+    if (!input || !dropDown) {
+      return;
+    }
+
+    const position = computeDropDownPosition(input.getBoundingClientRect());
+    for (const [property, value] of Object.entries(position)) {
+      dropDown.style[property] = value;
+    }
+  };
+
+  const mountDropDown = (markup) => {
+    $("#resultsDiv").remove();
+    $(getDropDownHost()).append(markup);
+    positionDropDown();
+  };
+
   function createDropDown() {
     // Create the dropdown with the results
-    var parent = $("#searchBox").parent();
 
-    $("#resultsDiv").remove();
-    parent.append(
+    mountDropDown(
       "<div id='resultsDiv' class='autocomplete-result'><ul id='resultList' class='autocomplete-list'></ul><div>"
     );
-
-    $("#resultsDiv")[0].style.position = $("#searchBox")[0].style.position;
-    $("#resultsDiv")[0].style.left =
-      parseInt($("#searchBox")[0].style.left) - 10 + "px";
-    $("#resultsDiv")[0].style.bottom = $("#searchBox")[0].style.bottom;
-    $("#resultsDiv")[0].style.right = $("#searchBox")[0].style.right;
-    $("#resultsDiv")[0].style.top =
-      parseInt($("#searchBox")[0].style.top) + 25 + "px";
-    $("#resultsDiv")[0].style.zIndex = $("#searchBox")[0].style.zIndex;
 
     var loopCount = features.length; // Number of results got from Ajax call + Fuse search
 
@@ -708,7 +722,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
         "<span id='listElementContent" +
         i +
         "' class='autocomplete-content'><img src='assets/icons_os/" +
-        features[i].properties.image +
+        resolveResultIcon(features[i].properties.image) +
         "' class='autocomplete-iconStyle' align='middle'>";
       html +=
         "<font size='2' color='#333' class='autocomplete-title'>" +
@@ -754,6 +768,10 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
   function listElementMouseDown(listElement) {
     // Mouse down (click) on list element event
     var index = parseInt(listElement.id.substr(11));
+
+    // El blur del input dispara antes que el mousedown del resultado, asi que sin
+    // este flag el dropdown se colapsa antes de que el click llegue a aplicarse.
+    collapseOnBlur = false;
 
     if (index !== activeResult) {
       if (activeResult !== -1) {
@@ -903,9 +921,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
       searchLayer = undefined;
     }
 
-    var parent = $("#searchBox").parent();
-    $("#resultsDiv").remove();
-    parent.append(
+    mountDropDown(
       "<div id='resultsDiv' class='autocomplete-result'><i>" +
         lastSearch +
         " " +
@@ -929,6 +945,10 @@ export const loadSearchBox = (path, campus) => {
     searchContainer.classList.remove("autocomplete-searchContainer");
   }
 
+  // El dropdown vive en body (fuera del overflow:hidden de la pastilla), asi que al
+  // recargar el buscador hay que sacarlo de ahi o queda el ultimo resultado pegado.
+  $("#resultsDiv").remove();
+
   var options = {
     geojsonServiceAddress: path,
     placeholderMessage: "Edificios, Sectores, Equipos",
@@ -949,6 +969,7 @@ export const removeSearchContainerElements = () => {
   // Remove search container elements so no duplicates are made when changing campuses
   var element = document.getElementById("searchContainer");
   element.innerHTML = "";
+  $("#resultsDiv").remove();
 };
 
 export const showSearch = (location, school) => {
