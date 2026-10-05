@@ -11,7 +11,10 @@ import { loadWalkingRouteNetwork } from "../utils/walkingRouteStorage.js?v=20260
 const DEFAULT_CAMPUS = () => String(getActiveCampus() || getPrimaryCampusKey() || "").trim();
 const MAX_ATTEMPTS = 48;
 const RETRY_DELAY_MS = 250;
-const SELECTED_ROUTE_COLOR = "#ef4444";
+// Amarillo de senalizacion: la ruta activa y sus flechas se leen como
+// transito sobre el mapa, no como una alerta. El blanco de debajo hace de
+// contorno, asi que un tono medio mantiene el filo definido.
+const SELECTED_ROUTE_COLOR = "#eab308";
 
 let plannerElements = null;
 let routeOverlayLayer = null;
