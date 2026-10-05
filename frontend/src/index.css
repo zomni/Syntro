@@ -2651,6 +2651,29 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     color: var(--pi-danger-dark);
 }
 
+/* Cinta transportadora de la ruta activa: las cuentas amarillo claro recorren
+   la canaleta ambar hacia el destino. El desplazamiento negativo es lo que hace
+   que el patron avance hacia adelante; con positivo retrocederia.
+   Leaflet escribe stroke-dashoffset como atributo de presentacion y esta
+   animacion css lo sobreescribe, asi que no hace falta js ni limpiar nada al
+   borrar la ruta. El recorrido tiene que igualar el periodo del patron
+   (ROUTE_BEAD_DASH en routePlanner.js) para que el bucle no de un salto. */
+.route-conveyor-beads {
+    animation: route-conveyor-advance 1s linear infinite;
+}
+
+@keyframes route-conveyor-advance {
+    to {
+        stroke-dashoffset: -48;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .route-conveyor-beads {
+        animation: none;
+    }
+}
+
 .route-arrow-icon-container {
     background: transparent;
     border: none;

@@ -16,6 +16,22 @@ const RETRY_DELAY_MS = 250;
 // contorno, asi que un tono medio mantiene el filo definido.
 const SELECTED_ROUTE_COLOR = "#eab308";
 
+// La ruta se dibuja como una cinta transportadora en tres capas: un casing
+// blanco de contorno, la canaleta ambar y las cuentas amarillo claro que
+// avanzan hacia el destino. Los pesos crecen hacia afuera para que las cuentas
+// queden dentro de la canaleta y esta dentro del casing.
+const ROUTE_CASING_COLOR = "#ffffff";
+const ROUTE_CHANNEL_COLOR = "#ca8a04";
+const ROUTE_BEAD_COLOR = "#fde047";
+const ROUTE_CASING_WEIGHT = 14;
+const ROUTE_CHANNEL_WEIGHT = 10;
+const ROUTE_BEAD_WEIGHT = 5;
+// Periodo del patron: 20 de cuenta + 28 de hueco. Tiene que coincidir con el
+// recorrido de la animacion en index.css (route-conveyor-advance), si no el
+// bucle se reinicia con un salto visible.
+const ROUTE_BEAD_DASH = "20 28";
+const ROUTE_BEAD_CLASS = "route-conveyor-beads";
+
 let plannerElements = null;
 let routeOverlayLayer = null;
 let buildingsCache = null;
@@ -901,23 +917,44 @@ const renderRoute = async (originId, destinationId, originLayer, destinationLaye
   clearRouteOverlay();
   const overlay = ensureRouteOverlayLayer();
 
+  // El recorrido de un tramo dibujado no es un camino real: cuando no hay red
+  // caminable o no hay camino, la linea queda punteada y sin movimiento, para
+  // no sugerir un trayecto que no se puede recorrer.
+  const routeIsReal = hasWalkingNetwork && !routeUnavailable;
+
   L.polyline(routeLatLngs, {
-    color: "#ffffff",
-    weight: 12,
+    color: ROUTE_CASING_COLOR,
+    weight: ROUTE_CASING_WEIGHT,
     opacity: 0.95,
     lineCap: "round",
     interactive: false,
   }).addTo(overlay);
 
   const selectedPolyline = L.polyline(routeLatLngs, {
-    color: SELECTED_ROUTE_COLOR,
-    weight: 8,
+    color: routeIsReal ? SELECTED_ROUTE_COLOR : ROUTE_CHANNEL_COLOR,
+    weight: ROUTE_CHANNEL_WEIGHT,
     opacity: 0.98,
-    dashArray: !hasWalkingNetwork || routeUnavailable ? "12 10" : null,
+    dashArray: routeIsReal ? null : "12 10",
     lineCap: "round",
     interactive: false,
   }).addTo(overlay);
   selectedPolyline.bringToFront?.();
+
+  if (routeIsReal) {
+    // Las cuentas van despues del bringToFront de la canaleta y se suben ellas:
+    // Leaflet resuelve el z-order de los <path> por orden en el DOM, asi que si
+    // se dibujaran antes la canaleta terminaria tapandolas.
+    const beadPolyline = L.polyline(routeLatLngs, {
+      color: ROUTE_BEAD_COLOR,
+      weight: ROUTE_BEAD_WEIGHT,
+      opacity: 1,
+      dashArray: ROUTE_BEAD_DASH,
+      lineCap: "round",
+      interactive: false,
+      className: ROUTE_BEAD_CLASS,
+    }).addTo(overlay);
+    beadPolyline.bringToFront?.();
+  }
 
   const arrowSegments = routeLatLngs.length > 1 ? routeLatLngs.slice(0, -1) : [originLatLng];
   [0.25, 0.5, 0.75].forEach((fraction) => {
