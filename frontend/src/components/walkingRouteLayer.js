@@ -53,7 +53,7 @@ export const resetWalkingRoutesLayerCache = () => {
 };
 
 export const hideWalkingRoutesLayer = () => {
-  routesLayer&& clearLayers();
+  routesLayer?.clearLayers();
 };
 
 export const refreshWalkingRoutesLayer = async () => {
@@ -103,7 +103,8 @@ export const renderWalkingRoutesLayer = async () => {
           dashArray: String(edge.status || "").toLowerCase() === "closed" ? "4 8" : null,
           interactive: false,
         }
-      ).addTo(layer);    }
+      ).addTo(layer);
+    }
 
     if (layer && typeof layer.bringToFront === "function") {
       layer.bringToFront();
@@ -117,7 +118,7 @@ export const renderWalkingRoutesLayer = async () => {
 
 export const setWalkingRoutesVisible = async (isVisible) => {
   routesVisible = Boolean(isVisible);
-  window.sessionStorage&& setItem(ROUTE_VISIBILITY_STORAGE_KEY, String(routesVisible));
+  window.sessionStorage?.setItem(ROUTE_VISIBILITY_STORAGE_KEY, String(routesVisible));
   updateButtonState();
 
   if (routesVisible) {
@@ -137,7 +138,10 @@ export const bindWalkingRouteToggleButton = (button) => {
   button.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    void setWalkingRoutesVisible(!routesVisible);
+    void setWalkingRoutesVisible(!routesVisible).catch((error) => {
+      console.error("No se pudo cambiar la visibilidad de las rutas caminables:", error);
+      updateButtonState();
+    });
   });
 
   updateButtonState();
@@ -149,22 +153,28 @@ export const initWalkingRouteLayer = () => {
   window.addEventListener(identifiers.events.campusChanged, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();    } else {
-      hideWalkingRoutesLayer();    }
+      void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
+    }
   });
 
   window.addEventListener(identifiers.events.sitesLoaded, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();    } else {
-      hideWalkingRoutesLayer();    }
+      void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
+    }
   });
 
   window.addEventListener(identifiers.events.sessionChanged, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();    } else {
-      hideWalkingRoutesLayer();    }
+      void renderWalkingRoutesLayer();
+    } else {
+      hideWalkingRoutesLayer();
+    }
   });
 
   if (routesVisible) {
