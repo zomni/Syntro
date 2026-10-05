@@ -12,8 +12,15 @@ describe("burbujas de sectores", () => {
     expect(source).toContain("let nonCollidingFallback = null;");
     expect(source).toContain("let insideFallback = null;");
     expect(source).toContain(
-      "return fallback || nonCollidingFallback || insideFallback || baseLatLng;"
+      "return isLatLngInsideRing(baseLatLng, ring) ? baseLatLng : null;"
     );
+  });
+
+  it("usa el centroide estable de la geometria compartida", () => {
+    expect(source).toContain(
+      'import { pointInRing, ringCentroidLatLng } from "../utils/roomEditorGeometry.js";'
+    );
+    expect(source).not.toContain("const ringCentroidLatLng = (latLngs) =>");
   });
 
   it("usa la burbuja vacia solo para sectores sin equipos", () => {

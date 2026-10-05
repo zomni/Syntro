@@ -12,7 +12,7 @@ import { appConfig } from "../config/appConfig.js";
 import { isWayfindingMode } from "../utils/wayfinding.js";
 import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
-import { pointInRing } from "../utils/roomEditorGeometry.js";
+import { pointInRing, ringCentroidLatLng } from "../utils/roomEditorGeometry.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -2624,30 +2624,6 @@ const parseRoomGeometryCoords = (geometryJson) => {
   }
 };
 
-const ringCentroidLatLng = (latLngs) => {
-  const n = latLngs.length;
-  if (n < 3) return null;
-  const centerLat = latLngs.reduce((sum, p) => sum + p[0], 0) / n;
-  const lngScale = Math.cos((centerLat * Math.PI) / 180);
-  const pts = latLngs.map((p) => [p[1] * lngScale, p[0]]);
-  let twiceArea = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    const cross = pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
-    twiceArea += cross;
-    cx += (pts[i][0] + pts[j][0]) * cross;
-    cy += (pts[i][1] + pts[j][1]) * cross;
-  }
-  if (Math.abs(twiceArea) < 1e-12) {
-    const lngs = latLngs.map((p) => p[1]);
-    const lats = latLngs.map((p) => p[0]);
-    return [(Math.min(...lats) + Math.max(...lats)) / 2, (Math.min(...lngs) + Math.max(...lngs)) / 2];
-  }
-  return [cy / (3 * twiceArea), cx / (3 * twiceArea * lngScale)];
-};
-
 const createFloorTotalBubbleIcon = (count) =>
   L.divIcon({
     className: "building-floor-total-bubble",
@@ -2956,7 +2932,11 @@ const resolveBubbleLatLng = ({ preferred, ring, avoidPoints = [], radiusPx, minD
   // Sectores pequenos no siempre admiten el diametro completo de la burbuja.
   // En vez de omitirla, usamos primero un punto sin colision y luego cualquier
   // punto interior: la burbuja debe identificar tambien sectores vacios.
-  return fallback || nonCollidingFallback || insideFallback || baseLatLng;
+  if (fallback || nonCollidingFallback || insideFallback) {
+    return fallback || nonCollidingFallback || insideFallback;
+  }
+
+  return isLatLngInsideRing(baseLatLng, ring) ? baseLatLng : null;
 };
 
 const placeFloorTotalBubble = (overlay, floorRing, floorTotal, floor, featureId) => {

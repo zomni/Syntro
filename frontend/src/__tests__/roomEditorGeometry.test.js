@@ -4,6 +4,7 @@ import {
   projectPointOnSegment,
   buildSnapRefs,
   simplifyRing,
+  ringCentroidLatLng,
   squareRingFromCorner,
 } from "../utils/roomEditorGeometry.js";
 
@@ -140,6 +141,36 @@ describe("simplifyRing", () => {
     ];
     const result = simplifyRing(pts, 2);
     expect(result.length).toBeLessThanOrEqual(pts.length);
+  });
+});
+
+describe("ringCentroidLatLng", () => {
+  test("mantiene el centro dentro de un sector pequeno con coordenadas absolutas", () => {
+    const sector = [
+      [-33.578790914811215, -70.57787512356481],
+      [-33.578790914811215, -70.5777855],
+      [-33.5787525, -70.5777855],
+      [-33.5787525, -70.57787512356481],
+      [-33.578790914811215, -70.57787512356481],
+    ];
+    const centroid = ringCentroidLatLng(sector);
+
+    expect(pointInRing(centroid, sector)).toBe(true);
+    expect(centroid[0]).toBeCloseTo(-33.5787717, 7);
+    expect(centroid[1]).toBeCloseTo(-70.5778303, 7);
+  });
+
+  test("no devuelve un centroide desplazado por cancelacion numerica", () => {
+    const sector = [
+      [-33.578790914811215, -70.57787512356481],
+      [-33.578790914811215, -70.5777855],
+      [-33.5787525, -70.5777855],
+      [-33.5787525, -70.57787512356481],
+    ];
+    const centroid = ringCentroidLatLng(sector);
+
+    expect(Math.abs(centroid[0] - sector[0][0])).toBeLessThan(0.0001);
+    expect(Math.abs(centroid[1] - sector[0][1])).toBeLessThan(0.0001);
   });
 });
 

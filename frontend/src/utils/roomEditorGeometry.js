@@ -11,6 +11,47 @@ export const distanceMeters = (ll1, ll2) => {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+export const ringCentroidLatLng = (latLngs) => {
+  const n = latLngs.length;
+  if (n < 3) return null;
+
+  const centerLat = latLngs.reduce((sum, point) => sum + point[0], 0) / n;
+  const lngScale = Math.cos((centerLat * Math.PI) / 180);
+  // Translate the polygon before the shoelace calculation. Using absolute
+  // coordinates such as -33/-70 loses precision for small sectors.
+  const originX = latLngs[0][1] * lngScale;
+  const originY = latLngs[0][0];
+  const points = latLngs.map((point) => [
+    point[1] * lngScale - originX,
+    point[0] - originY,
+  ]);
+  let twiceArea = 0;
+  let cx = 0;
+  let cy = 0;
+
+  for (let i = 0; i < n; i += 1) {
+    const j = (i + 1) % n;
+    const cross = points[i][0] * points[j][1] - points[j][0] * points[i][1];
+    twiceArea += cross;
+    cx += (points[i][0] + points[j][0]) * cross;
+    cy += (points[i][1] + points[j][1]) * cross;
+  }
+
+  if (Math.abs(twiceArea) < 1e-12) {
+    const lngs = latLngs.map((point) => point[1]);
+    const lats = latLngs.map((point) => point[0]);
+    return [
+      (Math.min(...lats) + Math.max(...lats)) / 2,
+      (Math.min(...lngs) + Math.max(...lngs)) / 2,
+    ];
+  }
+
+  return [
+    originY + cy / (3 * twiceArea),
+    (originX + cx / (3 * twiceArea)) / lngScale,
+  ];
+};
+
 // Arma un cuadrado con la esquina en 'corner' y el lado hacia donde apunta el
 // puntero. El lado se decide en metros y recien ahi se pasa a grados, porque un
 // grado de longitud mide menos que uno de latitud: a -33 grados son 92.7 km
