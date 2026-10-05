@@ -42,9 +42,15 @@ public static class BuildingFloorNormalizer
             .OrderBy(value => value)
             .ToList();
 
-        if (normalized.Contains(0) && !normalized.Contains(1))
+        // El piso 0 no es un piso real: RemoveFloorZero lo consolido en el 1
+        // porque ambos son el mismo espacio. Se reemplaza, no se conserva.
+        if (normalized.Remove(0))
         {
-            normalized.Add(1);
+            if (!normalized.Contains(1))
+            {
+                normalized.Add(1);
+            }
+
             normalized.Sort();
         }
 

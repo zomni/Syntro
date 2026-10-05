@@ -1,4 +1,5 @@
 import { map, BACKEND_API_URL } from "../views/map.js";
+import { appConfig } from "../config/appConfig.js";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { refreshCurrentMapData } from "@app/goToCampus";
 import { resetBuildingsCatalogCache } from "@app/addData";
@@ -110,17 +111,41 @@ const removeModal = () => {
 
 const getFormValue = (form, name) => String(form.elements[name]?.value || "").trim();
 
+// Los pisos no se escriben a mano: el selector ofrece los validos y el 1 queda
+// marcado de entrada, porque casi todos los edificios son de planta base.
+const buildFloorOptions = () =>
+  appConfig.floors.selectable
+    .map((floor) => {
+      const checked = Number(floor) === Number(appConfig.floors.defaultForNewBuilding) ? " checked" : "";
+      return `<label class="manual-building-floor-option">
+          <input type="checkbox" name="manualBuildingFloor" value="${floor}"${checked} />
+          <span>Piso ${floor}</span>
+        </label>`;
+    })
+    .join("");
+
+const collectSelectedFloors = (form) =>
+  Array.from(form.querySelectorAll('input[name="manualBuildingFloor"]:checked'))
+    .map((input) => Number(input.value))
+    .filter((floor) => Number.isFinite(floor))
+    .sort((first, second) => first - second);
+
 const submitManualBuildingForm = async (form) => {
   const externalId = getFormValue(form, "externalId");
   const displayName = getFormValue(form, "displayName");
   const campus = getFormValue(form, "campus") || getPrimaryCampusKey();
-  const floorsCsv = getFormValue(form, "floorsCsv") || "0, 1";
   const type = getFormValue(form, "type") || "manual";
   const notes = getFormValue(form, "notes");
   const coordinates = points.map((point) => [point.lng, point.lat]);
 
   if (!externalId || !displayName) {
     setStatus("Completa ID y nombre del edificio.");
+    return;
+  }
+
+  const floorsCsv = collectSelectedFloors(form).join(", ");
+  if (!floorsCsv) {
+    setStatus("Elige al menos un piso para el edificio.");
     return;
   }
 
@@ -202,7 +227,7 @@ const openManualBuildingForm = () => {
         </label>
         <label>
           <span>Pisos</span>
-          <input name="floorsCsv" value="0, 1" />
+          <div class="manual-building-floors" role="group" aria-label="Pisos del edificio">${buildFloorOptions()}</div>
         </label>
         <label>
           <span>Tipo</span>

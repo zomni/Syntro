@@ -21,6 +21,13 @@ export const appConfig = {
     locale: runtime.displayLocale || "es-CL",
     timeZone: runtime.displayTimeZone || "UTC",
   },
+  floors: {
+    // El piso 0 quedo consolidado en el 1 (RemoveFloorZero): no se ofrece.
+    selectable: Array.isArray(runtime.selectableFloors)
+      ? runtime.selectableFloors
+      : [-1, 1, 2, 3, 4, 5],
+    defaultForNewBuilding: Number(runtime.defaultFloorForNewBuilding) || 1,
+  },
   inventoryCategories: {
     order: runtime.inventoryCategoryOrder || ["pc", "printer", "scanner", "other"],
     labels: runtime.inventoryCategoryLabels || {

@@ -2757,6 +2757,46 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     border-color: var(--pi-primary);
 }
 
+/* Selector de pisos del alta de edificio: chips en vez de texto libre. */
+.manual-building-floors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.manual-building-form .manual-building-floor-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.manual-building-form .manual-building-floor-option input {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    accent-color: var(--pi-primary);
+}
+
+.manual-building-form .manual-building-floor-option span {
+    padding: 8px 13px;
+    border: 1px solid rgba(var(--pi-primary-rgb), 0.28);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--pi-gray-600);
+    font-weight: 600;
+}
+
+.manual-building-form .manual-building-floor-option input:checked + span {
+    border-color: var(--pi-primary);
+    background: rgba(var(--pi-primary-rgb), 0.12);
+    color: var(--pi-primary);
+}
+
+.manual-building-form .manual-building-floor-option input:focus-visible + span {
+    outline: 2px solid rgba(var(--pi-primary-rgb), 0.35);
+}
+
 .manual-building-modal-actions {
     display: flex;
     gap: 10px;

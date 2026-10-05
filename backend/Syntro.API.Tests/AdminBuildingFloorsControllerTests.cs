@@ -332,7 +332,7 @@ public class BuildingFloorNormalizerFloorsRemovedFromTests
     [Fact]
     public void ElPisoCeroNoSeCuentaComoQuitado()
     {
-        // NormalizeFloors convierte el 0 en 1 cuando falta la 1, asi que un 0 previo
+        // NormalizeFloors reemplaza el 0 por el 1, asi que un 0 previo
         // no debe disparar una baja en cascada sobre el piso base.
         var removed = BuildingFloorNormalizer.FloorsRemovedFrom("[0,1]", "[1]");
 
@@ -345,5 +345,50 @@ public class BuildingFloorNormalizerFloorsRemovedFromTests
         Assert.Empty(BuildingFloorNormalizer.FloorsRemovedFrom("no-json", "[1]"));
         Assert.Empty(BuildingFloorNormalizer.ParseFloors("no-json"));
         Assert.Empty(BuildingFloorNormalizer.ParseFloors(null));
+    }
+}
+
+public class BuildingFloorNormalizerPisoCeroTests
+{
+    [Theory]
+    [InlineData("0", "[1]")]
+    [InlineData("0,1", "[1]")]
+    [InlineData("1,0", "[1]")]
+    [InlineData("0,2", "[1,2]")]
+    [InlineData("0,0", "[1]")]
+    public void ElPisoCeroSeReemplazaPorElUno(string csv, string expected)
+    {
+        Assert.Equal(expected, BuildingFloorNormalizer.NormalizeCsv(csv));
+    }
+
+    [Theory]
+    [InlineData("[0]", "[1]")]
+    [InlineData("[0,1]", "[1]")]
+    [InlineData("[0,2,3]", "[1,2,3]")]
+    public void ElPisoCeroNoSeConservaEnElJson(string json, string expected)
+    {
+        Assert.Equal(expected, BuildingFloorNormalizer.NormalizeJson(json));
+    }
+
+    [Fact]
+    public void UnPisoCeroAisladoNoDejaElEdificioSinPisos()
+    {
+        Assert.Equal("[1]", BuildingFloorNormalizer.NormalizeCsv("0"));
+        Assert.Equal("[1]", BuildingFloorNormalizer.NormalizeFloors(new[] { 0 }));
+    }
+
+    [Fact]
+    public void SinPisoCeroNoCambiaNada()
+    {
+        Assert.Equal("[1,2]", BuildingFloorNormalizer.NormalizeCsv("2,1"));
+        Assert.Equal("[-1,1,5]", BuildingFloorNormalizer.NormalizeCsv("-1, 5, 1"));
+        Assert.Equal("[2]", BuildingFloorNormalizer.NormalizeCsv("2"));
+        Assert.Equal(string.Empty, BuildingFloorNormalizer.NormalizeCsv(""));
+    }
+
+    [Fact]
+    public void DescartaLoQueNoEsUnNumero()
+    {
+        Assert.Equal("[1]", BuildingFloorNormalizer.NormalizeCsv("1, planta, , dos"));
     }
 }

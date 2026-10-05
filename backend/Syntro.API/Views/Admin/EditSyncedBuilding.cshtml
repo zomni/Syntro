@@ -40,7 +40,11 @@
     var overrideFloorsCsv = FloorsToCsv(building.ManualFloorsJson);
     var effectiveFloors = FloorsToList(building.EffectiveFloorsJson);
     var selectedFloors = effectiveFloors.ToHashSet();
-    var floorOptions = Enumerable.Range(-1, 7)
+    // El piso 0 no es una opcion valida: la migracion RemoveFloorZero lo
+    // consolido en el 1 porque ambos son el mismo espacio. Solo se offercen
+    // los pisos admitidos, mas los que el edificio ya tenga guardados, para no
+    // esconderle al usuario un piso que ya tiene.
+    var floorOptions = new[] { -1, 1, 2, 3, 4, 5 }
         .Concat(effectiveFloors)
         .Concat(FloorsToList(building.FloorsJson))
         .Distinct()
@@ -119,7 +123,7 @@
                                 </label>
                             }
                         </div>
-                        <div class="form-text">Selecciona los pisos exactos del edificio. Si marcas 0, el sistema agregara 1 si falta. Para subterraneo usa -1 o -2.</div>
+                        <div class="form-text">Selecciona los pisos exactos del edificio. Usa -1 para niveles subterraneos. El piso 0 no es valido: quedo consolidado en el 1.</div>
                         <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
                             <i class="bi bi-exclamation-triangle me-1"></i>
                             Al quitar un piso se dan de baja automaticamente las salas y los marcadores de ese piso.
