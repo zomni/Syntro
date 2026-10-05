@@ -26,12 +26,19 @@ describe("burbujas de sectores", () => {
   it("usa la burbuja vacia solo para sectores sin equipos", () => {
     expect(source).toContain("const createEquipmentBubbleIcon = (count, { emptyWhenZero = false } = {})");
     expect(source).toContain("createEquipmentBubbleIcon(count, { emptyWhenZero: true })");
-    expect(source).toContain("const visibleCount = emptyWhenZero && normalizedCount === 0 ? \"\" : normalizedCount;");
+    expect(source).toContain('className: `building-equipment-bubble${isEmpty ? " is-empty" : ""}`');
+    expect(source).toContain("iconSize: isEmpty ? [17, 17] : [34, 34]");
+    expect(source).toContain('const visibleCount = isEmpty ? "" : normalizedCount;');
   });
 
   it("mantiene una etiqueta accesible aunque la burbuja no muestre cero", () => {
     expect(source).toContain('"Sin equipos asignados"');
     expect(source).toContain('aria-label="${label}"');
+  });
+
+  it("mantiene el tamano normal cuando el sector tiene equipos", () => {
+    expect(source).toContain("iconAnchor: isEmpty ? [8.5, 8.5] : [17, 17]");
+    expect(css).toMatch(/\.building-equipment-bubble\.is-empty button \{[\s\S]*?width: 17px;[\s\S]*?height: 17px;/);
   });
 });
 

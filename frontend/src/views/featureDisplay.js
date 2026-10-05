@@ -1273,16 +1273,17 @@ const getAvailableSummaryTypes = (summaryMap) => {
 
 const createEquipmentBubbleIcon = (count, { emptyWhenZero = false } = {}) => {
   const normalizedCount = Number(count) || 0;
+  const isEmpty = emptyWhenZero && normalizedCount === 0;
   const label = normalizedCount > 0
     ? `${normalizedCount} equipo(s) asignados`
     : "Sin equipos asignados";
-  const visibleCount = emptyWhenZero && normalizedCount === 0 ? "" : normalizedCount;
+  const visibleCount = isEmpty ? "" : normalizedCount;
 
   return L.divIcon({
-    className: "building-equipment-bubble",
+    className: `building-equipment-bubble${isEmpty ? " is-empty" : ""}`,
     html: `<button type="button" aria-label="${label}">${visibleCount}</button>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    iconSize: isEmpty ? [17, 17] : [34, 34],
+    iconAnchor: isEmpty ? [8.5, 8.5] : [17, 17],
   });
 };
 
