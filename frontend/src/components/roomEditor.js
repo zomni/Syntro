@@ -3148,7 +3148,7 @@ const runQuickSuggestion = async () => {
     const autoCount = sectorCountForArea(buildingAreaM2);
 
     const preset = await appPrompt(
-      `Superficie del piso: ${Math.round(buildingAreaM2).toLocaleString("es")} m². Ingresa cuantos sectores quieres generar (2-12).`,
+      `Superficie del piso: ${Math.round(buildingAreaM2).toLocaleString("es")} m². Ingresa cuantos sectores quieres generar (1-12).`,
       String(autoCount)
     );
 
@@ -3158,12 +3158,12 @@ const runQuickSuggestion = async () => {
     }
 
     const count = Number(preset);
-    if (!Number.isFinite(count) || count < 2 || count > 12) {
-      setAdminMapToolsStatus("El numero de sectores debe estar entre 2 y 12.");
+    if (!Number.isFinite(count) || count < 1 || count > 12) {
+      setAdminMapToolsStatus("El numero de sectores debe estar entre 1 y 12.");
       return;
     }
 
-    const suggestions = divideBuildingIntoSectors(buildingGeometry, count, { minCount: 2, maxCount: 12 });
+    const suggestions = divideBuildingIntoSectors(buildingGeometry, count, { minCount: 1, maxCount: 12 });
 
     if (!suggestions || suggestions.length === 0) {
       setAdminMapToolsStatus("El edificio es muy pequeno para generar sectores con los parametros actuales.");
@@ -3184,7 +3184,9 @@ const runQuickSuggestion = async () => {
     renderSuggestionPreviewLayers();
     updateBottomBar();
     setAdminMapToolsStatus(
-      `Se generaron ${suggestions.length} sector(es) dividiendo el piso por area. Haz clic en el check para guardarlos.`
+      count === 1
+        ? "Se genero un sector con la silueta completa del edificio. Haz clic en el check para guardarlo."
+        : `Se generaron ${suggestions.length} sector(es) dividiendo el piso por area. Haz clic en el check para guardarlos.`
     );
   } catch (error) {
     console.error("Error running suggestion:", error);

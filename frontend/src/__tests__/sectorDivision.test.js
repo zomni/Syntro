@@ -48,8 +48,17 @@ describe("divideBuildingIntoSectors", () => {
     }
   });
 
-  test("clamps count between 2 and 12", () => {
-    const sectorsLow = divideBuildingIntoSectors(rectBuilding, 1);
+  test("permite un sector con la silueta exacta del edificio", () => {
+    const sector = divideBuildingIntoSectors(rectBuilding, 1);
+
+    expect(sector).toHaveLength(1);
+    expect(sector[0].coordinates).toEqual(rectBuilding.coordinates[0]);
+    expect(sector[0].displayName).toBe("Sector 1");
+    expect(sector[0].areaM2).toBeGreaterThan(0);
+  });
+
+  test("mantiene el limite superior y el minimo historico para cero", () => {
+    const sectorsLow = divideBuildingIntoSectors(rectBuilding, 0);
     expect(sectorsLow.length).toBeGreaterThanOrEqual(2);
     const sectorsHigh = divideBuildingIntoSectors(rectBuilding, 99);
     expect(sectorsHigh.length).toBeLessThanOrEqual(12);

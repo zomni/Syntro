@@ -194,7 +194,11 @@ export const divideBuildingIntoSectors = (buildingGeometry, sectorCount, options
   const minCount = options.minCount ?? 2;
   const maxCount = options.maxCount ?? 12;
   const requested = Math.floor(Number(sectorCount));
-  const count = Number.isFinite(requested)
+  // Uno es un caso especial: el sector debe conservar exactamente la silueta
+  // del edificio. Desde dos en adelante se mantiene la division habitual.
+  const count = requested === 1
+    ? 1
+    : Number.isFinite(requested)
     ? Math.max(minCount, Math.min(maxCount, requested))
     : Math.max(minCount, Math.min(maxCount, 2));
 
@@ -211,6 +215,18 @@ export const divideBuildingIntoSectors = (buildingGeometry, sectorCount, options
   if (metersRing.length < 3) return [];
   const originalArea = polygonArea(metersRing);
   if (!(originalArea > 0)) return [];
+
+  if (count === 1) {
+    const [cxM, cyM] = ringCentroid(metersRing);
+    return [{
+      index: 1,
+      displayName: "Sector 1",
+      type: "sector",
+      coordinates: ring.map((coordinate) => [coordinate[0], coordinate[1]]),
+      areaM2: originalArea,
+      centroid: [cxM / mPerLng, cyM / METERS_PER_DEG_LAT],
+    }];
+  }
 
   const pieces = divide(metersRing, count, 0).filter((p) => p.length >= 3 && polygonArea(p) > 1e-6);
 
