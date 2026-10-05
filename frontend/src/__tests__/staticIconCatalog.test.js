@@ -8,10 +8,12 @@ describe("staticIconUrl", () => {
   });
 
   test("cae a un icono valido cuando el IconKey guardado no existe", () => {
-    // Regresion: el marcador de Corta Estadia 2 (SR-BLD-010) tiene IconKey
-    // "hotel", que no esta en el catalogo. Sin fallback se pedia hotel.png,
-    // nginx lo resolvia con index.html (200) y el navegador dibujaba el icono
-    // roto al recibir HTML donde esperaba un PNG.
+    // Regresion: un marcador guardado con IconKey "hotel" (SR-BLD-010,
+    // Hospitalizacion) no esta en el catalogo y hotel.png no existe. Sin
+    // fallback se pedia hotel.png, nginx lo resolvia con index.html (200) y el
+    // navegador dibujaba el icono roto al recibir HTML donde esperaba un PNG.
+    // Ese marcador se elimino de MapMarkers; el fallback sigue como red por si
+    // vuelve a llegar un IconKey fuera del catalogo.
     const url = staticIconUrl("hotel");
 
     expect(url).not.toContain("hotel");

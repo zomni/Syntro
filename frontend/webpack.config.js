@@ -44,6 +44,15 @@ module.exports = {
     },
   },
   module: {
-    rules: [],
+    parser: {
+      javascript: {
+        // Rompio el merge 94da17f: addData.js quedo vacio y webpack solo aviso
+        // por consola que faltaban addDataToMap/clearAllMapData/
+        // resetBuildingsCatalogCache, asi que goToCampus, featureDisplay,
+        // manualBuildingEditor y buildingGeometryEditor se quedaron importando
+        // undefined. Con "error" el build falla en vez de avisar.
+        exportsPresence: "error",
+      },
+    },
   },
 };
