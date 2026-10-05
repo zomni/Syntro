@@ -111,6 +111,8 @@
                                        id="@checkboxId"
                                        value="@floor"
                                        checked="@selectedFloors.Contains(floor)"
+                                       data-rooms="@(Model.ManualRoomCountsByFloor.TryGetValue(floor, out var roomCount) ? roomCount : 0)"
+                                       data-markers="@(Model.MapMarkerCountsByFloor.TryGetValue(floor, out var markerCount) ? markerCount : 0)"
                                        autocomplete="off" />
                                 <label class="btn btn-outline-primary btn-sm fw-semibold px-3" for="@checkboxId">
                                     Piso @floor
@@ -118,6 +120,11 @@
                             }
                         </div>
                         <div class="form-text">Selecciona los pisos exactos del edificio. Si marcas 0, el sistema agregara 1 si falta. Para subterraneo usa -1 o -2.</div>
+                        <div class="alert alert-warning py-2 px-3 mt-2 mb-0 small">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Al quitar un piso se dan de baja automaticamente las salas y los marcadores de ese piso.
+                            No se puede deshacer desde la interfaz: solo un respaldo de la base de datos los recupera.
+                        </div>
                         <button type="button" id="clearFloorOverrideButton" class="btn btn-outline-secondary btn-sm mt-2">
                             Usar pisos fuente
                         </button>
@@ -232,6 +239,50 @@
             if (!(await SyntroUI.confirm(message))) {
                 event.preventDefault();
             }
+        });
+
+        form?.addEventListener("submit", (event) => {
+            updateHiddenFloors();
+
+            const unchecked = checkboxes.filter((checkbox) => !checkbox.checked);
+            const withContent = unchecked
+                .map((checkbox) => ({
+                    floor: Number(checkbox.value),
+                    rooms: Number(checkbox.dataset.rooms || "0"),
+                    markers: Number(checkbox.dataset.markers || "0")
+                }))
+                .filter((entry) => entry.rooms > 0 || entry.markers > 0);
+
+            if (withContent.length === 0) {
+                return;
+            }
+
+            const detail = withContent
+                .map((entry) => {
+                    const parts = [];
+                    if (entry.rooms > 0) parts.push(`${entry.rooms} sala(s)`);
+                    if (entry.markers > 0) parts.push(`${entry.markers} marcador(es)`);
+                    return `Piso ${entry.floor}: ${parts.join(" y ")}`;
+                })
+                .join("\n");
+
+            const message = `Vas a quitar pisos con contenido asociado:\n\n${detail}\n\nEsas salas y marcadores se dan de baja y ya no se muestran en el mapa. No se puede deshacer desde aqui; solo un respaldo de la base de datos los recupera.\n\n¿Continuar?`;
+
+            // preventDefault va antes de cualquier await: en un manejador asincrono
+            // llega tarde y el formulario se envia igual.
+            event.preventDefault();
+            SyntroUI.confirm(message).then((accepted) => {
+                if (accepted) {
+                    form.submit();
+                    return;
+                }
+
+                withContent.forEach((entry) => {
+                    const checkbox = checkboxes.find((item) => Number(item.value) === entry.floor);
+                    if (checkbox) checkbox.checked = true;
+                });
+                updateHiddenFloors();
+            });
         });
     })();
 </script>

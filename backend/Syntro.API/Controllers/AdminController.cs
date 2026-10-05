@@ -2230,7 +2230,19 @@ public class AdminController : Controller
                 .Where(r => r.DeletedAtUtc == null && r.BuildingExternalId == externalId)
                 .OrderBy(r => r.ManualFloor ?? r.Floor)
                 .ThenBy(r => r.ManualName != "" ? r.ManualName : r.Name)
-                .ToListAsync()
+                .ToListAsync(),
+            ManualRoomCountsByFloor = await _context.ManualRooms
+                .AsNoTracking()
+                .Where(room => room.DeletedAtUtc == null && room.BuildingExternalId == externalId)
+                .GroupBy(room => room.Floor)
+                .Select(group => new { Floor = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(item => item.Floor, item => item.Count),
+            MapMarkerCountsByFloor = await _context.MapMarkers
+                .AsNoTracking()
+                .Where(marker => marker.DeletedAtUtc == null && marker.BuildingExternalId == externalId)
+                .GroupBy(marker => marker.Floor)
+                .Select(group => new { Floor = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(item => item.Floor, item => item.Count)
         };
 
         return View(model);
@@ -2269,11 +2281,103 @@ public class AdminController : Controller
         }
 
         building.SyncedAtUtc = DateTime.UtcNow;
+        var removedFloors = await SoftDeleteContentOfRemovedFloorsAsync(
+            externalId,
+            previousFloors,
+            building.EffectiveFloorsJson);
         await _context.SaveChangesAsync();
         await LogBuildingOverrideAsync(building, previousCampus, previousDisplayName, previousFloors);
 
-        TempData["SuccessMessage"] = "Override del edificio guardado correctamente.";
+        if (removedFloors.RemovedRoomCount > 0 || removedFloors.RemovedMarkerCount > 0)
+        {
+            await LogRemovedFloorsContentAsync(building, removedFloors);
+            TempData["SuccessMessage"] =
+                $"Override del edificio guardado. Se dieron de baja {removedFloors.RemovedRoomCount} sala(s) y " +
+                $"{removedFloors.RemovedMarkerCount} marcador(es) de los pisos quitados.";
+        }
+        else
+        {
+            TempData["SuccessMessage"] = "Override del edificio guardado correctamente.";
+        }
+
         return RedirectToAction(nameof(EditSyncedBuilding), new { externalId });
+    }
+
+    private sealed record RemovedFloorsContent(
+        IReadOnlyList<int> Floors,
+        int RemovedRoomCount,
+        int RemovedMarkerCount,
+        IReadOnlyDictionary<int, int> RoomsPerFloor);
+
+    private async Task<RemovedFloorsContent> SoftDeleteContentOfRemovedFloorsAsync(
+        string externalId,
+        string previousFloorsJson,
+        string newFloorsJson)
+    {
+        var removedFloors = BuildingFloorNormalizer.FloorsRemovedFrom(previousFloorsJson, newFloorsJson);
+        if (removedFloors.Count == 0)
+        {
+            return new RemovedFloorsContent([], 0, 0, new Dictionary<int, int>());
+        }
+
+        var actor = User.Identity?.Name ?? "sistema";
+        var removed = new List<int>(removedFloors);
+
+        // ManualRooms tiene indice por (BuildingExternalId, Floor), asi que el filtro
+        // es indexado. El BuildingExternalId acota la cascada al edificio: los
+        // marcadores de campus (map-general, Floor -1) no se ven afectados.
+        var rooms = await _context.ManualRooms
+            .Where(room => room.BuildingExternalId == externalId
+                && room.DeletedAtUtc == null
+                && removed.Contains(room.Floor))
+            .ToListAsync();
+
+        var markers = await _context.MapMarkers
+            .Where(marker => marker.BuildingExternalId == externalId
+                && marker.DeletedAtUtc == null
+                && removed.Contains(marker.Floor))
+            .ToListAsync();
+
+        foreach (var room in rooms)
+        {
+            room.SoftDelete(actor);
+        }
+
+        foreach (var marker in markers)
+        {
+            marker.SoftDelete(actor);
+        }
+
+        var roomsPerFloor = rooms
+            .GroupBy(room => room.Floor)
+            .ToDictionary(group => group.Key, group => group.Count());
+
+        return new RemovedFloorsContent(removed, rooms.Count, markers.Count, roomsPerFloor);
+    }
+
+    private async Task LogRemovedFloorsContentAsync(SyncedBuilding building, RemovedFloorsContent removed)
+    {
+        var floorsText = string.Join(", ", removed.Floors);
+        var roomsText = removed.RoomsPerFloor.Count == 0
+            ? "sin salas"
+            : string.Join(", ", removed.RoomsPerFloor.OrderBy(pair => pair.Key)
+                .Select(pair => $"piso {pair.Key}: {pair.Value}"));
+
+        _context.AuditLogEntries.Add(new AuditLogEntry
+        {
+            BuildingExternalId = building.ExternalId,
+            EntityType = "synced-building",
+            EntityId = building.ExternalId,
+            ActionType = "remove-floors-content",
+            Summary = $"Baja en cascada por piso quitado en {building.EffectiveDisplayName}",
+            Details = $"pisos quitados: [{floorsText}]; salas por piso -> {roomsText}; marcadores dados de baja: {removed.RemovedMarkerCount}",
+            PreviousValue = string.Join(", ", removed.Floors),
+            NewValue = building.EffectiveFloorsJson,
+            ChangedByUsername = User.Identity?.Name ?? "sistema",
+            CreatedAtUtc = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
     }
 
     [Authorize(Roles = $"{AppRoles.Admin}")]
@@ -5346,8 +5450,9 @@ public class AdminController : Controller
         if (!string.Equals(previousDisplayName, building.EffectiveDisplayName, StringComparison.Ordinal))
             changes.Add($"edificio: '{previousDisplayName}' -> '{building.EffectiveDisplayName}'");
 
-        if (!string.Equals(previousFloorsJson, building.EffectiveFloorsJson, StringComparison.Ordinal))
-            changes.Add("pisos actualizados");
+        var floorsChanged = !string.Equals(previousFloorsJson, building.EffectiveFloorsJson, StringComparison.Ordinal);
+        if (floorsChanged)
+            changes.Add($"pisos: '{previousFloorsJson}' -> '{building.EffectiveFloorsJson}'");
 
         if (changes.Count == 0)
             changes.Add("override revisado sin cambios");
@@ -5360,6 +5465,8 @@ public class AdminController : Controller
             ActionType = "override-building",
             Summary = $"Override manual en edificio {building.EffectiveDisplayName}",
             Details = string.Join("; ", changes),
+            PreviousValue = floorsChanged ? previousFloorsJson : string.Empty,
+            NewValue = floorsChanged ? building.EffectiveFloorsJson : string.Empty,
             ChangedByUsername = User.Identity?.Name ?? "sistema",
             CreatedAtUtc = DateTime.UtcNow
         });

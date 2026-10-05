@@ -217,6 +217,8 @@ public class EditSyncedBuildingViewModel
     public SyncedBuilding Building { get; set; } = null!;
     public IReadOnlyList<SyncedRoom> Rooms { get; set; } = [];
     public int AssignedInventoryCount { get; set; }
+    public IReadOnlyDictionary<int, int> ManualRoomCountsByFloor { get; set; } = new Dictionary<int, int>();
+    public IReadOnlyDictionary<int, int> MapMarkerCountsByFloor { get; set; } = new Dictionary<int, int>();
 }
 
 public class EditSyncedRoomViewModel

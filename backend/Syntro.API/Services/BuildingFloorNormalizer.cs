@@ -50,4 +50,36 @@ public static class BuildingFloorNormalizer
 
         return normalized.Count == 0 ? string.Empty : JsonSerializer.Serialize(normalized);
     }
+
+    public static List<int> ParseFloors(string? floorsJson)
+    {
+        if (string.IsNullOrWhiteSpace(floorsJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<int>>(floorsJson) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    public static List<int> FloorsRemovedFrom(string? previousFloorsJson, string? newFloorsJson)
+    {
+        var previous = ParseFloors(previousFloorsJson);
+        var current = ParseFloors(newFloorsJson);
+        var removed = previous.Except(current).ToList();
+
+        // NormalizeFloors convierte el 0 en 1 cuando falta la 1, asi que un
+        // "0" previo nunca esta en la lista vigente: se descarta para no dar de
+        // baja el piso base por un cambio que en realidad no lo quito.
+        removed.RemoveAll(floor => floor == 0);
+
+        removed.Sort();
+        return removed;
+    }
 }
