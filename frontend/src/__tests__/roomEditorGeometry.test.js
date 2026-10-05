@@ -4,6 +4,7 @@ import {
   projectPointOnSegment,
   buildSnapRefs,
   simplifyRing,
+  squareRingFromCorner,
 } from "../utils/roomEditorGeometry.js";
 
 describe("distanceMeters", () => {
@@ -139,5 +140,99 @@ describe("simplifyRing", () => {
     ];
     const result = simplifyRing(pts, 2);
     expect(result.length).toBeLessThanOrEqual(pts.length);
+  });
+});
+
+describe("squareRingFromCorner", () => {
+  const corner = [-33.45, -70.67];
+  const metersPerLatDegree = 111320;
+  const metersPerLngDegree = 111194.9 * Math.cos((-33.45 * Math.PI) / 180);
+
+  test("pone la esquina en el primer vertice", () => {
+    const ring = squareRingFromCorner(corner, [-33.44, -70.66]);
+
+    expect(ring).toHaveLength(4);
+    expect(ring[0]).toEqual(corner);
+  });
+
+  test("crece hacia el cuadrante del puntero", () => {
+    const ring = squareRingFromCorner(corner, [-33.44, -70.66]);
+
+    ring.forEach(([lat, lng]) => {
+      expect(lat).toBeGreaterThanOrEqual(corner[0]);
+      expect(lng).toBeGreaterThanOrEqual(corner[1]);
+    });
+  });
+
+  test("se da vuelta segun el cuadrante del puntero", () => {
+    const ring = squareRingFromCorner(corner, [-33.46, -70.68]);
+
+    ring.forEach(([lat, lng]) => {
+      expect(lat).toBeLessThanOrEqual(corner[0]);
+      expect(lng).toBeLessThanOrEqual(corner[1]);
+    });
+  });
+
+  test("los cuatro lados miden lo mismo en metros", () => {
+    const ring = squareRingFromCorner(corner, [-33.44, -70.66]);
+    const sides = [0, 1, 2, 3].map((i) => distanceMeters(ring[i], ring[(i + 1) % 4]));
+
+    sides.forEach((side) => {
+      expect(Math.abs(side - sides[0]) / sides[0]).toBeLessThan(0.002);
+    });
+  });
+
+  test("corrige la proporcion real entre latitud y longitud", () => {
+    const ring = squareRingFromCorner(corner, [-33.44, -70.66]);
+    const width = Math.abs(ring[2][1] - ring[0][1]);
+    const height = Math.abs(ring[2][0] - ring[0][0]);
+
+    expect(width / height).toBeCloseTo(metersPerLatDegree / metersPerLngDegree, 2);
+    expect(width / height).toBeGreaterThan(1.1);
+  });
+
+  test("usa el mayor de los dos ejes para definir el lado", () => {
+    const ring = squareRingFromCorner(corner, [-33.43, -70.665]);
+    const expectedMeters = Math.abs(-33.43 - corner[0]) * metersPerLatDegree;
+
+    expect(Math.abs(distanceMeters(ring[0], ring[3]) - expectedMeters)).toBeLessThan(5);
+  });
+
+  test("no produce NaN ni Infinity cerca de los polos", () => {
+    const ring = squareRingFromCorner([89.999, 0], [89.999, 1]);
+
+    ring.forEach(([lat, lng]) => {
+      expect(Number.isFinite(lat)).toBe(true);
+      expect(Number.isFinite(lng)).toBe(true);
+    });
+  });
+
+  test("con el puntero sobre la esquina no cambia la figura", () => {
+    const ring = squareRingFromCorner(corner, corner);
+
+    ring.forEach((point) => expect(point).toEqual(corner));
+  });
+});
+
+describe("el editor usa el cuadrado por esquina", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const editor = fs.readFileSync(
+    path.join(__dirname, "..", "components", "roomEditor.js"),
+    "utf8"
+  );
+  const squareBody = editor.slice(
+    editor.indexOf("const startDrawSquare"),
+    editor.indexOf("const startDrawRect")
+  );
+
+  test("importa la geometria nueva", () => {
+    expect(editor).toContain("squareRingFromCorner,");
+  });
+
+  test("el preview usa la funcion de esquina y no la cuenta centrada", () => {
+    expect(squareBody).toContain("squareRingFromCorner([p1.lat, p1.lng]");
+    expect(squareBody).not.toContain("p1.lat + d * sLat");
+    expect(squareBody).not.toContain("p1.lat - d * sLat");
   });
 });

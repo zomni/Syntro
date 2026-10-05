@@ -11,6 +11,35 @@ export const distanceMeters = (ll1, ll2) => {
   return EARTH_RADIUS_M * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+// Arma un cuadrado con la esquina en 'corner' y el lado hacia donde apunta el
+// puntero. El lado se decide en metros y recien ahi se pasa a grados, porque un
+// grado de longitud mide menos que uno de latitud: a -33 grados son 92.7 km
+// contra 111.3 km. Mezclar los dos ejes en grados deja un cuadrado ~20% mas
+// ancho que alto, que es lo que pasaba antes de sacar la cuenta de las unidades.
+export const squareRingFromCorner = (corner, pointer) => {
+  const [lat, lng] = corner;
+  const [pLat, pLng] = pointer;
+  const mPerDegLat = METERS_PER_DEG_LAT;
+  const mPerDegLng = Math.max(
+    EARTH_RADIUS_M * Math.cos((lat * Math.PI) / 180) * (Math.PI / 180),
+    1
+  );
+  const sideM = Math.max(
+    Math.abs(pLat - lat) * mPerDegLat,
+    Math.abs(pLng - lng) * mPerDegLng
+  );
+  const dLat = sideM / mPerDegLat;
+  const dLng = sideM / mPerDegLng;
+  const latDir = pLat >= lat ? 1 : -1;
+  const lngDir = pLng >= lng ? 1 : -1;
+  return [
+    [lat, lng],
+    [lat, lng + dLng * lngDir],
+    [lat + dLat * latDir, lng + dLng * lngDir],
+    [lat + dLat * latDir, lng],
+  ];
+};
+
 export const pointInRing = (latlng, ring) => {
   const [lat, lng] = latlng;
   let inside = false;

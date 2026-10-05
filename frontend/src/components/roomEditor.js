@@ -12,6 +12,7 @@ import {
   buildSnapRefs,
   simplifyRing,
   distanceMeters,
+  squareRingFromCorner,
 } from "../utils/roomEditorGeometry.js";
 import { divideBuildingIntoSectors, sectorCountForArea } from "../utils/sectorDivision.js";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
@@ -2047,17 +2048,12 @@ const startDrawSquare = () => {
   const onMove = (e) => {
     if (!p1 || !currentEditorState.previewLayer) return;
     const snapped = applySnap(e.latlng);
-    const dLat = Math.abs(snapped.lat - p1.lat);
-    const dLng = Math.abs(snapped.lng - p1.lng);
-    const d = Math.max(dLat, dLng);
-    const sLat = snapped.lat >= p1.lat ? 1 : -1;
-    const sLng = snapped.lng >= p1.lng ? 1 : -1;
-    currentEditorState.previewLayer.setLatLngs([
-      [p1.lat + d * sLat, p1.lng - d * sLng],
-      [p1.lat + d * sLat, p1.lng + d * sLng],
-      [p1.lat - d * sLat, p1.lng + d * sLng],
-      [p1.lat - d * sLat, p1.lng - d * sLng],
-    ]);
+    // El primer click fija una esquina, igual que el rectangulo. Antes el
+    // preview se armaba como p1 mas/menos el lado, con lo que el centro caia
+    // en p1 y el primer click terminaba fijando el centro de la figura.
+    currentEditorState.previewLayer.setLatLngs(
+      squareRingFromCorner([p1.lat, p1.lng], [snapped.lat, snapped.lng])
+    );
   };
 
   popupMap.on("click", onClick);
