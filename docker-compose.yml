@@ -17,7 +17,7 @@ services:
       - FrontendAppUrl=${FRONTEND_APP_URL:-http://localhost:8081}
       - FrontendDataPath=/app/frontend-data
       - ExcelImportRoot=/app/import
-      - SQLITE_DATA_ROOT=/app/data
+      - SQLITE_DATA_ROOT=/app/dbdata
       - AuthSettings__AdminUsername=${ADMIN_EMAIL:-}
       - AuthSettings__AdminPassword=${ADMIN_PASSWORD:-}
       - AuthSettings__UseLdapAuthentication=${AUTH_USE_LDAP:-false}
@@ -62,6 +62,7 @@ services:
       - api_bin:/app/Syntro.API/bin
       - api_obj:/app/Syntro.API/obj
       - ./backend/data:/app/data
+      - api_dbdata:/app/dbdata
       - ./runtime/network-telemetry-agent:/runtime/network-telemetry-agent
       - ./runtime/network-telemetry-agent:/app/runtime/network-telemetry-agent
       - nuget_cache:/root/.nuget/packages
@@ -84,4 +85,5 @@ services:
 volumes:
   api_bin:
   api_obj:
+  api_dbdata:
   nuget_cache:

@@ -100,6 +100,21 @@ if (!window.closeBuildingPanel) {
   };
 }
 
+const isBuildingPanelOpen = () => {
+  if (!currentOpenLayer) return false;
+  if (typeof currentOpenLayer.isPopupOpen === "function" && currentOpenLayer.isPopupOpen()) return true;
+  return document.body.classList.contains("map-building-panel");
+};
+
+// Escape debe cerrar el panel de edificio igual que el boton X. Se registra una
+// sola vez a nivel de modulo y se condiciona a que el panel siga abierto, para no
+// secuestrar la tecla en el resto de modales, inputs o del editor de interiores.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  if (!isBuildingPanelOpen()) return;
+  closeCurrentPopup();
+});
+
 map.on("click", (event) => {
   if (buildingPanelMapFrozen) return;
 
@@ -2561,6 +2576,9 @@ const unfreezeMapForBuildingPanel = () => {
 };
 
 const destroyBuildingViewMap = () => {
+  // Invalida cualquier render de sectores que siga en vuelo: si no, volvería a
+  // pintar sobre un mapa ya destruido.
+  floorSectorsRenderToken += 1;
   hoveredSectorRoomId = "";
   hoveredSectorPolygon = null;
   if (buildingViewOverlay) {
@@ -2654,6 +2672,12 @@ let equipmentDropTargetRoomId = "";
 let equipmentDropHandlersBound = false;
 let hoveredSectorRoomId = "";
 let hoveredSectorPolygon = null;
+
+// RenderFloorSectors se dispara desde varios sitios a la vez (cambio de piso,
+// refresco tras asignar un equipo, whenReady del mapa) y es async: sin este token
+// la invocación lenta sigue pintando su piso sobre el overlay que creó la más
+// reciente y los sectores de pisos distintos quedan superpuestos.
+let floorSectorsRenderToken = 0;
 
 const baseSectorStyle = {
   color: "#a78bfa",
@@ -2912,10 +2936,10 @@ const resolveBubbleLatLng = ({ preferred, ring, avoidPoints = [], radiusPx, minD
   return fallback;
 };
 
-const placeFloorTotalBubble = (floorRing, floorTotal, floor, featureId) => {
-  if (!buildingViewOverlay || floorRing.length < 3) return;
+const placeFloorTotalBubble = (overlay, floorRing, floorTotal, floor, featureId) => {
+  if (!overlay || floorRing.length < 3) return;
 
-  const anchors = buildingViewOverlay
+  const anchors = overlay
     .getLayers()
     .filter((l) => l.options?.icon && /building-equipment-bubble/.test(l.options.icon?.options?.className || ""));
   const avoidPoints = anchors.map((marker) => marker.getLatLng());
@@ -2933,7 +2957,7 @@ const placeFloorTotalBubble = (floorRing, floorTotal, floor, featureId) => {
   const marker = L.marker(target, {
     icon: createFloorTotalBubbleIcon(floorTotal),
     zIndexOffset: 1000,
-  }).addTo(buildingViewOverlay);
+  }).addTo(overlay);
   marker.bindTooltip(`${floorTotal} equipo(s) en el piso ${floor}`, { sticky: true, direction: "top" });
   marker.on("click", () => {
     window.clearSectorFilter && window.clearSectorFilter(featureId);
@@ -2949,8 +2973,12 @@ const renderFloorSectors = async (feature) => {
   const building = await findBuildingInCatalog(feature);
   if (!building) return;
 
+  const token = ++floorSectorsRenderToken;
+  const isStale = () => token !== floorSectorsRenderToken;
+
   const floor = popupFloorState[featureId] ?? (feature?.properties?.floor ?? 0);
   const backendSession = await loadBackendSession();
+  if (isStale()) return;
   const canViewEquipment = Boolean(backendSession?.isAuthenticated) && !isWayfindingMode();
 
   if (buildingViewOverlay) {
@@ -2960,12 +2988,22 @@ const renderFloorSectors = async (feature) => {
   }
   hoveredSectorRoomId = "";
   hoveredSectorPolygon = null;
-  buildingViewOverlay = L.layerGroup().addTo(buildingViewMap);
+  const overlay = L.layerGroup().addTo(buildingViewMap);
+  buildingViewOverlay = overlay;
 
   const [allRooms, backendInventoryItems] = await Promise.all([
     loadRoomsForBuilding(building),
     canViewEquipment ? loadBackendInventoryForBuilding(building) : Promise.resolve([]),
   ]);
+
+  // Otra invocación ya tomó el control (o el mapa se cerró): este render quedó
+  // obsoleto, así que se descarta su overlay en vez de mezclarlo con el vigente.
+  if (isStale() || !buildingViewMap) {
+    overlay.clearLayers();
+    overlay.remove();
+    return;
+  }
+
   const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
   const sectors = filterRoomsByFloor(allRooms, floor).filter(
     (room) => room.type === "sector" && room.geometryJson
@@ -3018,7 +3056,7 @@ const renderFloorSectors = async (feature) => {
       ...(isActive ? activeSectorStyle : baseSectorStyle),
       className: isActive ? "building-view-sector is-active" : "building-view-sector",
       interactive: true,
-    }).addTo(buildingViewOverlay);
+    }).addTo(overlay);
 
     const setHover = (hovering) => {
       if (isActive) return;
@@ -3056,7 +3094,7 @@ const renderFloorSectors = async (feature) => {
 
     sectorBubblePoints.push(bubblePoint);
 
-    const marker = L.marker(bubblePoint, { icon: createEquipmentBubbleIcon(count) }).addTo(buildingViewOverlay);
+    const marker = L.marker(bubblePoint, { icon: createEquipmentBubbleIcon(count) }).addTo(overlay);
     marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
     marker.on("click", () => {
       window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
@@ -3071,8 +3109,11 @@ const renderFloorSectors = async (feature) => {
     });
   }
 
+  // Siempre se reescribe: si el piso ya no tiene sectores hay que borrar los
+  // drop targets del piso anterior o se seguirían soltando equipos en pisos
+  // donde ese sector ya no existe.
+  sectorDropTargets[featureId] = dropTargets;
   if (dropTargets.length) {
-    sectorDropTargets[featureId] = dropTargets;
     bindEquipmentDropTargets();
   }
 
@@ -3080,7 +3121,7 @@ const renderFloorSectors = async (feature) => {
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
-  placeFloorTotalBubble(floorRing, devicesInFloor.length, floor, featureId);
+  placeFloorTotalBubble(overlay, floorRing, devicesInFloor.length, floor, featureId);
 };
 
 const createBuildingViewMap = (layer) => {

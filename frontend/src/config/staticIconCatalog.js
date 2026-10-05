@@ -50,7 +50,16 @@ export const STATIC_ICON_LABELS = {
   wifi: "Wi-Fi",
 };
 
-export const staticIconUrl = (key) => `data/assets/static_icons/${key}.png`;
+// Icono usado cuando el IconKey guardado no existe en el catalogo. Sin este
+// fallback, staticIconUrl("hotel") pedia data/assets/static_icons/hotel.png, el
+// nginx no lo encuentra y try_files responde index.html con 200: el navegador
+// recibe HTML donde espera un PNG y dibuja el icono roto.
+const FALLBACK_STATIC_ICON_KEY = "information_desk";
+
+export const staticIconUrl = (key) => {
+  const safeKey = STATIC_ICON_KEYS.includes(key) ? key : FALLBACK_STATIC_ICON_KEY;
+  return `data/assets/static_icons/${safeKey}.png`;
+};
 
 export const staticIconLabel = (key) => STATIC_ICON_LABELS[key] || key;
 

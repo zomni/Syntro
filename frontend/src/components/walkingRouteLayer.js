@@ -8,7 +8,7 @@ const ROUTE_VISIBILITY_STORAGE_KEY = identifiers.storage.walkingRoutesVisible;
 let routesLayer = null;
 let routesCache = null;
 let routesCampus = null;
-const storedVisibility = window.sessionStorage?.getItem(ROUTE_VISIBILITY_STORAGE_KEY);
+const storedVisibility = window.sessionStorage&& window.sessionStorage.getItem(ROUTE_VISIBILITY_STORAGE_KEY);
 let routesVisible = storedVisibility !== null ? storedVisibility === "true" : true;
 
 const ensureRoutesLayer = () => {
@@ -53,7 +53,7 @@ export const resetWalkingRoutesLayerCache = () => {
 };
 
 export const hideWalkingRoutesLayer = () => {
-  routesLayer?.clearLayers();
+  routesLayer&& clearLayers();
 };
 
 export const refreshWalkingRoutesLayer = async () => {
@@ -103,10 +103,11 @@ export const renderWalkingRoutesLayer = async () => {
           dashArray: String(edge.status || "").toLowerCase() === "closed" ? "4 8" : null,
           interactive: false,
         }
-      ).addTo(layer);
-    }
+      ).addTo(layer);    }
 
-    layer.bringToFront();
+    if (layer && typeof layer.bringToFront === "function") {
+      layer.bringToFront();
+    }
   } catch (error) {
     console.error("Error mostrando rutas caminables:", error);
   } finally {
@@ -116,7 +117,7 @@ export const renderWalkingRoutesLayer = async () => {
 
 export const setWalkingRoutesVisible = async (isVisible) => {
   routesVisible = Boolean(isVisible);
-  window.sessionStorage?.setItem(ROUTE_VISIBILITY_STORAGE_KEY, String(routesVisible));
+  window.sessionStorage&& setItem(ROUTE_VISIBILITY_STORAGE_KEY, String(routesVisible));
   updateButtonState();
 
   if (routesVisible) {
@@ -148,28 +149,22 @@ export const initWalkingRouteLayer = () => {
   window.addEventListener(identifiers.events.campusChanged, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();
-    } else {
-      hideWalkingRoutesLayer();
-    }
+      void renderWalkingRoutesLayer();    } else {
+      hideWalkingRoutesLayer();    }
   });
 
   window.addEventListener(identifiers.events.sitesLoaded, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();
-    } else {
-      hideWalkingRoutesLayer();
-    }
+      void renderWalkingRoutesLayer();    } else {
+      hideWalkingRoutesLayer();    }
   });
 
   window.addEventListener(identifiers.events.sessionChanged, () => {
     resetWalkingRoutesLayerCache();
     if (routesVisible) {
-      void renderWalkingRoutesLayer();
-    } else {
-      hideWalkingRoutesLayer();
-    }
+      void renderWalkingRoutesLayer();    } else {
+      hideWalkingRoutesLayer();    }
   });
 
   if (routesVisible) {
