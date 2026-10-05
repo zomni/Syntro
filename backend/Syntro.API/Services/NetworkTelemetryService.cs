@@ -97,6 +97,12 @@ public class NetworkTelemetryService
     public string? IngestApiKey()
         => _configuration["NetworkTelemetrySettings:IngestApiKey"];
 
+    // Ventana maxima para que una captura programada adopte el numero de un run pendiente.
+    // Sin este limite una captura tardia se apropia de un run atascado en 'queued' y le
+    // roba el numero, dejando al run real sin cerrar.
+    public int PendingRunAdoptionMinutes()
+        => _configuration.GetValue<int?>("NetworkTelemetrySettings:PendingRunAdoptionMinutes") ?? 45;
+
     public async Task<NetworkTelemetryDashboardViewModel> GetDashboardAsync(
         int take = 10,
         Guid? selectedSnapshotId = null,
@@ -478,8 +484,8 @@ public class NetworkTelemetryService
     }
 
     // Numeracion compartida runs/snapshots por campus: las capturas programadas
-    // adoptan el numero del run pendiente (queued/running); el resto continua la
-    // secuencia tras el maximo entre runs y snapshots del campus.
+    // adoptan el numero del run pendiente (queued/running) siempre que sea reciente; el
+    // resto continua la secuencia tras el maximo entre runs y snapshots del campus.
     private async Task<int> ResolveSnapshotRunNumberAsync(
         string campusKey,
         string? triggerType,
@@ -489,14 +495,20 @@ public class NetworkTelemetryService
 
         if (string.Equals(triggerType, "scheduled", StringComparison.OrdinalIgnoreCase))
         {
-            var pendingRun = await _context.ScheduledScanRuns
+            var adoptionMinutes = PendingRunAdoptionMinutes();
+            var adoptionCutoffUtc = adoptionMinutes > 0
+                ? DateTime.UtcNow.AddMinutes(-adoptionMinutes)
+                : DateTime.MinValue;
+
+            var pendingRuns = await _context.ScheduledScanRuns
                 .AsNoTracking()
                 .Where(r => (r.CampusKey == campus || r.CampusKey == string.Empty)
                             && (r.Status == "queued" || r.Status == "running"))
                 .OrderByDescending(r => r.CreatedAtUtc)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken);
 
-            if (pendingRun is not null && pendingRun.RunNumber > 0)
+            var pendingRun = SelectRunToAdopt(pendingRuns, adoptionCutoffUtc);
+            if (pendingRun is not null)
             {
                 return pendingRun.RunNumber;
             }
@@ -510,6 +522,21 @@ public class NetworkTelemetryService
             .MaxAsync(s => (int?)s.RunNumber, cancellationToken) ?? 0;
 
         return Math.Max(maxRunNumber, maxSnapshotRunNumber) + 1;
+    }
+
+    // Elige que run pendiente queda adoptado por la captura programada. Un run en cola
+    // atascado puede llevar horas abierto: si se adoptaba igual, la captura se quedaria con
+    // su numero y el run real nunca se cerraria.
+    internal static ScheduledScanRun? SelectRunToAdopt(
+        IEnumerable<ScheduledScanRun> pendingRuns,
+        DateTime adoptionCutoffUtc)
+    {
+        return pendingRuns
+            .Where(run => run.RunNumber > 0
+                && (adoptionCutoffUtc == DateTime.MinValue
+                    || run.CreatedAtUtc >= adoptionCutoffUtc))
+            .OrderByDescending(run => run.CreatedAtUtc)
+            .FirstOrDefault();
     }
 
     public async Task<NetworkTelemetrySnapshotPageViewModel> GetSnapshotPageAsync(

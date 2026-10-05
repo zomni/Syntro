@@ -120,11 +120,50 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 await db.SaveChangesAsync(stoppingToken);
 
                 var scanner = scope.ServiceProvider.GetRequiredService<NetworkTelemetryLiveScanService>();
+                var liveScanRequest = new NetworkTelemetryLiveScanRequest
+                {
+                    CampusKey = slotInfo.CampusKey,
+                    ResolveInteractiveSessions = true,
+                    ScanMode = "full",
+                    TriggerType = "scheduled"
+                };
 
                 if (bridge.UseAgentMode())
                 {
                     // Estado del agente de la sede (campusKey) del slot, no global.
                     var agentStatus = await bridge.GetStatusAsync(slotInfo.CampusKey, stoppingToken);
+                    var agentNowUtc = DateTime.UtcNow;
+
+                    // El agente solo informa el fallo escribiendo 'failed' en su scan-status.json.
+                    // Sin este cierre el run queda 'queued' para siempre y bloquea todos los slots
+                    // siguientes, porque shouldFallbackToInline ve un run en cola sin completar.
+                    var closedByAgentFailure = await CloseQueuedRunsForFailedAgentAsync(
+                        db,
+                        slotInfo.CampusKey,
+                        agentStatus,
+                        agentNowUtc,
+                        stoppingToken);
+                    if (closedByAgentFailure > 0)
+                    {
+                        _logger.LogWarning(
+                            "Closed {Count} queued telemetry scan run(s) because the Windows agent reported a failure.",
+                            closedByAgentFailure);
+                    }
+
+                    // Red de seguridad para cuando el agente muere sin escribir su estado.
+                    var closedByAge = await CloseStaleQueuedRunsAsync(
+                        db,
+                        slotInfo.CampusKey,
+                        GetQueuedRunTimeoutMinutes(),
+                        agentNowUtc,
+                        stoppingToken);
+                    if (closedByAge > 0)
+                    {
+                        _logger.LogWarning(
+                            "Closed {Count} queued telemetry scan run(s) that exceeded the agent response window.",
+                            closedByAge);
+                    }
+
                     if (string.Equals(agentStatus.State, "pending", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(agentStatus.State, "running", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(agentStatus.State, "paused", StringComparison.OrdinalIgnoreCase) ||
@@ -139,7 +178,11 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                     }
 
                     var previousQueuedRun = await db.ScheduledScanRuns
-                        .Where(r => r.Status == "queued" && r.CompletedAtUtc == null)
+                        .Where(r => r.Status == "queued"
+                            && r.CompletedAtUtc == null
+                            && (slotInfo.CampusKey == string.Empty
+                                || r.CampusKey == slotInfo.CampusKey
+                                || r.CampusKey == string.Empty))
                         .OrderByDescending(r => r.CreatedAtUtc)
                         .FirstOrDefaultAsync(stoppingToken);
 
@@ -148,22 +191,25 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
 
                     if (shouldFallbackToInline)
                     {
-                        var reason = !agentStatus.IsConnected
-                            ? $"Agent disconnected (state={agentStatus.State})"
-                            : $"Previous scan run #{previousQueuedRun!.Id} is still queued without completion";
+                        var fallbackReason = !agentStatus.IsConnected
+                            ? $"El agente Windows no esta conectado (estado={agentStatus.State})."
+                            : $"El escaneo programado #{previousQueuedRun!.RunNumber} sigue en cola sin completarse.";
 
                         _logger.LogWarning(
                             "Falling back to inline scan. Reason: {Reason}",
-                            reason);
+                            fallbackReason);
 
-                    var result = await scanner.ScanAndStoreAsync("system", new NetworkTelemetryLiveScanRequest
-                    {
-                        CampusKey = slotInfo.CampusKey,
-                        ResolveInteractiveSessions = true,
-                        ScanMode = "full",
-                        TriggerType = "scheduled"
-                    }, stoppingToken);
-                    _logger.LogInformation("Live network telemetry auto scan completed inline (agent bypassed).");
+                        if (!CanRunInlineScanHere(out var inlineBlockedReason))
+                        {
+                            run.Status = "failed";
+                            run.CompletedAtUtc = DateTime.UtcNow;
+                            run.ErrorMessage = $"{fallbackReason} {inlineBlockedReason}";
+                            await db.SaveChangesAsync(stoppingToken);
+                            continue;
+                        }
+
+                        var result = await scanner.ScanAndStoreAsync("system", liveScanRequest, stoppingToken);
+                        _logger.LogInformation("Live network telemetry auto scan completed inline (agent bypassed).");
 
                         run.Status = "completed";
                         run.CompletedAtUtc = DateTime.UtcNow;
@@ -174,13 +220,7 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                         continue;
                     }
 
-                    await bridge.QueueScanAsync("system", new NetworkTelemetryLiveScanRequest
-                    {
-                        CampusKey = slotInfo.CampusKey,
-                        ResolveInteractiveSessions = true,
-                        ScanMode = "full",
-                        TriggerType = "scheduled"
-                    }, stoppingToken);
+                    await bridge.QueueScanAsync("system", liveScanRequest, stoppingToken);
                     _logger.LogInformation("Live network telemetry auto scan queued for Windows agent.");
 
                     run.Status = "queued";
@@ -188,13 +228,16 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
                 }
                 else
                 {
-                    var result = await scanner.ScanAndStoreAsync("system", new NetworkTelemetryLiveScanRequest
+                    if (!CanRunInlineScanHere(out var inlineBlockedReason))
                     {
-                        CampusKey = slotInfo.CampusKey,
-                        ResolveInteractiveSessions = true,
-                        ScanMode = "full",
-                        TriggerType = "scheduled"
-                    }, stoppingToken);
+                        run.Status = "failed";
+                        run.CompletedAtUtc = DateTime.UtcNow;
+                        run.ErrorMessage = $"No hay agente Windows configurado. {inlineBlockedReason}";
+                        await db.SaveChangesAsync(stoppingToken);
+                        continue;
+                    }
+
+                    var result = await scanner.ScanAndStoreAsync("system", liveScanRequest, stoppingToken);
                     _logger.LogInformation("Live network telemetry scan completed successfully.");
 
                     run.Status = "completed";
@@ -324,6 +367,135 @@ public class NetworkTelemetryLiveScanHostedService : BackgroundService
         }
 
         return reconciled;
+    }
+
+    private int GetQueuedRunTimeoutMinutes()
+        => GetInt("NetworkTelemetrySettings:AgentQueuedRunTimeoutMinutes", "NETWORK_TELEMETRY_AGENT_QUEUED_RUN_TIMEOUT_MINUTES", 45);
+
+    // El escaneo en linea solo aporta datos si corre en Windows (para resolver sesiones y
+    // hardware por WMI) o si hay rangos de red configurados. Sin ninguna de las dos cosas,
+    // dentro de Docker solo se observaria la red puente del propio contenedor.
+    internal static bool CanRunInlineScanHere(bool isWindowsHost, string? configuredScanCidrs, out string blockedReason)
+    {
+        if (isWindowsHost || !string.IsNullOrWhiteSpace(configuredScanCidrs))
+        {
+            blockedReason = string.Empty;
+            return true;
+        }
+
+        blockedReason = "El backend corre en Linux/Docker sin NetworkTelemetrySettings:ScanCidrs configurado, "
+            + "asi que el escaneo en linea solo observaria la red del propio contenedor. "
+            + "Se requiere el agente Windows (Syntro.NetworkCollector) para capturar la red del campus.";
+        return false;
+    }
+
+    private bool CanRunInlineScanHere(out string blockedReason)
+        => CanRunInlineScanHere(
+            OperatingSystem.IsWindows(),
+            GetString("NetworkTelemetrySettings:ScanCidrs", "NETWORK_TELEMETRY_SCAN_CIDRS"),
+            out blockedReason);
+
+    // Cierra los runs que quedaron 'queued' cuando el agente informo un fallo (scan-timeout,
+    // scan-stopped o error). Sin esto el run permanece en cola indefinidamente y cada slot
+    // posterior cae al escaneo en linea, que en Linux/Docker solo ve la red del contenedor.
+    internal static async Task<int> CloseQueuedRunsForFailedAgentAsync(
+        AppDbContext db,
+        string campusKey,
+        NetworkTelemetryAgentStatusViewModel agentStatus,
+        DateTime utcNow,
+        CancellationToken stoppingToken = default)
+    {
+        if (!string.Equals(agentStatus.State, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return 0;
+        }
+
+        // Solo cerramos runs en cola anteriores al momento en que el agente registro el
+        // fallo, para no dar por fallido un run recien creado con un estado_agent viejo.
+        var failureRecordedAtUtc = agentStatus.UpdatedAtUtc ?? agentStatus.CompletedAtUtc;
+        var candidates = await db.ScheduledScanRuns
+            .Where(r => r.Status == "queued"
+                && r.CompletedAtUtc == null
+                && (campusKey == string.Empty || r.CampusKey == campusKey || r.CampusKey == string.Empty))
+            .ToListAsync(stoppingToken);
+
+        var closed = 0;
+        foreach (var run in candidates)
+        {
+            var queuedAtUtc = run.StartedAtUtc ?? run.CreatedAtUtc;
+            if (failureRecordedAtUtc.HasValue && queuedAtUtc > failureRecordedAtUtc.Value)
+            {
+                continue;
+            }
+
+            run.Status = "failed";
+            run.CompletedAtUtc = utcNow;
+            run.ErrorMessage = BuildAgentFailureMessage(agentStatus);
+            closed++;
+        }
+
+        if (closed > 0)
+        {
+            await db.SaveChangesAsync(stoppingToken);
+        }
+
+        return closed;
+    }
+
+    private static string BuildAgentFailureMessage(NetworkTelemetryAgentStatusViewModel agentStatus)
+    {
+        var detail = !string.IsNullOrWhiteSpace(agentStatus.Message)
+            ? agentStatus.Message.Trim()
+            : "el agente Windows no devolvio resultado";
+        var error = (agentStatus.Error ?? string.Empty).Trim();
+
+        return string.IsNullOrEmpty(error)
+            ? $"El agente Windows no completo el escaneo: {detail}"
+            : $"El agente Windows no completo el escaneo ({error}): {detail}";
+    }
+
+    // Si el agente muere sin escribir su estado, el run sigue 'queued'. A partir de esta
+    // ventana se da por fallido para que el siguiente slot vuelva a encolar al agente.
+    internal static async Task<int> CloseStaleQueuedRunsAsync(
+        AppDbContext db,
+        string campusKey,
+        int timeoutMinutes,
+        DateTime utcNow,
+        CancellationToken stoppingToken = default)
+    {
+        if (timeoutMinutes <= 0)
+        {
+            return 0;
+        }
+
+        var cutoffUtc = utcNow.AddMinutes(-timeoutMinutes);
+        var candidates = await db.ScheduledScanRuns
+            .Where(r => r.Status == "queued"
+                && r.CompletedAtUtc == null
+                && (campusKey == string.Empty || r.CampusKey == campusKey || r.CampusKey == string.Empty))
+            .ToListAsync(stoppingToken);
+
+        var closed = 0;
+        foreach (var run in candidates)
+        {
+            var queuedAtUtc = run.StartedAtUtc ?? run.CreatedAtUtc;
+            if (queuedAtUtc >= cutoffUtc)
+            {
+                continue;
+            }
+
+            run.Status = "failed";
+            run.CompletedAtUtc = utcNow;
+            run.ErrorMessage = $"El agente Windows no devolvio resultado en {timeoutMinutes} minutos (escaneo #{run.RunNumber}).";
+            closed++;
+        }
+
+        if (closed > 0)
+        {
+            await db.SaveChangesAsync(stoppingToken);
+        }
+
+        return closed;
     }
 
     private async Task<IReadOnlyList<ActiveSchedule>> LoadActiveSchedulesAsync(CancellationToken stoppingToken)
