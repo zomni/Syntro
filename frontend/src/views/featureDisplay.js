@@ -1271,13 +1271,20 @@ const getAvailableSummaryTypes = (summaryMap) => {
   return getAvailableDeviceTypes(Array.from(types).map((type) => ({ type })));
 };
 
-const createEquipmentBubbleIcon = (count) =>
-  L.divIcon({
+const createEquipmentBubbleIcon = (count, { emptyWhenZero = false } = {}) => {
+  const normalizedCount = Number(count) || 0;
+  const label = normalizedCount > 0
+    ? `${normalizedCount} equipo(s) asignados`
+    : "Sin equipos asignados";
+  const visibleCount = emptyWhenZero && normalizedCount === 0 ? "" : normalizedCount;
+
+  return L.divIcon({
     className: "building-equipment-bubble",
-    html: `<button type="button" aria-label="${count} equipo(s) asignados">${count}</button>`,
+    html: `<button type="button" aria-label="${label}">${visibleCount}</button>`,
     iconSize: [34, 34],
     iconAnchor: [17, 17],
   });
+};
 
 const updateBuildingEquipmentBubbles = () => {
   if (buildingMatchModeActive) return;
@@ -1565,11 +1572,14 @@ const popupShellStyle = `
   padding-right: 2px;
 `;
 
-const buildBuildingPanelHeaderHtml = (featureName) => `
-  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
-    <b style="font-size:16px; flex:1 1 auto; min-width:0;">
-      ${escapeHtml(featureName)}
-    </b>
+const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "") => `
+  <div class="building-panel-heading">
+    <div class="building-panel-heading-copy">
+      <b class="building-panel-title">
+        ${escapeHtml(featureName)}
+      </b>
+      ${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}
+    </div>
     <button
       type="button"
       class="building-panel-close"
@@ -2321,9 +2331,9 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const buildBuildingPanelPopupHtml = ({ featureName, building, currentFloor, hasView, contentHtml }) => `
+const buildBuildingPanelPopupHtml = ({ featureName, selectedRoomName = "", building, currentFloor, hasView, contentHtml }) => `
   <div style="${popupShellStyle}">
-    ${buildBuildingPanelHeaderHtml(featureName)}
+    ${buildBuildingPanelHeaderHtml(featureName, selectedRoomName)}
     ${buildFloorSelectorHtml(building, currentFloor)}
     <div style="margin-top:8px;">
       <div style="${hasView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
@@ -2422,6 +2432,11 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
   const roomsInFloor = filterRoomsByFloor(allRooms, currentFloor);
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
+  const selectedRoomHeaderId = popupSectorFilterState[featureId] || selectedRoomId;
+  const selectedRoomHeader = selectedRoomHeaderId
+    ? roomsInFloor.find((room) => room.roomId === selectedRoomHeaderId && room.type === "sector")
+    : null;
+  const selectedRoomName = selectedRoomHeader?.name || "";
 
   const searchPopupContent = building?.searchPopupContent || "";
   const canManageEquipment = canManageEquipmentAssignments(backendSession);
@@ -2525,6 +2540,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
 
   return buildBuildingPanelPopupHtml({
     featureName,
+    selectedRoomName,
     building,
     currentFloor,
     hasView: Boolean(currentView),
@@ -2681,23 +2697,23 @@ let floorSectorsRenderToken = 0;
 
 const baseSectorStyle = {
   color: "#a78bfa",
-  weight: 1.2,
+  weight: 1.8,
   fillColor: "#a78bfa",
-  fillOpacity: 0.05,
-  opacity: 0.85,
+  fillOpacity: 0.16,
+  opacity: 0.95,
 };
 const activeSectorStyle = {
   color: "#6d28d9",
-  weight: 2.5,
+  weight: 3.5,
   fillColor: "#6d28d9",
-  fillOpacity: 0.16,
+  fillOpacity: 0.24,
   opacity: 1,
 };
 const hoverSectorStyle = {
   color: "#38bdf8",
-  weight: 2.5,
+  weight: 4,
   fillColor: "#38bdf8",
-  fillOpacity: 0.16,
+  fillOpacity: 0.32,
   opacity: 1,
 };
 
@@ -2912,12 +2928,15 @@ const resolveBubbleLatLng = ({ preferred, ring, avoidPoints = [], radiusPx, minD
 
   const probes = bubbleProbeOffsets(radiusPx);
   let fallback = null;
+  let nonCollidingFallback = null;
+  let insideFallback = null;
 
   for (const [dx, dy] of bubbleCandidateOffsets()) {
     const candidate = buildingViewMap.containerPointToLatLng(
       L.point(basePoint.x + dx, basePoint.y + dy)
     );
     if (!isLatLngInsideRing(candidate, ring)) continue;
+    if (!insideFallback) insideFallback = candidate;
 
     const fitsCompletely = probes.every(([px, py]) => {
       const probe = buildingViewMap.containerPointToLatLng(L.point(basePoint.x + dx + px, basePoint.y + dy + py));
@@ -2930,10 +2949,14 @@ const resolveBubbleLatLng = ({ preferred, ring, avoidPoints = [], radiusPx, minD
     });
 
     if (fitsCompletely && !collides) return candidate;
+    if (!collides && !nonCollidingFallback) nonCollidingFallback = candidate;
     if (!fallback && fitsCompletely) fallback = candidate;
   }
 
-  return fallback;
+  // Sectores pequenos no siempre admiten el diametro completo de la burbuja.
+  // En vez de omitirla, usamos primero un punto sin colision y luego cualquier
+  // punto interior: la burbuja debe identificar tambien sectores vacios.
+  return fallback || nonCollidingFallback || insideFallback || baseLatLng;
 };
 
 const placeFloorTotalBubble = (overlay, floorRing, floorTotal, floor, featureId) => {
@@ -3094,8 +3117,13 @@ const renderFloorSectors = async (feature) => {
 
     sectorBubblePoints.push(bubblePoint);
 
-    const marker = L.marker(bubblePoint, { icon: createEquipmentBubbleIcon(count) }).addTo(overlay);
-    marker.bindTooltip(`${sector.name} · ${count} equipo(s)`, { sticky: true, direction: "top" });
+    const marker = L.marker(bubblePoint, {
+      icon: createEquipmentBubbleIcon(count, { emptyWhenZero: true }),
+    }).addTo(overlay);
+    marker.bindTooltip(
+      `${sector.name} · ${count > 0 ? `${count} equipo(s)` : "Sin equipos asignados"}`,
+      { sticky: true, direction: "top" }
+    );
     marker.on("click", () => {
       window.setSectorFilter && window.setSectorFilter(featureId, sector.roomId);
     });

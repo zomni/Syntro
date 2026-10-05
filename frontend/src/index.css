@@ -1898,13 +1898,48 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
 }
 
 .building-view-sector {
-    filter: blur(1.5px) drop-shadow(0 0 9px rgba(167, 139, 250, 0.55));
+    filter: none;
     cursor: pointer;
 }
 
 .building-view-sector.is-hover,
 .building-view-sector.is-active {
     filter: none;
+}
+
+.building-panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.building-panel-heading-copy {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.building-panel-title {
+    min-width: 0;
+    overflow: hidden;
+    color: #0f172a;
+    font-size: 16px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.building-panel-subtitle {
+    overflow: hidden;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .building-view-sector.is-drop-target {
