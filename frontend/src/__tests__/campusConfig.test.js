@@ -13,14 +13,14 @@ describe("campusConfig", () => {
   test("derives data file names from school + explicit campus key", () => {
     const names = getDataFileNames("sotero");
     expect(names.search).toBe("data/cs_sotero_search.json");
-    expect(names.floor("0")).toBe("data/cs_sotero_0.json");
+    expect(names.floor("1")).toBe("data/cs_sotero_1.json");
     expect(names.floor("b1")).toBe("data/cs_sotero_b1.json");
   });
 
   test("derives no data file names without a campus", () => {
     const names = getDataFileNames("");
     expect(names.search).toBe("data/tmpl__search.json");
-    expect(names.floor("0")).toBe("data/tmpl__0.json");
+    expect(names.floor("1")).toBe("data/tmpl__1.json");
   });
 
   test("derives catalog and backup file names from explicit campus key", () => {
