@@ -6,6 +6,7 @@ import {
   simplifyRing,
   ringCentroidLatLng,
   squareRingFromCorner,
+  latLngRingToGeoJsonRing,
 } from "../utils/roomEditorGeometry.js";
 
 describe("distanceMeters", () => {
@@ -265,5 +266,70 @@ describe("el editor usa el cuadrado por esquina", () => {
     expect(squareBody).toContain("squareRingFromCorner([p1.lat, p1.lng]");
     expect(squareBody).not.toContain("p1.lat + d * sLat");
     expect(squareBody).not.toContain("p1.lat - d * sLat");
+  });
+});
+
+describe("latLngRingToGeoJsonRing", () => {
+  test("convierte objetos LatLng a [lng,lat] y cierra el anillo", () => {
+    const ring = [
+      { lat: -33.45, lng: -70.67 },
+      { lat: -33.45, lng: -70.66 },
+      { lat: -33.44, lng: -70.66 },
+    ];
+
+    expect(latLngRingToGeoJsonRing(ring)).toEqual([
+      [-70.67, -33.45],
+      [-70.66, -33.45],
+      [-70.66, -33.44],
+      [-70.67, -33.45],
+    ]);
+  });
+
+  test("nunca produce null ni undefined (bug de indices en LatLng)", () => {
+    const out = latLngRingToGeoJsonRing([
+      { lat: 1, lng: 2 },
+      { lat: 3, lng: 4 },
+      { lat: 5, lng: 6 },
+    ]);
+
+    expect(out.flat().every((v) => typeof v === "number")).toBe(true);
+  });
+
+  test("acepta pares [lat,lng] sin mutar la entrada", () => {
+    const ring = [[1, 2], [3, 4], [5, 6]];
+    const before = JSON.parse(JSON.stringify(ring));
+
+    expect(latLngRingToGeoJsonRing(ring)).toEqual([
+      [2, 1],
+      [4, 3],
+      [6, 5],
+      [2, 1],
+    ]);
+    expect(ring).toEqual(before);
+  });
+
+  test("entrada vacia devuelve anillo vacio", () => {
+    expect(latLngRingToGeoJsonRing([])).toEqual([]);
+  });
+});
+
+describe("el editor cierra el poligono libre con coordenadas reales", () => {
+  const fs = require("fs");
+  const path = require("path");
+  const editor = fs.readFileSync(
+    path.join(__dirname, "..", "components", "roomEditor.js"),
+    "utf8"
+  );
+
+  test("usa latLngRingToGeoJsonRing al terminar el trazo", () => {
+    expect(editor).toContain("latLngRingToGeoJsonRing(pts)");
+  });
+
+  test("ya no indexa los objetos LatLng como si fueran arrays", () => {
+    expect(editor).not.toContain("closedRing.map((ll) => [ll[1], ll[0]])");
+  });
+
+  test("Enter avisa si no hay vertices suficientes", () => {
+    expect(editor).toContain("Agrega al menos 3 vertices antes de cerrar con Enter.");
   });
 });

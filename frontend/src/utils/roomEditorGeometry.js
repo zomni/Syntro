@@ -81,6 +81,19 @@ export const squareRingFromCorner = (corner, pointer) => {
   ];
 };
 
+// Convierte un anillo de objetos LatLng (o pares [lat,lng]) a coordenadas
+// GeoJSON [[lng,lat],...] y lo cierra repitiendo el primer punto. Leaflet 1.8
+// no le da indices numericos a LatLng: indexar con [1]/[0] devuelvia undefined
+// y el sector se guardaba con coordenadas null.
+export const latLngRingToGeoJsonRing = (ring) => {
+  const coords = ring.map((point) =>
+    Array.isArray(point) ? [point[1], point[0]] : [point.lng, point.lat]
+  );
+  if (coords.length === 0) return [];
+  coords.push([coords[0][0], coords[0][1]]);
+  return coords;
+};
+
 export const pointInRing = (latlng, ring) => {
   const [lat, lng] = latlng;
   let inside = false;

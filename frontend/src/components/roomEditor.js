@@ -13,6 +13,7 @@ import {
   simplifyRing,
   distanceMeters,
   squareRingFromCorner,
+  latLngRingToGeoJsonRing,
 } from "../utils/roomEditorGeometry.js";
 import { divideBuildingIntoSectors, sectorCountForArea } from "../utils/sectorDivision.js";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
@@ -278,9 +279,10 @@ const installKeyboardShortcuts = () => {
         setAdminMapToolsStatus("Dibujo cancelado.");
       }
     } else if (e.key === "Enter") {
-      e.preventDefault();
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       const mode = currentEditorState.mode;
       if (mode === "draw-free") {
+        e.preventDefault();
         finishCurrentPolygonDraw();
       }
     } else if (e.key === "c" && (e.ctrlKey || e.metaKey)) {
@@ -348,8 +350,9 @@ const finishCurrentPolygonDraw = () => {
   if (!currentEditorState) return;
   const pts = currentEditorState.drawPoints;
   if (pts.length >= 3) {
-    const closedRing = [...pts, pts[0]];
-    const geoJsonCoords = closedRing.map((ll) => [ll[1], ll[0]]);
+    // pts guarda objetos L.LatLng, que no tienen indices [0]/[1]: hay que
+    // leer .lng/.lat o el sector termina con coordenadas null.
+    const geoJsonCoords = latLngRingToGeoJsonRing(pts);
     clearDrawState();
     createNewRoom(geoJsonCoords);
   } else if (pts.length > 0) {
@@ -357,6 +360,8 @@ const finishCurrentPolygonDraw = () => {
     currentEditorState.mode = "select";
     updatePopupContent();
     setAdminMapToolsStatus("Se necesitan al menos 3 puntos.");
+  } else {
+    setAdminMapToolsStatus("Agrega al menos 3 vertices antes de cerrar con Enter.");
   }
 };
 
