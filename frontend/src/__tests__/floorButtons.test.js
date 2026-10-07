@@ -1,4 +1,4 @@
-import { resolveFloorButtonId, queryFloorButtons } from "../utils/floorButtons.js";
+import { resolveFloorButtonId, queryFloorButtons, getSelectedMapFloor } from "../utils/floorButtons.js";
 
 describe("queryFloorButtons", () => {
   afterEach(() => {
@@ -20,6 +20,30 @@ describe("queryFloorButtons", () => {
     expect(queryFloorButtons().map((button) => button.id)).toEqual(["b0", "b1", "b2"]);
     expect(selectors[0]).toContain("#floorButtons-container");
     expect(selectors[0]).toContain("#map-floor-filter-buttons");
+  });
+});
+
+describe("getSelectedMapFloor", () => {
+  afterEach(() => {
+    delete global.document;
+  });
+
+  test("lee el piso del boton seleccionado en cualquiera de los contenedores", () => {
+    let selector = "";
+    global.document = {
+      querySelector: (s) => {
+        selector = s;
+        return { textContent: " 3 " };
+      },
+    };
+    expect(getSelectedMapFloor()).toBe(3);
+    expect(selector).toContain("#floorButtons-container .selectedFloorButton");
+    expect(selector).toContain("#map-floor-filter-buttons .selectedFloorButton");
+  });
+
+  test("devuelve null si no hay boton seleccionado", () => {
+    global.document = { querySelector: () => null };
+    expect(getSelectedMapFloor()).toBeNull();
   });
 });
 

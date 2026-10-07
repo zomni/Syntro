@@ -501,6 +501,7 @@ public static class ExtendedSchemaInitializer
                 CREATE TABLE IF NOT EXISTS BuildingGeometryOverrides (
                     Id INTEGER NOT NULL CONSTRAINT PK_BuildingGeometryOverrides PRIMARY KEY AUTOINCREMENT,
                     BuildingExternalId TEXT NOT NULL,
+                    Floor INTEGER NOT NULL DEFAULT 0,
                     GeometryJson TEXT NOT NULL,
                     CentroidLatitude REAL NULL,
                     CentroidLongitude REAL NULL,
@@ -509,9 +510,13 @@ public static class ExtendedSchemaInitializer
                 );
                 """);
 
+            await EnsureColumnAsync(context, "BuildingGeometryOverrides", "Floor", "INTEGER NOT NULL DEFAULT 0");
+
             await context.Database.ExecuteSqlRawAsync("""
-                CREATE UNIQUE INDEX IF NOT EXISTS IX_BuildingGeometryOverrides_BuildingExternalId
-                ON BuildingGeometryOverrides (BuildingExternalId);
+                DROP INDEX IF EXISTS IX_BuildingGeometryOverrides_BuildingExternalId;
+                CREATE UNIQUE INDEX IF NOT EXISTS IX_BuildingGeometryOverrides_BuildingExternalId_Floor
+                ON BuildingGeometryOverrides (BuildingExternalId, Floor)
+                WHERE "DeletedAtUtc" IS NULL;
                 """);
 
             await context.Database.ExecuteSqlRawAsync("""

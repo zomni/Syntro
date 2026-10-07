@@ -17,6 +17,18 @@ export const queryFloorButtons = () =>
     )
   ).filter((button) => button.id !== "bLoc");
 
+// Piso activo del mapa según el botón seleccionado; null si no hay ninguno.
+// Mismo criterio que el editor de sectores (roomEditor.readSelectedMapFloor) y
+// el panel de filtros: los botones viven en dos contenedores posibles.
+export const getSelectedMapFloor = () => {
+  const button = document.querySelector(
+    "#floorButtons-container .selectedFloorButton, #map-floor-filter-buttons .selectedFloorButton"
+  );
+  if (!button) return null;
+  const parsed = parseInt(button.textContent.trim(), 10);
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
 export const resolveFloorButtonId = (defaultFloor, floors) => {
   const normalized = String(defaultFloor ?? "");
 

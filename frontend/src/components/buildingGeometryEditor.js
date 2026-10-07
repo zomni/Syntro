@@ -14,6 +14,7 @@ import {
   setAdminMapToolsStatus,
 } from "@app/adminMapToolsPanel";
 import { registerBuildingUndo } from "@app/walkingRouteEditor";
+import { getSelectedMapFloor } from "../utils/floorButtons.js";
 
 const controlsId = "building-geometry-editor-controls";
 const editButtonId = "building-shape-editor-button";
@@ -124,6 +125,7 @@ const saveGeometry = async () => {
   try {
     const undoCoordinates = latLngsToCoordinates(originalLatLngs);
     const undoBuildingId = activeBuildingId;
+    const undoFloor = getSelectedMapFloor() ?? 0;
     const undoActionLabel = activeMode === "move" ? "mover edificio" : "editar forma del edificio";
     const response = await fetch(`${BACKEND_API_URL}/api/building-geometry-overrides`, {
       method: "POST",
@@ -135,6 +137,7 @@ const saveGeometry = async () => {
       body: JSON.stringify({
         buildingExternalId: activeBuildingId,
         coordinates: latLngsToCoordinates(latlngs),
+        floor: undoFloor,
       }),
     });
 
@@ -151,7 +154,11 @@ const saveGeometry = async () => {
           credentials: "include",
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ buildingExternalId: undoBuildingId, coordinates: undoCoordinates }),
+          body: JSON.stringify({
+            buildingExternalId: undoBuildingId,
+            coordinates: undoCoordinates,
+            floor: undoFloor,
+          }),
         });
         if (!undoResponse.ok) throw new Error("No se pudo restaurar la forma anterior del edificio.");
         resetSearchMetadataCaches();
@@ -164,8 +171,75 @@ const saveGeometry = async () => {
     resetBuildingsCatalogCache();
     stopGeometryEditor();
     await refreshCurrentMapData();
+    setStatus(
+      undoFloor === 0
+        ? "Forma guardada para todos los pisos."
+        : `Forma guardada solo para el piso ${undoFloor}.`
+    );
   } catch (error) {
     setStatus(error.message || "Error guardando geometria.");
+  }
+};
+
+const restoreOriginalShape = async () => {
+  if (!activeBuildingId) {
+    setStatus("Selecciona un edificio para restaurar su forma.");
+    return;
+  }
+
+  const floor = getSelectedMapFloor() ?? 0;
+  const restoreBuildingId = activeBuildingId;
+  const undoCoordinates = latLngsToCoordinates(originalLatLngs);
+
+  try {
+    const response = await fetch(
+      `${BACKEND_API_URL}/api/building-geometry-overrides/${encodeURIComponent(restoreBuildingId)}?floor=${floor}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      setStatus(data?.message || "No se pudo restaurar la forma original.");
+      return;
+    }
+
+    registerBuildingUndo({
+      label: "restaurar forma del edificio",
+      restore: async () => {
+        const undoResponse = await fetch(`${BACKEND_API_URL}/api/building-geometry-overrides`, {
+          method: "POST",
+          credentials: "include",
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            buildingExternalId: restoreBuildingId,
+            coordinates: undoCoordinates,
+            floor,
+          }),
+        });
+        if (!undoResponse.ok) throw new Error("No se pudo recuperar la forma anterior.");
+        resetSearchMetadataCaches();
+        resetBuildingsCatalogCache();
+        await refreshCurrentMapData();
+      },
+    });
+
+    resetSearchMetadataCaches();
+    resetBuildingsCatalogCache();
+    stopGeometryEditor();
+    await refreshCurrentMapData();
+
+    if (data?.removedShared) {
+      setStatus("Forma compartida (todos los pisos) eliminada: ahora cada piso usa su forma original.");
+    } else {
+      setStatus(floor === 0 ? "Forma original restaurada (afectaba a todos los pisos)." : `Forma original del piso ${floor} restaurada.`);
+    }
+  } catch (error) {
+    setStatus(error.message || "Error restaurando la forma original.");
   }
 };
 
@@ -173,10 +247,18 @@ const buildActionButtons = () => {
   const wrapper = document.createElement("div");
   wrapper.className = `${activeActionsClass} building-geometry-active-actions`;
   wrapper.innerHTML = `
+    <button type="button" class="dashboard-link manual-building-editor-button building-tool-button action-restore-button is-icon-only" data-geometry-restore title="Restaurar forma original de este piso" aria-label="Restaurar forma original">&#8634;</button>
     <button type="button" class="dashboard-link manual-building-editor-button building-tool-button action-save-button is-icon-only" data-geometry-save title="Guardar forma" aria-label="Guardar forma"><span class="map-tool-button-icon" aria-hidden="true">✓</span></button>
     <button type="button" class="dashboard-link action-cancel-button is-icon-only" data-geometry-cancel title="Cancelar" aria-label="Cancelar"><span class="map-tool-button-icon" aria-hidden="true">&times;</span></button>
   `;
+  wrapper.querySelector("[data-geometry-restore]")?.classList.remove("building-tool-button");
   wrapper.querySelector("[data-geometry-save]")?.classList.remove("building-tool-button");
+
+  wrapper.querySelector("[data-geometry-restore]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    restoreOriginalShape();
+  });
 
   wrapper.querySelector("[data-geometry-save]")?.addEventListener("click", (event) => {
     event.preventDefault();

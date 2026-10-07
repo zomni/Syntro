@@ -79,7 +79,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<BuildingGeometryOverride>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.BuildingExternalId).IsUnique().HasFilter("\"BuildingExternalId\" IS NOT NULL AND \"DeletedAtUtc\" IS NULL");
+            entity.HasIndex(e => new { e.BuildingExternalId, e.Floor }).IsUnique().HasFilter("\"BuildingExternalId\" IS NOT NULL AND \"DeletedAtUtc\" IS NULL");
             entity.Property(e => e.BuildingExternalId).IsRequired().HasMaxLength(100);
             entity.Property(e => e.GeometryJson).IsRequired();
             entity.Property(e => e.UpdatedBy).HasMaxLength(100);

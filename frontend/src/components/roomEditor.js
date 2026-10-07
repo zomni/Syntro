@@ -54,6 +54,7 @@ const ICONS = {
   marker: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>',
   copyLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="2" width="14" height="14" rx="2"/><path d="M4 8H2a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2"/></svg>',
   pasteLayout: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg>',
+  vertices: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5l7 5.5-2.5 8.5h-9L5 10.5z"/><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="19" cy="10.5" r="1.8" fill="currentColor"/><circle cx="16.5" cy="19" r="1.8" fill="currentColor"/><circle cx="7.5" cy="19" r="1.8" fill="currentColor"/><circle cx="5" cy="10.5" r="1.8" fill="currentColor"/></svg>',
 };
 
 let currentEditorState = null;
@@ -188,11 +189,11 @@ const openRoomEditor = async (buildingExternalId, feature) => {
   setAdminMapToolsStatus("Abriendo editor de sectores...");
 
   try {
-    const buildingData = await fetchBuildingGeometry(buildingExternalId);
+    const mapFloor = readSelectedMapFloor();
+    const buildingData = await fetchBuildingGeometry(buildingExternalId, mapFloor);
     const floorsData = await fetchBuildingFloors(buildingExternalId);
 
     const floors = floorsData.length > 0 ? floorsData : [{ floor: 1, totalCount: 0 }];
-    const mapFloor = readSelectedMapFloor();
     const selectedFloor = floors.find((f) => Number(f.floor) === mapFloor)?.floor ?? floors[0].floor;
 
     const buildingName =
@@ -218,6 +219,8 @@ const openRoomEditor = async (buildingExternalId, feature) => {
       isDirty: false,
       buildingPolygonLayer: null,
       roomLayers: [],
+      vertexMarkerLayers: [],
+      editingVertexRoomId: null,
       markerLayers: [],
       previewLayer: null,
       drawPoints: [],
@@ -266,6 +269,7 @@ const installKeyboardShortcuts = () => {
       e.preventDefault();
       if (currentEditorState.mode !== "select") {
         clearDrawState();
+        clearVertexMarkers();
         currentEditorState.mode = "select";
         currentEditorState.selectedRoom = null;
         currentEditorState.selectedRoomIds = [];
@@ -330,6 +334,10 @@ const installKeyboardShortcuts = () => {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
       selectRoomMode("draw-free");
+    } else if (e.key === "v" && !e.ctrlKey && !e.metaKey) {
+      if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
+      e.preventDefault();
+      selectRoomMode("edit-vertices");
     } else if (e.key === "s" && !e.ctrlKey && !e.metaKey) {
       if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA" || document.activeElement?.tagName === "SELECT") return;
       e.preventDefault();
@@ -365,9 +373,13 @@ const finishCurrentPolygonDraw = () => {
   }
 };
 
-const fetchBuildingGeometry = async (buildingExternalId) => {
+const fetchBuildingGeometry = async (buildingExternalId, floor = null) => {
+  // Piso explicito: permite cargar la forma propia del piso (o la compartida
+  // floor 0 como fallback) en vez de siempre la misma silueta por ID.
+  const floorParam =
+    floor !== null && floor !== undefined && Number.isFinite(Number(floor)) ? `?floor=${Number(floor)}` : "";
   const response = await fetch(
-    `${getApiUrl()}/api/synced-buildings/${encodeURIComponent(buildingExternalId)}/geometry`,
+    `${getApiUrl()}/api/synced-buildings/${encodeURIComponent(buildingExternalId)}/geometry${floorParam}`,
     { credentials: "include", cache: "no-store" }
   );
   if (!response.ok) throw new Error("No se pudo cargar la geometria del edificio");
@@ -724,7 +736,8 @@ const updateBottomBar = () => {
   tools.className = "room-editor-tools";
 
   const toolDefs = [
-    { id: "select", icon: ICONS.select, title: "Seleccionar (V)" },
+    { id: "select", icon: ICONS.select, title: "Seleccionar (Esc)" },
+    { id: "edit-vertices", icon: ICONS.vertices, title: "Mover vertices del sector (V) - requiere 1 seleccionado" },
     { id: "draw-square", icon: ICONS.square, title: "Cuadrado (B)" },
     { id: "draw-rect", icon: ICONS.rect, title: "Rectangulo (R)" },
     { id: "draw-circle", icon: ICONS.circle, title: "Circulo (C)" },
@@ -947,6 +960,7 @@ const getHintForMode = (mode, snapEnabled) => {
   const snapText = snapEnabled ? "S=snap OFF" : "S=snap ON";
   switch (mode) {
     case "select": return `Seleccion: click=sumar/quitar | Ctrl+arrastrar=mover | Shift+arrastrar=rotar | ${snapText}`;
+    case "edit-vertices": return `Vertices: arrastra cada punto del sector seleccionado. ${snapText} | Esc=salir | G=guardar`;
     case "draw-square": return "Cuadrado: click 1ra esquina, click 2da esquina. Esc cancelar.";
     case "draw-rect": return "Rectangulo: click 1ra esquina, click 2da esquina. Esc cancelar.";
     case "draw-circle": return "Circulo: click centro, click radio. Esc cancelar.";
@@ -1955,13 +1969,146 @@ const selectRoomEditorFloor = async (floor) => {
   clearSuggestionPreviewLayers();
   currentEditorState.suggestions = [];
   clearDrawState();
+  // El contorno depende del piso: salir del modo de vertices y recargarlo.
+  if (currentEditorState.mode === "edit-vertices") {
+    currentEditorState.mode = "select";
+    clearVertexMarkers();
+  }
+  try {
+    const buildingData = await fetchBuildingGeometry(currentEditorState.buildingExternalId, floor);
+    currentEditorState.buildingGeometry = buildingData;
+    renderBuildingBoundary(buildingData);
+  } catch (error) {
+    console.warn("No se pudo recargar el contorno del edificio:", error);
+  }
   await loadRoomsForFloor(currentEditorState.buildingExternalId, floor);
   renderRooms();
   updatePopupContent();
 };
 
+const clearVertexMarkers = () => {
+  if (!currentEditorState) return;
+  for (const marker of currentEditorState.vertexMarkerLayers || []) {
+    popupMap?.removeLayer(marker);
+  }
+  currentEditorState.vertexMarkerLayers = [];
+  currentEditorState.editingVertexRoomId = null;
+  const snapMarker = currentEditorState.snapPreviewMarker;
+  if (snapMarker && popupMap && popupMap.hasLayer(snapMarker)) {
+    popupMap.removeLayer(snapMarker);
+  }
+};
+
+const ringToGeometryJson = (openRing) => {
+  const ring = [...openRing, openRing[0]].map((ll) => [ll[1], ll[0]]);
+  return JSON.stringify({ type: "Polygon", coordinates: [ring] });
+};
+
+const beginVertexEdit = (room) => {
+  if (!room || !popupMap) return;
+  clearVertexMarkers();
+
+  let geom = null;
+  try {
+    geom = typeof room.geometryJson === "string" ? JSON.parse(room.geometryJson) : room.geometryJson;
+  } catch {
+    geom = null;
+  }
+  const coords = geom?.coordinates?.[0];
+  if (!Array.isArray(coords) || coords.length < 3) {
+    currentEditorState.mode = "select";
+    setAdminMapToolsStatus("Este sector no tiene un poligono editable.");
+    updateBottomBar();
+    return;
+  }
+
+  // Hornear rotation/scale a coordenadas: los vertices se mueven sobre la
+  // silueta ya dibujada y la transformacion vuelve a identidad.
+  let latLngs = coords.map((c) => [c[1], c[0]]);
+  const rotation = room.rotation || 0;
+  const scaleX = room.scaleX || 1;
+  const scaleY = room.scaleY || 1;
+  if (rotation !== 0 || scaleX !== 1 || scaleY !== 1) {
+    const before = { geometryJson: room.geometryJson, rotation, scaleX, scaleY };
+    latLngs = transformLatLngs(latLngs, rotation, scaleX, scaleY);
+    room.rotation = 0;
+    room.scaleX = 1;
+    room.scaleY = 1;
+    room.geometryJson = ringToGeometryJson(latLngs);
+    currentEditorState.isDirty = true;
+    pushUndo({
+      type: "bake-transform",
+      id: room.externalId,
+      before,
+      after: { geometryJson: room.geometryJson, rotation: 0, scaleX: 1, scaleY: 1 },
+    });
+    renderRooms();
+  }
+
+  // El anillo puede venir cerrado (ultimo punto repetido): no se duplica el marker.
+  let openRing = latLngs;
+  const first = latLngs[0];
+  const last = latLngs[latLngs.length - 1];
+  if (latLngs.length > 3 && first[0] === last[0] && first[1] === last[1]) {
+    openRing = latLngs.slice(0, -1);
+  }
+
+  currentEditorState.editingVertexRoomId = room.externalId;
+  currentEditorState.vertexMarkerLayers = openRing.map((point, index) => {
+    const marker = L.marker(point, {
+      draggable: true,
+      zIndexOffset: 2100,
+      icon: L.divIcon({
+        className: VERTEX_CLASS,
+        html: "",
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+    });
+
+    let beforeGeometry = null;
+    marker.on("dragstart", () => {
+      beforeGeometry = room.geometryJson;
+      popupMap?.dragging?.disable();
+    });
+    marker.on("drag", (event) => {
+      const target = currentEditorState.snapEnabled ? applySnap(event.latlng) : event.latlng;
+      openRing[index] = [target.lat, target.lng];
+      room.geometryJson = ringToGeometryJson(openRing);
+      currentEditorState.isDirty = true;
+      currentEditorState.snapRefs = null;
+      const layer = currentEditorState.roomLayers.find((l) => l.roomData?.externalId === room.externalId);
+      if (layer) layer.setLatLngs(openRing);
+    });
+    marker.on("dragend", () => {
+      popupMap?.dragging?.enable();
+      if (beforeGeometry && beforeGeometry !== room.geometryJson) {
+        pushUndo({
+          type: "move-rooms",
+          ids: [room.externalId],
+          before: [beforeGeometry],
+          after: [room.geometryJson],
+        });
+      }
+      currentEditorState.snapRefs = null;
+      const snapMarker = currentEditorState.snapPreviewMarker;
+      if (snapMarker && popupMap?.hasLayer(snapMarker)) popupMap.removeLayer(snapMarker);
+    });
+
+    marker.addTo(popupMap);
+    return marker;
+  });
+
+  setAdminMapToolsStatus(
+    `Vertices de "${room.displayName || room.externalId}": arrastra los puntos. Ctrl+Z deshacer, G guardar.`
+  );
+};
+
 const selectRoomMode = (mode) => {
   if (!currentEditorState) return;
+  if (currentEditorState.mode === "edit-vertices" && mode !== "edit-vertices") {
+    clearVertexMarkers();
+  }
   clearDrawState();
   const wasDrawMode = currentEditorState.mode !== "select";
   currentEditorState.mode = mode;
@@ -1979,6 +2126,21 @@ const selectRoomMode = (mode) => {
   updateSidePanel();
 
   switch (mode) {
+    case "edit-vertices": {
+      const ids = getSelectedRoomIds();
+      if (ids.length !== 1) {
+        currentEditorState.mode = "select";
+        setAdminMapToolsStatus(
+          ids.length === 0
+            ? "Haz click sobre un sector para seleccionarlo antes de mover sus vertices."
+            : "Mover vertices requiere exactamente 1 sector seleccionado."
+        );
+        updateBottomBar();
+        break;
+      }
+      beginVertexEdit(findShapeById(ids[0]));
+      break;
+    }
     case "draw-square":
       setAdminMapToolsStatus("Click para colocar la primera esquina. Luego click para la segunda esquina.");
       startDrawSquare();
@@ -2672,6 +2834,16 @@ const undoRoomEditor = () => {
         if (shape) shape.geometryJson = action.before[i];
       });
       break;
+    case "bake-transform": {
+      const shape = findShapeById(action.id);
+      if (shape) {
+        shape.geometryJson = action.before.geometryJson;
+        shape.rotation = action.before.rotation;
+        shape.scaleX = action.before.scaleX;
+        shape.scaleY = action.before.scaleY;
+      }
+      break;
+    }
     case "rotate-rooms":
       action.ids.forEach((id, i) => {
         const shape = findShapeById(id);
@@ -2691,6 +2863,12 @@ const undoRoomEditor = () => {
   syncSelectedRoomFromIds();
   renderRooms();
   updatePopupContent();
+  if (currentEditorState.mode === "edit-vertices") {
+    currentEditorState.mode = "select";
+    clearVertexMarkers();
+    updateBottomBar();
+    setAdminMapToolsStatus("Vertices cancelados por deshacer. Vuelve a entrar con V.");
+  }
 };
 
 const redoRoomEditor = () => {
@@ -2746,6 +2924,16 @@ const redoRoomEditor = () => {
         if (shape) shape.geometryJson = action.after[i];
       });
       break;
+    case "bake-transform": {
+      const shape = findShapeById(action.id);
+      if (shape) {
+        shape.geometryJson = action.after.geometryJson;
+        shape.rotation = action.after.rotation;
+        shape.scaleX = action.after.scaleX;
+        shape.scaleY = action.after.scaleY;
+      }
+      break;
+    }
     case "rotate-rooms":
       action.ids.forEach((id, i) => {
         const shape = findShapeById(id);
@@ -2765,6 +2953,12 @@ const redoRoomEditor = () => {
   syncSelectedRoomFromIds();
   renderRooms();
   updatePopupContent();
+  if (currentEditorState.mode === "edit-vertices") {
+    currentEditorState.mode = "select";
+    clearVertexMarkers();
+    updateBottomBar();
+    setAdminMapToolsStatus("Vertices cancelados por rehacer. Vuelve a entrar con V.");
+  }
 };
 
 const saveRoomEditorMarkers = async (state, pushError) => {

@@ -26,6 +26,8 @@ import {
   loadManualBuildings,
   mergeCatalogWithSearch,
   mergeGeoJsonWithSearch,
+  loadBuildingGeometryOverrides,
+  pickGeometryOverride,
 } from "@app/searchMetadata";
 import { staticIconUrl, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
 import { shouldRenderRoomForFloor } from "./manualRoomFloor.js";
@@ -220,7 +222,7 @@ const addBaseFootprintsForMissingBuildings = async (
       sourceFeatures = baseFloorFeatures;
     } else {
       const baseJson = await loadFloorGeoJson(school, location, BASE_FLOOR_NUMBER);
-      const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location);
+      const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location, floorNumber);
       sourceFeatures = enrichedBaseJson.features || [];
     }
 
@@ -247,10 +249,13 @@ const parseManualFloors = (floorsJson) => {
   }
 };
 
-const manualBuildingToFeature = (building, floorNumber) => {
+const manualBuildingToFeature = (building, floorNumber, geometryOverrides) => {
   let geometry = null;
   try {
-    geometry = JSON.parse(building.geometryJson || "{}");
+    // Si hay una forma guardada para este piso (o compartida) manda sobre la
+    // geometria base del edificio manual.
+    const override = pickGeometryOverride(geometryOverrides, building.externalId, floorNumber);
+    geometry = override?.geometry ?? JSON.parse(building.geometryJson || "{}");
   } catch {
     geometry = null;
   }
@@ -290,13 +295,16 @@ const manualBuildingToFeature = (building, floorNumber) => {
 };
 
 const loadManualFeaturesForFloor = async (floorNumber) => {
-  const manualBuildings = await loadManualBuildings();
+  const [manualBuildings, geometryOverrides] = await Promise.all([
+    loadManualBuildings(),
+    loadBuildingGeometryOverrides(),
+  ]);
   return manualBuildings
     .filter((building) => {
       const floors = parseManualFloors(building.floorsJson);
       return floors.length ? floors.includes(Number(floorNumber)) : Number(floorNumber) === BASE_FLOOR_NUMBER;
     })
-    .map((building) => manualBuildingToFeature(building, floorNumber))
+    .map((building) => manualBuildingToFeature(building, floorNumber, geometryOverrides))
     .filter(Boolean);
 };
 
@@ -512,7 +520,7 @@ const buildBuildingRingsForCampus = async () => {
       if (!Number.isFinite(floorNumber)) continue;
       try {
         const json = await loadFloorGeoJson(school, campus, floorNumber);
-        const enriched = await mergeGeoJsonWithSearch(json, campus);
+        const enriched = await mergeGeoJsonWithSearch(json, campus, floorNumber);
         rings.push(...extractPolygonRings(Array.isArray(enriched?.features) ? enriched.features : []));
       } catch (error) {
         // Piso sin plano: se ignora para la validacion.
@@ -635,7 +643,7 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       return;
     }
 
-    const enrichedJson = floorJson ? await mergeGeoJsonWithSearch(floorJson, location) : { features: [] };
+    const enrichedJson = floorJson ? await mergeGeoJsonWithSearch(floorJson, location, floorNumber) : { features: [] };
     const baseFeatures = Array.isArray(enrichedJson.features) ? enrichedJson.features : [];
 
     if (expectedRenderSequence !== renderSequence) {

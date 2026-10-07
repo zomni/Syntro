@@ -194,6 +194,7 @@ public class FrontendStaticBackupController : ControllerBase
             .OrderBy(item => item.BuildingExternalId)
             .Select(item => new BuildingGeometryOverrideDto(
                 item.BuildingExternalId,
+                item.Floor,
                 item.GeometryJson,
                 item.CentroidLatitude,
                 item.CentroidLongitude,
@@ -311,6 +312,7 @@ public class FrontendStaticBackupController : ControllerBase
 
     private sealed record BuildingGeometryOverrideDto(
         string BuildingExternalId,
+        int Floor,
         string GeometryJson,
         double? CentroidLatitude,
         double? CentroidLongitude,

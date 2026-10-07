@@ -6,6 +6,8 @@ import { BASE_FLOOR_NUMBER } from "./buildingCatalog.js";
 
 import { loadBuildingBackupBundle, resetBuildingBackupCache } from "./buildingBackupStorage.js?v=20260608b";
 
+import { getSelectedMapFloor } from "./floorButtons.js";
+
 // El índice se versiona en el despliegue, no en cada request: usar `?v=Date.now()`
 // junto con `no-store` obligaba a re-descargar ~146 KB en cada búsqueda y en cada
 // refresco de catálogo. La invalidación explícita queda en resetSearchMetadataCaches().
@@ -121,7 +123,9 @@ export const loadBuildingGeometryOverrides = async (campus = getCurrentCampusKey
       try {
         const geometry = JSON.parse(item.geometryJson || "{}");
         if (item.buildingExternalId && geometry?.type && geometry?.coordinates) {
-          overrides.set(item.buildingExternalId, {
+          // Clave por piso: una fila con floor 0 es la forma compartida (legada)
+          // que aplica a todos los pisos sin forma propia.
+          overrides.set(`${item.buildingExternalId}:${Number(item.floor) || 0}`, {
             ...item,
             geometry,
           });
@@ -387,7 +391,24 @@ export const mergeCatalogWithSearch = async (catalog, campus = getCurrentCampusK
   };
 };
 
-export const mergeGeoJsonWithSearch = async (geoJson, campus = getCurrentCampusKey()) => {
+// Forma guardada de un edificio para un piso: primero la del piso concreto y,
+// si no existe, la compartida (floor 0, filas legadas de "todos los pisos").
+export const pickGeometryOverride = (overridesById, buildingId, floorNumber) => {
+  if (!overridesById || !buildingId) return null;
+
+  const floor = Number.isFinite(Number(floorNumber)) ? Number(floorNumber) : 0;
+  return (
+    overridesById.get(`${buildingId}:${floor}`) ??
+    overridesById.get(`${buildingId}:0`) ??
+    null
+  );
+};
+
+export const mergeGeoJsonWithSearch = async (
+  geoJson,
+  campus = getCurrentCampusKey(),
+  floorNumber = getSelectedMapFloor() ?? 0
+) => {
   const metadataById = await loadSearchMetadata(campus);
   const backendOverridesById = await loadBackendBuildingOverrides(campus);
   const geometryOverridesById = await loadBuildingGeometryOverrides(campus);
@@ -398,7 +419,7 @@ export const mergeGeoJsonWithSearch = async (geoJson, campus = getCurrentCampusK
     features: features.map((feature) => {
       const properties = feature?.properties || {};
       const metadata = metadataById.get(properties.id);
-      const geometryOverride = geometryOverridesById.get(properties.id);
+      const geometryOverride = pickGeometryOverride(geometryOverridesById, properties.id, floorNumber);
 
       const enrichedFeature = !metadata
         ? feature

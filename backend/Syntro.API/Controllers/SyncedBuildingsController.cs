@@ -82,14 +82,18 @@ public class SyncedBuildingsController : ControllerBase
 
     [HttpGet("{externalId}/geometry")]
     [AllowAnonymous]
-    public IActionResult GetGeometry(string externalId)
+    public IActionResult GetGeometry(string externalId, [FromQuery] int? floor)
     {
         if (string.IsNullOrWhiteSpace(externalId))
             return BadRequest(new { message = "externalId is required." });
 
-        var override_ = _context.BuildingGeometryOverrides
+        var overrides = _context.BuildingGeometryOverrides
             .AsNoTracking()
-            .FirstOrDefault(g => g.BuildingExternalId == externalId);
+            .Where(g => g.BuildingExternalId == externalId);
+
+        var override_ = floor is null
+            ? overrides.FirstOrDefault()
+            : overrides.FirstOrDefault(g => g.Floor == floor) ?? overrides.FirstOrDefault(g => g.Floor == 0);
 
         if (override_ is not null && !string.IsNullOrWhiteSpace(override_.GeometryJson))
         {
@@ -105,52 +109,12 @@ public class SyncedBuildingsController : ControllerBase
             return Content(manualBuilding.GeometryJson, "application/json");
         }
 
-        var geometryDir = ResolveFrontendDataDirectory();
-        if (geometryDir is null || !Directory.Exists(geometryDir))
-            return NotFound(new { message = "Frontend data directory not found." });
-
-        var floorFiles = Directory.GetFiles(geometryDir, "cs_sotero_*.json");
-        foreach (var file in floorFiles)
+        var originalJson = FrontendBuildingGeometry.FindGeometryJson(_configuration, externalId, floor);
+        if (originalJson is not null)
         {
-            try
-            {
-                var json = System.IO.File.ReadAllText(file);
-                using var doc = JsonDocument.Parse(json);
-                if (!doc.RootElement.TryGetProperty("features", out var features))
-                    continue;
-
-                foreach (var feature in features.EnumerateArray())
-                {
-                    if (!feature.TryGetProperty("properties", out var props))
-                        continue;
-                    if (!props.TryGetProperty("id", out var idProp))
-                        continue;
-                    if (idProp.GetString() != externalId)
-                        continue;
-                    if (!feature.TryGetProperty("geometry", out var geometry))
-                        continue;
-
-                    return Content(geometry.GetRawText(), "application/json");
-                }
-            }
-            catch
-            {
-            }
+            return Content(originalJson, "application/json");
         }
 
         return NotFound(new { message = $"No geometry found for building {externalId}." });
-    }
-
-    private string? ResolveFrontendDataDirectory()
-    {
-        var configuredPath = _configuration["FrontendDataPath"];
-        if (!string.IsNullOrWhiteSpace(configuredPath) && Directory.Exists(configuredPath))
-            return Path.GetFullPath(configuredPath);
-
-        const string dockerPath = "/app/frontend-data";
-        if (Directory.Exists(dockerPath))
-            return dockerPath;
-
-        return null;
     }
 }
