@@ -228,8 +228,10 @@
     letter-spacing: 0.03em;
 }
 
+/* Filas del panel repartidas uniformemente de costado a costado. */
 .map-equipment-type-buttons {
     display: flex;
+    justify-content: space-between;
     gap: 6px;
 }
 
@@ -281,12 +283,16 @@
 }
 
 /* Fila de toggles de solo-icono del panel de filtros; aqui caben tambien los
-   botones de vista satelital y de coincidencias movidos desde el badge. */
+   botones de vista satelital y de coincidencias movidos desde el badge.
+   flex:1 la estira hasta los costados tambien en la tira de wayfinding. */
 .map-filter-icon-row {
     display: flex;
+    flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
+    min-width: 0;
 }
 
 .map-filter-icon-row .building-label-toggle {
@@ -878,6 +884,7 @@ body.session-warning-open .leaflet-container {
 .map-floor-filter-buttons {
     display: flex;
     flex-wrap: nowrap;
+    justify-content: space-between;
     gap: 4px;
     overflow-x: auto;
     padding-bottom: 2px;
@@ -3250,6 +3257,7 @@ body.map-ui-wayfinding .map-floor-filter {
 body.map-ui-wayfinding .map-equipment-type-filter {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 6px;
     padding: 4px 8px;
 }

@@ -46,4 +46,12 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
     expect(source).toContain('if (field) field.classList.toggle("is-filter-hidden", !canSeeCounters);');
     expect(css).toMatch(/\.map-equipment-type-filter\.building-match-active \.map-equipment-type-filter-field \{/);
   });
+
+  it("reparte las filas del panel uniformemente de costado a costado", () => {
+    expect(css).toMatch(/\.map-equipment-type-buttons \{[^}]*justify-content: space-between;/);
+    expect(css).toMatch(/\.map-floor-filter-buttons \{[^}]*justify-content: space-between;/);
+    expect(css).toMatch(/\.map-filter-icon-row \{[^}]*justify-content: space-between;/);
+    expect(css).toMatch(/\.map-filter-icon-row \{[^}]*flex: 1 1 auto;/);
+    expect(css).toMatch(/body\.map-ui-wayfinding \.map-equipment-type-filter \{[^}]*justify-content: space-between;/);
+  });
 });
