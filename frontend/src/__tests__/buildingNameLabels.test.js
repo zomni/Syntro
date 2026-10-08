@@ -13,10 +13,12 @@ describe("reconciliador de nombres de edificios", () => {
     expect(source).toContain("[140, 0],");
   });
 
-  it("compara rectangulos con margen y desplaza sin tocar el posicion de Leaflet", () => {
+  it("compara rectangulos con margen y desplaza por margin sin tocar el transform de Leaflet", () => {
     expect(source).toContain("const rectsOverlap = (a, b, margin) =>");
     expect(source).toContain("const moveRect = (rect, x, y) => ({");
-    expect(source).toContain('label.style.transform = `translate(${x}px, ${y}px)`;');
+    expect(source).toContain("label.style.marginLeft = `${x}px`;");
+    expect(source).toContain("label.style.marginTop = `${y}px`;");
+    expect(source).not.toContain("label.style.transform");
   });
 
   it("acepta la posicion base primero y solo desplaza si choca", () => {
@@ -41,7 +43,7 @@ describe("reconciliador de nombres de edificios", () => {
   });
 
   it("limpia los ajustes cuando los nombres estan ocultos", () => {
-    expect(source).toMatch(/if \(!buildingLabelsVisible\) \{[\s\S]{0,220}label\.style\.transform = "";/);
+    expect(source).toMatch(/if \(!buildingLabelsVisible\) \{[\s\S]{0,220}label\.style\.marginLeft = "";/);
   });
 
   it("recalcula con debounce ante zoom, pan, resize y capas nuevas", () => {
@@ -57,7 +59,7 @@ describe("reconciliador de nombres de edificios", () => {
     expect(source).toContain("buildingEquipmentBubbleEntries.delete(featureId);");
   });
 
-  it("pasa el transform con transicion suave", () => {
-    expect(css).toMatch(/\.building-name-label \{[\s\S]*?transition: transform 120ms ease;/);
+  it("pasa el offset con transicion suave de margen", () => {
+    expect(css).toMatch(/\.building-name-label \{[\s\S]*?transition: margin 120ms ease;/);
   });
 });

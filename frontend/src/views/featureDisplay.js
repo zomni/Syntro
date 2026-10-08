@@ -366,7 +366,9 @@ const setBuildingLabelsVisible = (isVisible) => {
 
   const button = document.getElementById("building-label-toggle");
   if (button) {
-    button.textContent = isVisible ? "Ocultar nombres" : "Mostrar nombres";
+    const title = isVisible ? "Ocultar nombres" : "Mostrar nombres";
+    button.title = title;
+    button.setAttribute("aria-label", title);
     button.setAttribute("aria-pressed", String(isVisible));
     button.classList.toggle("is-muted", !isVisible);
   }
@@ -405,7 +407,9 @@ const setEquipmentBubblesVisible = (isVisible) => {
 
   const button = document.getElementById("equipment-bubble-toggle");
   if (button) {
-    button.textContent = isVisible ? "Ocultar contador" : "Mostrar contador";
+    const title = isVisible ? "Ocultar contador" : "Mostrar contador";
+    button.title = title;
+    button.setAttribute("aria-label", title);
     button.setAttribute("aria-pressed", String(isVisible));
     button.classList.toggle("is-muted", !isVisible);
   }
@@ -432,6 +436,20 @@ const bindEquipmentBubbleToggleButton = (button) => {
 const initEquipmentBubbleToggle = () => {
   setEquipmentBubblesVisible(equipmentBubblesVisible);
   bindEquipmentBubbleToggleButton(document.getElementById("equipment-bubble-toggle"));
+};
+
+// Botones de solo-icono del panel de filtros: el estado (mostrar/ocultar) vive
+// en title/aria-label y aria-pressed; el glyph solo indica la accion.
+const createFilterToggleButton = ({ id, title, glyph, ariaPressed }) => {
+  const button = document.createElement("button");
+  button.id = id;
+  button.className = "dashboard-link building-label-toggle is-muted";
+  button.type = "button";
+  button.setAttribute("aria-pressed", ariaPressed);
+  button.title = title;
+  button.setAttribute("aria-label", title);
+  button.innerHTML = `<span class="filter-toggle-icon" aria-hidden="true">${glyph}</span>`;
+  return button;
 };
 
 // Los nombres permanentes se centran en el bounds de cada edificio, asi que
@@ -475,7 +493,8 @@ const reconcileBuildingNameLabels = () => {
 
   if (!buildingLabelsVisible) {
     labels.forEach((label) => {
-      label.style.transform = "";
+      label.style.marginLeft = "";
+      label.style.marginTop = "";
       label.style.visibility = "";
     });
     return;
@@ -502,7 +521,8 @@ const reconcileBuildingNameLabels = () => {
   const isFree = (rect) => !accepted.some((other) => rectsOverlap(rect, other, LABEL_COLLISION_MARGIN));
 
   visibleLabels.forEach((label) => {
-    label.style.transform = "";
+    label.style.marginLeft = "";
+    label.style.marginTop = "";
     label.style.visibility = "";
 
     const baseRect = label.getBoundingClientRect();
@@ -519,7 +539,8 @@ const reconcileBuildingNameLabels = () => {
     }
 
     const [x, y] = offset;
-    label.style.transform = `translate(${x}px, ${y}px)`;
+    label.style.marginLeft = `${x}px`;
+    label.style.marginTop = `${y}px`;
     accepted.push(moveRect(baseRect, x, y));
   });
 };
@@ -1486,6 +1507,38 @@ const syncFloorButtonsToFilter = () => {
   });
 };
 
+// La vista satelital y las coincidencias de inventario viven en el badge de
+// sesion; en la vista campus se muestran junto al resto de toggles de solo-icono
+// del panel de filtros. En wayfinding el badge esta oculto, asi que vuelven a el
+// para conservar el comportamiento actual.
+export const syncSessionButtonsToFilters = () => {
+  const badge = document.getElementById("session-mode-badge");
+  if (!badge) return;
+
+  const heading = badge.querySelector(".session-mode-heading-buttons");
+  const iconRow = document.querySelector("#map-equipment-filters .map-filter-icon-row");
+  const target = !isWayfindingMode() && iconRow ? iconRow : null;
+
+  [".session-mode-globe", ".session-mode-match"].forEach((selector) => {
+    const button = badge.querySelector(selector) || document.querySelector(selector);
+    if (!button) return;
+
+    if (target) {
+      if (button.parentElement !== target) target.appendChild(button);
+      return;
+    }
+
+    if (button.parentElement === heading || !heading) return;
+    // Orden original del heading: satelital, ojo, coincidencias.
+    if (button.classList.contains("session-mode-globe")) {
+      heading.prepend(button);
+    } else {
+      const eye = heading.querySelector(".session-mode-visibility");
+      heading.insertBefore(button, eye ? eye.nextSibling : null);
+    }
+  });
+};
+
 const ensureWayfindingControls = () => {
   if (!isWayfindingMode()) return;
   const topActions = document.getElementById("top-actions");
@@ -1499,22 +1552,22 @@ const ensureWayfindingControls = () => {
     L.DomEvent.disableClickPropagation(wrapper);
     L.DomEvent.disableScrollPropagation(wrapper);
 
-    const labelToggle = document.createElement("button");
-    labelToggle.id = "building-label-toggle";
-    labelToggle.className = "dashboard-link building-label-toggle is-muted";
-    labelToggle.type = "button";
-    labelToggle.setAttribute("aria-pressed", "false");
-    labelToggle.textContent = "Mostrar nombres";
+    const labelToggle = createFilterToggleButton({
+      id: "building-label-toggle",
+      title: "Mostrar nombres",
+      glyph: "Aa",
+      ariaPressed: "false",
+    });
     wrapper.appendChild(labelToggle);
     bindBuildingLabelToggleButton(labelToggle);
     setBuildingLabelsVisible(buildingLabelsVisible);
 
-    const routeVisibilityToggle = document.createElement("button");
-    routeVisibilityToggle.id = "walking-route-toggle";
-    routeVisibilityToggle.className = "dashboard-link building-label-toggle is-muted";
-    routeVisibilityToggle.type = "button";
-    routeVisibilityToggle.setAttribute("aria-pressed", "false");
-    routeVisibilityToggle.textContent = "Mostrar rutas";
+    const routeVisibilityToggle = createFilterToggleButton({
+      id: "walking-route-toggle",
+      title: "Mostrar rutas",
+      glyph: "↝",
+      ariaPressed: "false",
+    });
     wrapper.appendChild(routeVisibilityToggle);
     bindWalkingRouteToggleButton(routeVisibilityToggle);
 
@@ -1545,6 +1598,7 @@ export const initWayfindingControls = () => {
   }
 
   ensureWayfindingControls();
+  syncSessionButtonsToFilters();
 
   if (leaving) {
     refreshCurrentMapData();
@@ -1553,15 +1607,24 @@ export const initWayfindingControls = () => {
   previousWayfindingState = active;
 };
 
+const syncEquipmentTypeButtons = () => {
+  document.querySelectorAll(".map-equipment-type-button").forEach((button) => {
+    const isActive = button.dataset.type === globalEquipmentTypeFilter;
+    button.setAttribute("aria-pressed", String(isActive));
+    button.classList.toggle("is-active", isActive);
+  });
+};
+
 const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const topActions = document.getElementById("top-actions");
   if (!topActions) return;
   if (document.getElementById("map-equipment-filters")) {
     syncFloorButtonsToFilter();
+    syncSessionButtonsToFilters();
     return;
   }
 
-  const types = ["all", ...getAvailableSummaryTypes(summaryMap)];
+  const availableTypes = getAvailableSummaryTypes(summaryMap);
 
   const wrapper = document.createElement("div");
   wrapper.id = "map-equipment-filters";
@@ -1569,37 +1632,47 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   L.DomEvent.disableClickPropagation(wrapper);
   L.DomEvent.disableScrollPropagation(wrapper);
 
-  const label = document.createElement("span");
-  label.textContent = "Filtros";
-
-  const typeLabel = document.createElement("label");
-  typeLabel.className = "map-equipment-type-filter-field";
-  typeLabel.htmlFor = "map-equipment-type-filter";
+  // Un boton por tipo (solo PC e impresora): clic sobre el activo deselecciona
+  // y vuelve a mostrar todos los tipos.
+  const typeField = document.createElement("div");
+  typeField.className = "map-equipment-type-filter-field";
 
   const typeText = document.createElement("small");
   typeText.textContent = "Tipo de equipo";
+  typeField.appendChild(typeText);
 
-  const select = document.createElement("select");
-  select.id = "map-equipment-type-filter";
-  select.className = "map-equipment-type-filter-select";
-  select.disabled = types.length <= 1;
+  const typeButtonsRow = document.createElement("div");
+  typeButtonsRow.className = "map-equipment-type-buttons";
 
-  for (const type of types) {
-    const option = document.createElement("option");
-    option.value = type === "all" ? "" : type;
-    option.textContent = getDeviceTypeLabel(type);
-    select.appendChild(option);
-  }
+  [
+    { type: "pc", label: "Filtrar PC", iconClass: "map-equipment-type-icon-pc" },
+    { type: "printer", label: "Filtrar impresoras", iconClass: "map-equipment-type-icon-printer" },
+  ].forEach(({ type, label, iconClass }) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.id = `map-equipment-type-${type}`;
+    button.className = "dashboard-link map-equipment-type-button";
+    button.dataset.type = type;
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", "false");
+    button.innerHTML = `<span class="map-equipment-type-icon ${iconClass}" aria-hidden="true"></span>`;
+    button.disabled = !availableTypes.includes(type);
+    L.DomEvent.disableClickPropagation(button);
 
-  select.addEventListener("change", () => {
-    globalEquipmentTypeFilter = select.value || "";
-    updateBuildingEquipmentBubbles();
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      globalEquipmentTypeFilter = globalEquipmentTypeFilter === type ? "" : type;
+      syncEquipmentTypeButtons();
+      updateBuildingEquipmentBubbles();
+    });
+
+    typeButtonsRow.appendChild(button);
   });
 
-  wrapper.appendChild(label);
-  typeLabel.appendChild(typeText);
-  typeLabel.appendChild(select);
-  wrapper.appendChild(typeLabel);
+  typeField.appendChild(typeButtonsRow);
+  wrapper.appendChild(typeField);
 
   const floorFilter = document.createElement("div");
   floorFilter.className = "map-floor-filter";
@@ -1607,32 +1680,36 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   wrapper.appendChild(floorFilter);
   syncFloorButtonsToFilter();
 
-  const labelToggle = document.createElement("button");
-  labelToggle.id = "building-label-toggle";
-  labelToggle.className = "dashboard-link building-label-toggle is-muted";
-  labelToggle.type = "button";
-  labelToggle.setAttribute("aria-pressed", "false");
-  labelToggle.textContent = "Mostrar nombres";
-  wrapper.appendChild(labelToggle);
+  const iconRow = document.createElement("div");
+  iconRow.className = "map-filter-icon-row";
+  wrapper.appendChild(iconRow);
+
+  const labelToggle = createFilterToggleButton({
+    id: "building-label-toggle",
+    title: "Mostrar nombres",
+    glyph: "Aa",
+    ariaPressed: "false",
+  });
+  iconRow.appendChild(labelToggle);
   bindBuildingLabelToggleButton(labelToggle);
   setBuildingLabelsVisible(buildingLabelsVisible);
 
-  const routeVisibilityToggle = document.createElement("button");
-  routeVisibilityToggle.id = "walking-route-toggle";
-  routeVisibilityToggle.className = "dashboard-link building-label-toggle is-muted";
-  routeVisibilityToggle.type = "button";
-  routeVisibilityToggle.setAttribute("aria-pressed", "false");
-  routeVisibilityToggle.textContent = "Mostrar rutas";
-  wrapper.appendChild(routeVisibilityToggle);
+  const routeVisibilityToggle = createFilterToggleButton({
+    id: "walking-route-toggle",
+    title: "Mostrar rutas",
+    glyph: "↝",
+    ariaPressed: "false",
+  });
+  iconRow.appendChild(routeVisibilityToggle);
   bindWalkingRouteToggleButton(routeVisibilityToggle);
 
-  const equipmentBubbleToggle = document.createElement("button");
-  equipmentBubbleToggle.id = "equipment-bubble-toggle";
-  equipmentBubbleToggle.className = "dashboard-link building-label-toggle is-muted";
-  equipmentBubbleToggle.type = "button";
-  equipmentBubbleToggle.setAttribute("aria-pressed", "true");
-  equipmentBubbleToggle.textContent = "Ocultar contador";
-  wrapper.appendChild(equipmentBubbleToggle);
+  const equipmentBubbleToggle = createFilterToggleButton({
+    id: "equipment-bubble-toggle",
+    title: "Ocultar contador",
+    glyph: "#",
+    ariaPressed: "true",
+  });
+  iconRow.appendChild(equipmentBubbleToggle);
   bindEquipmentBubbleToggleButton(equipmentBubbleToggle);
   setEquipmentBubblesVisible(equipmentBubblesVisible);
 
@@ -1645,7 +1722,9 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   } else {
     topActions.appendChild(wrapper);
   }
+  syncEquipmentTypeButtons();
   syncEquipmentTypeFilterVisibility();
+  syncSessionButtonsToFilters();
 };
 
 const syncEquipmentTypeFilterVisibility = () => {

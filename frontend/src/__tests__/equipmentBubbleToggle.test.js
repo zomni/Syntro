@@ -11,15 +11,16 @@ describe("boton para ocultar el contador de equipos", () => {
     expect(source).toContain("window.sessionStorage?.setItem(EQUIPMENT_BUBBLES_STORAGE_KEY, String(equipmentBubblesVisible));");
   });
 
-  it("solo alterna la vista, con texto y aria acordes al estado", () => {
+  it("solo alterna la vista, con title y aria acordes al estado", () => {
     expect(source).toContain('document.documentElement.classList.toggle("equipment-bubbles-hidden", !isVisible);');
-    expect(source).toContain('button.textContent = isVisible ? "Ocultar contador" : "Mostrar contador";');
+    expect(source).toContain('const title = isVisible ? "Ocultar contador" : "Mostrar contador";');
+    expect(source).toContain('button.setAttribute("aria-label", title);');
     expect(source).toContain('button.setAttribute("aria-pressed", String(isVisible));');
   });
 
   it("crea el boton solo en el wrapper de la vista general, no en wayfinding", () => {
-    expect(source).toContain('equipmentBubbleToggle.id = "equipment-bubble-toggle";');
-    const creationIndex = source.indexOf("const equipmentBubbleToggle = document.createElement");
+    expect(source).toContain('id: "equipment-bubble-toggle"');
+    const creationIndex = source.indexOf("const equipmentBubbleToggle = createFilterToggleButton(");
     const filterWrapperIndex = source.indexOf("const ensureMapEquipmentTypeFilter = (summaryMap) => {");
     const wayfindingIndex = source.indexOf("const ensureWayfindingControls = () => {");
     expect(filterWrapperIndex).toBeGreaterThan(-1);

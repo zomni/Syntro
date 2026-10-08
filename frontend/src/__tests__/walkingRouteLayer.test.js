@@ -134,7 +134,7 @@ describe("walkingRouteLayer", () => {
     const { layerModule, storage } = loadModule();
     layerModule.bindWalkingRouteToggleButton(button);
 
-    expect(button.textContent).toBe("Mostrar rutas");
+    expect(button.title).toBe("Mostrar rutas");
 
     button.click();
     await flush();
@@ -146,7 +146,7 @@ describe("walkingRouteLayer", () => {
       [-33.002, -71.002],
     ]);
     expect(polylines[0].addTo).toHaveBeenCalled();
-    expect(button.textContent).toBe("Ocultar rutas");
+    expect(button.title).toBe("Ocultar rutas");
     expect(sessionStorage.getItem(identifiers.storage.walkingRoutesVisible)).toBe("true");
   });
 
@@ -163,7 +163,7 @@ describe("walkingRouteLayer", () => {
     await flush();
 
     expect(polylines).toHaveLength(1);
-    expect(button.textContent).toBe("Ocultar rutas");
+    expect(button.title).toBe("Ocultar rutas");
 
     layerGroup.clearLayers.mockClear();
 
@@ -171,7 +171,7 @@ describe("walkingRouteLayer", () => {
     await flush();
 
     expect(layerGroup.clearLayers).toHaveBeenCalled();
-    expect(button.textContent).toBe("Mostrar rutas");
+    expect(button.title).toBe("Mostrar rutas");
     expect(sessionStorage.getItem(identifiers.storage.walkingRoutesVisible)).toBe("false");
   });
 
@@ -185,7 +185,7 @@ describe("walkingRouteLayer", () => {
     await flush();
 
     expect(polylines).toHaveLength(1);
-    expect(button.textContent).toBe("Ocultar rutas");
+    expect(button.title).toBe("Ocultar rutas");
   });
 
   it("no dibuja nada cuando no hay red", async () => {
@@ -204,7 +204,7 @@ describe("walkingRouteLayer", () => {
 
     expect(polylines).toHaveLength(0);
     // Aunque no haya red, la etiqueta debe quedar coherente con el estado.
-    expect(button.textContent).toBe("Ocultar rutas");
+    expect(button.title).toBe("Ocultar rutas");
   });
 
   // Guarda directa contra los dos regresores: un `&&` en vez de `?.` rompe el

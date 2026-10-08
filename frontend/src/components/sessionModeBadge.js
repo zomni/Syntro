@@ -3,7 +3,7 @@ import { identifiers } from "../utils/identifiers.js";
 import { goTo } from "@app/goToCampus";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
-import { setBuildingMatchMode } from "@app/featureDisplay";
+import { setBuildingMatchMode, syncSessionButtonsToFilters } from "@app/featureDisplay";
 
 const rootId = "session-mode-badge";
 const inventoryLinkId = "session-inventory-link";
@@ -55,14 +55,6 @@ const goToLoginPage = () => {
   window.location.href = `${BACKEND_API_URL}/Auth/Login`;
 };
 
-const buildLabel = (session) => {
-  if (!session?.isAuthenticated) {
-    return "Modo vista";
-  }
-
-  return session.isAdmin ? "Modo Administrador" : "Modo vista";
-};
-
 const getSiteFingerprint = (session) => {
   if (!Array.isArray(session?.sites) || session.sites.length === 0) {
     return "";
@@ -83,23 +75,36 @@ const getSessionKey = (session) =>
   [
     session?.isAuthenticated ? "1" : "0",
     session?.isAdmin ? "admin" : "viewer",
+    session?.role || "",
     session?.username || "",
     getSiteFingerprint(session),
   ].join("|");
 
+const getRoleClass = (session) => {
+  if (!session?.isAuthenticated) return "";
+  const role = String(session.role || "viewer").toLowerCase().replace(/[^a-z]/g, "");
+  return role ? ` role-${role}` : "";
+};
+
 const renderBadge = (badge, session) => {
+  // Si satelital/coincidencias estaban en el panel de filtros, vuelven al badge
+  // antes del innerHTML: asi el re-render los sustituye en vez de dejar copias.
+  [".session-mode-globe", ".session-mode-match"].forEach((selector) => {
+    const button = document.querySelector(selector);
+    if (button && !badge.contains(button)) badge.appendChild(button);
+  });
+
   const statusPanel = document.getElementById("map-status-panel");
   badge.className = `session-mode-badge ${session?.isAdmin ? "is-admin" : "is-viewer"}`;
   badge.dataset.authenticated = session?.isAuthenticated ? "true" : "false";
 
   const userLabel = session?.isAuthenticated && session.username
-    ? `<span class="session-mode-user">${session.username}</span>`
+    ? `<span class="session-mode-user${getRoleClass(session)}">${session.username}</span>`
     : `<span class="session-mode-user">Sin sesion</span>`;
 
   badge.innerHTML = `
     <div class="session-mode-info">
       <div class="session-mode-heading">
-        <span class="session-mode-label">${buildLabel(session)}</span>
         <div class="session-mode-heading-buttons">
           <button type="button" class="session-mode-globe" aria-pressed="false" title="Vista satelital" aria-label="Vista satelital">
             <span class="session-mode-globe-icon" aria-hidden="true"></span>
@@ -160,21 +165,21 @@ const renderBadge = (badge, session) => {
       satelliteLayer.remove();
       osmLayer.addTo(map);
     }
-    const btn = badge.querySelector(".session-mode-globe");
-    if (btn) {
-      btn.classList.toggle("is-active", satelliteActive);
-      btn.setAttribute("aria-pressed", String(satelliteActive));
-    }
+    // El boton puede haberse movido al panel de filtros: event.currentTarget
+    // lo referencia aunque ya no viva dentro del badge.
+    const btn = event.currentTarget;
+    btn.classList.toggle("is-active", satelliteActive);
+    btn.setAttribute("aria-pressed", String(satelliteActive));
   });
 
   badge.querySelector(".session-mode-match")?.addEventListener("click", async (event) => {
     event.preventDefault();
     event.stopPropagation();
+    // Capturado antes del await: currentTarget es null al terminar el dispatch.
+    const btn = event.currentTarget;
     buildingMatchActive = !buildingMatchActive;
     await setBuildingMatchMode(buildingMatchActive);
 
-    const btn = badge.querySelector(".session-mode-match");
-    if (!btn) return;
     btn.classList.toggle("is-active", buildingMatchActive);
     btn.setAttribute("aria-pressed", String(buildingMatchActive));
     btn.title = buildingMatchActive ? "Ocultar coincidencias de inventario" : "Coincidencias de inventario";
@@ -182,6 +187,7 @@ const renderBadge = (badge, session) => {
   });
 
   updateMinimalMapMode();
+  syncSessionButtonsToFilters();
 };
 
 const ensureBadge = () => {

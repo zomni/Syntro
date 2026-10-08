@@ -43,7 +43,9 @@ const updateButtonState = () => {
   const button = document.getElementById("walking-route-toggle");
   if (!button) return;
 
-  button.textContent = routesVisible ? "Ocultar rutas" : "Mostrar rutas";
+  const title = routesVisible ? "Ocultar rutas" : "Mostrar rutas";
+  button.title = title;
+  button.setAttribute("aria-label", title);
   button.setAttribute("aria-pressed", String(routesVisible));
   button.classList.toggle("is-muted", !routesVisible);
 };
