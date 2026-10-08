@@ -2641,6 +2641,12 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     background: var(--pi-primary-soft);
 }
 
+/* Sin activar: icono apagado, igual que mostrar nombres/rutas/contador. */
+.map-equipment-type-filter .session-mode-globe.is-muted,
+.map-equipment-type-filter .session-mode-match.is-muted {
+    color: var(--pi-gray-500);
+}
+
 .route-planner-panel {
     position: relative;
     top: auto;

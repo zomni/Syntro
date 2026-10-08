@@ -102,4 +102,14 @@ describe("badge de sesion y botones movidos al panel de filtros", () => {
     expect(css).toContain(".map-equipment-type-filter .session-mode-globe,");
     expect(css).toMatch(/\.map-equipment-type-filter \.session-mode-match \{[\s\S]*?color: var\(--pi-primary-deep\);/);
   });
+
+  it("cambia el color del icono de satelital/coincidencias como los demas toggles", () => {
+    expect(badgeSource).toContain('globe.classList.toggle("is-muted", !satelliteActive);');
+    expect(badgeSource).toContain('btn.classList.toggle("is-muted", !satelliteActive);');
+    expect(badgeSource).toContain('button.classList.toggle("is-muted", !buildingMatchActive);');
+    expect(badgeSource).toContain('btn.classList.toggle("is-muted", !buildingMatchActive);');
+    expect(css).toMatch(
+      /\.map-equipment-type-filter \.session-mode-globe\.is-muted,\s*\.map-equipment-type-filter \.session-mode-match\.is-muted \{\s*color: var\(--pi-gray-500\);/
+    );
+  });
 });

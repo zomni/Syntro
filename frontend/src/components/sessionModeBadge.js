@@ -112,6 +112,7 @@ const ensureSessionToggleButtons = (session) => {
     globe.setAttribute("aria-label", "Vista satelital");
     globe.setAttribute("aria-pressed", String(satelliteActive));
     globe.classList.toggle("is-active", satelliteActive);
+    globe.classList.toggle("is-muted", !satelliteActive);
     globe.innerHTML = '<span class="session-mode-globe-icon" aria-hidden="true"></span>';
     globe.addEventListener("click", (event) => {
       event.preventDefault();
@@ -126,6 +127,7 @@ const ensureSessionToggleButtons = (session) => {
       }
       const btn = event.currentTarget;
       btn.classList.toggle("is-active", satelliteActive);
+      btn.classList.toggle("is-muted", !satelliteActive);
       btn.setAttribute("aria-pressed", String(satelliteActive));
     });
     stash.appendChild(globe);
@@ -140,6 +142,7 @@ const ensureSessionToggleButtons = (session) => {
     button.setAttribute("aria-label", button.title);
     button.setAttribute("aria-pressed", String(buildingMatchActive));
     button.classList.toggle("is-active", buildingMatchActive);
+    button.classList.toggle("is-muted", !buildingMatchActive);
     button.innerHTML = '<span class="session-mode-match-icon" aria-hidden="true"></span>';
     button.addEventListener("click", async (event) => {
       event.preventDefault();
@@ -150,6 +153,7 @@ const ensureSessionToggleButtons = (session) => {
       await setBuildingMatchMode(buildingMatchActive);
 
       btn.classList.toggle("is-active", buildingMatchActive);
+      btn.classList.toggle("is-muted", !buildingMatchActive);
       btn.setAttribute("aria-pressed", String(buildingMatchActive));
       btn.title = buildingMatchActive ? "Ocultar coincidencias de inventario" : "Coincidencias de inventario";
       btn.setAttribute("aria-label", btn.title);
