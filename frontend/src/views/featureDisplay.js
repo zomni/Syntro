@@ -6,7 +6,7 @@ import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
 import { getCatalogFileName, getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
 import { refreshCurrentMapData, goTo } from "@app/goToCampus";
-import { resetBuildingsCatalogCache } from "@app/addData";
+import { resetBuildingsCatalogCache, buildStaticMarkerIcon, staticMarkerSizeForZoom } from "@app/addData";
 import { bindWalkingRouteToggleButton } from "@app/walkingRouteLayer";
 import { appConfig } from "../config/appConfig.js";
 import { isWayfindingMode } from "../utils/wayfinding.js";
@@ -2995,9 +2995,20 @@ const renderFloorSectors = async (feature) => {
   const overlay = L.layerGroup().addTo(buildingViewMap);
   buildingViewOverlay = overlay;
 
-  const [allRooms, backendInventoryItems] = await Promise.all([
+  const [allRooms, backendInventoryItems, mapMarkers] = await Promise.all([
     loadRoomsForBuilding(building),
     canViewEquipment ? loadBackendInventoryForBuilding(building) : Promise.resolve([]),
+    fetch(
+      `${BACKEND_API_URL}/api/map-markers?buildingExternalId=${encodeURIComponent(
+        featureId
+      )}&floor=${encodeURIComponent(floor)}`,
+      { cache: "no-store" }
+    )
+      .then((response) => (response.ok ? response.json() : []))
+      .catch((error) => {
+        console.warn("[mapa] no se pudieron cargar los marcadores de la vista edificio:", error);
+        return [];
+      }),
   ]);
 
   // Otra invocación ya tomó el control (o el mapa se cerró): este render quedó
@@ -3006,6 +3017,20 @@ const renderFloorSectors = async (feature) => {
     overlay.clearLayers();
     overlay.remove();
     return;
+  }
+
+  const buildingViewZoom = buildingViewMap.getZoom();
+  for (const marker of Array.isArray(mapMarkers) ? mapMarkers : []) {
+    const lat = Number(marker?.latitude);
+    const lng = Number(marker?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+
+    L.marker([lat, lng], {
+      icon: buildStaticMarkerIcon(marker.iconKey, staticMarkerSizeForZoom(buildingViewZoom)),
+      interactive: false,
+      keyboard: false,
+      zIndexOffset: 600,
+    }).addTo(overlay);
   }
 
   const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
