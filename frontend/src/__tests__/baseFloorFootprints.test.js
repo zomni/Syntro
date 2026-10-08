@@ -75,4 +75,24 @@ describeWithData("huellas de la planta base", () => {
 
     expect(baseFloor.features.some((f) => f.properties.footprintFloor === 0)).toBe(true);
   });
+
+  // Regresion: Movilizacion (SR-BLD-088) tiene pisos 1 y 2 pero la huella solo
+  // existia en cs_sotero_2.json y el catalogo declaraba floors [2]. En el campus
+  // el piso 1 la omitia porque la fuente de fallback del piso base es el propio
+  // cs_sotero_1.json: sin feature ahi, no hay nada que clonar.
+  test("Movilizacion declara pisos 1 y 2 y tiene huella en la planta base", () => {
+    const catalog = readCatalog();
+    const building = catalog.buildings.find((b) => b.id === "SR-BLD-088");
+
+    expect(building).toBeDefined();
+    expect(building.floors).toEqual(expect.arrayContaining([1, 2]));
+
+    const baseFloor = readData("cs_sotero_1.json");
+    const feature = baseFloor.features.find((f) => f.properties.id === "SR-BLD-088");
+
+    expect(feature).toBeDefined();
+    expect(feature.properties.floor).toBe(1);
+    expect(feature.geometry?.type).toBe("Polygon");
+    expect(feature.geometry?.coordinates?.length).toBeGreaterThan(0);
+  });
 });
