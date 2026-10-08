@@ -2635,12 +2635,27 @@ public class NetworkTelemetryService
         };
     }
 
-    private static async Task<IReadOnlyList<NetworkTelemetryBuildingRiskSummaryViewModel>> BuildBuildingRiskSummariesAsync(
+    private async Task<IReadOnlyList<NetworkTelemetryBuildingRiskSummaryViewModel>> BuildBuildingRiskSummariesAsync(
         IQueryable<NetworkTelemetryObservation> query,
         CancellationToken cancellationToken)
     {
+        var inventoryRows = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(item => item.DeletedAtUtc == null && item.AssignedBuildingExternalId != string.Empty)
+            .Select(item => new
+            {
+                item.Id,
+                item.AssignedBuildingExternalId
+            })
+            .ToListAsync(cancellationToken);
+
+        var inventoryById = inventoryRows.ToDictionary(item => item.Id, item => item.AssignedBuildingExternalId);
+        var inventoryByBuilding = inventoryRows
+            .GroupBy(item => item.AssignedBuildingExternalId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
         var observations = await query
-            .Where(observation => observation.ObservationType == "device" && observation.BuildingExternalId != string.Empty)
+            .Where(observation => observation.ObservationType == "device")
             .Select(observation => new
             {
                 observation.Id,
@@ -2652,34 +2667,75 @@ public class NetworkTelemetryService
             })
             .ToListAsync(cancellationToken);
 
-        return observations
-            .GroupBy(observation => observation.BuildingExternalId, StringComparer.OrdinalIgnoreCase)
-            .Select(group =>
+        var summaries = new Dictionary<string, NetworkTelemetryBuildingRiskSummaryViewModel>(StringComparer.OrdinalIgnoreCase);
+        var observedInventoryIds = new Dictionary<string, HashSet<Guid>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (buildingExternalId, inventoryCount) in inventoryByBuilding)
+        {
+            summaries[buildingExternalId] = new NetworkTelemetryBuildingRiskSummaryViewModel
             {
-                var topRisk = group
-                    .OrderByDescending(item => item.RiskScore)
-                    .ThenByDescending(item => item.Id)
-                    .First();
+                BuildingExternalId = buildingExternalId,
+                InventoryCount = inventoryCount
+            };
+            observedInventoryIds[buildingExternalId] = [];
+        }
 
-                var matchedCount = group.Count(item =>
-                    item.ImportedInventoryItemId.HasValue || item.SyncedEquipmentId.HasValue);
+        foreach (var observation in observations)
+        {
+            var buildingExternalId = observation.ImportedInventoryItemId is Guid importedId &&
+                                     inventoryById.TryGetValue(importedId, out var assignedBuilding)
+                ? assignedBuilding
+                : observation.BuildingExternalId;
 
-                return new NetworkTelemetryBuildingRiskSummaryViewModel
+            if (string.IsNullOrWhiteSpace(buildingExternalId))
+            {
+                continue;
+            }
+
+            if (!summaries.TryGetValue(buildingExternalId, out var summary))
+            {
+                summary = new NetworkTelemetryBuildingRiskSummaryViewModel
                 {
-                    BuildingExternalId = group.Key,
-                    DeviceCount = group.Count(),
-                    CriticalCount = group.Count(item => item.RiskLevel == "critical"),
-                    HighCount = group.Count(item => item.RiskLevel == "high"),
-                    MediumCount = group.Count(item => item.RiskLevel == "medium"),
-                    LowCount = group.Count(item => item.RiskLevel == "low"),
-                    MaxRiskScore = group.Max(item => item.RiskScore),
-                    MaxRiskLevel = string.IsNullOrWhiteSpace(topRisk.RiskLevel) ? "low" : topRisk.RiskLevel,
-                    MatchedCount = matchedCount,
-                    MatchRate = group.Count() == 0 ? 0 : Math.Round(matchedCount * 100.0 / group.Count(), 1)
+                    BuildingExternalId = buildingExternalId
                 };
+                summaries[buildingExternalId] = summary;
+                observedInventoryIds[buildingExternalId] = [];
+            }
+
+            summary.DeviceCount++;
+            summary.CriticalCount += observation.RiskLevel == "critical" ? 1 : 0;
+            summary.HighCount += observation.RiskLevel == "high" ? 1 : 0;
+            summary.MediumCount += observation.RiskLevel == "medium" ? 1 : 0;
+            summary.LowCount += observation.RiskLevel == "low" ? 1 : 0;
+            summary.MaxRiskScore = Math.Max(summary.MaxRiskScore, observation.RiskScore);
+
+            if (observation.ImportedInventoryItemId is Guid observedId &&
+                inventoryById.ContainsKey(observedId))
+            {
+                observedInventoryIds[buildingExternalId].Add(observedId);
+            }
+        }
+
+        return summaries.Values
+            .Select(summary =>
+            {
+                var observedCount = observedInventoryIds[summary.BuildingExternalId].Count;
+                summary.ObservedInventoryCount = observedCount;
+                summary.MatchedCount = observedCount;
+                summary.MatchRate = summary.InventoryCount == 0
+                    ? 0
+                    : Math.Round(observedCount * 100.0 / summary.InventoryCount, 1);
+                summary.MaxRiskLevel = summary.DeviceCount == 0
+                    ? "low"
+                    : summary.CriticalCount > 0
+                        ? "critical"
+                        : summary.HighCount > 0
+                            ? "high"
+                            : summary.MediumCount > 0 ? "medium" : "low";
+                return summary;
             })
             .OrderByDescending(item => item.MaxRiskScore)
-            .ThenByDescending(item => item.DeviceCount)
+            .ThenByDescending(item => item.InventoryCount)
             .Take(100)
             .ToList();
     }
@@ -3139,6 +3195,23 @@ public class NetworkTelemetryService
         var matchedCount = await deviceQuery.CountAsync(o => o.ImportedInventoryItemId != null || o.SyncedEquipmentId != null, cancellationToken);
         var unmatchedCount = totalCount - matchedCount;
 
+        var inventoryIds = await _context.ImportedInventoryItems
+            .AsNoTracking()
+            .Where(item => item.DeletedAtUtc == null && item.AssignedBuildingExternalId != string.Empty)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+        var inventoryIdSet = inventoryIds.ToHashSet();
+        var observedInventoryIds = (await deviceQuery
+                .Where(observation => observation.ImportedInventoryItemId.HasValue)
+                .Select(observation => observation.ImportedInventoryItemId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+            .Where(inventoryIdSet.Contains)
+            .ToHashSet();
+        var inventoryCoverageRate = inventoryIds.Count == 0
+            ? 0
+            : Math.Round(observedInventoryIds.Count * 100.0 / inventoryIds.Count, 1);
+
         var matchedKeys = await deviceQuery
             .Where(o => o.ImportedInventoryItemId != null || o.SyncedEquipmentId != null)
             .Select(o => o.MatchKey)
@@ -3198,7 +3271,10 @@ public class NetworkTelemetryService
             DeviceCount = totalCount,
             MatchedCount = matchedCount,
             UnmatchedCount = unmatchedCount,
-            MatchRate = totalCount == 0 ? 0 : Math.Round(matchedCount * 100.0 / totalCount, 1),
+            InventoryCount = inventoryIds.Count,
+            ObservedInventoryCount = observedInventoryIds.Count,
+            InventoryCoverageRate = inventoryCoverageRate,
+            MatchRate = inventoryCoverageRate,
             MatchKeyCounts = matchKeyCounts,
             MatchedByRiskLevel = matchedByRisk,
             UnmatchedByRiskLevel = unmatchedByRisk,

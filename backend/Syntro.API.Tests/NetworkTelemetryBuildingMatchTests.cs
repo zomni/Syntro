@@ -48,6 +48,18 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
             SyncedEquipmentId = syncedEquipmentId
         };
 
+    private static ImportedInventoryItem Inventory(Guid id, string building) => new()
+    {
+        Id = id,
+        InferredCategory = "pc",
+        AssignedBuildingExternalId = building,
+        AssignedRoomExternalId = $"room-{building}",
+        SerialNumber = id.ToString("N"),
+        ItemNumber = id.ToString("N"),
+        SourceFile = $"test-{id:N}",
+        RowNumber = 1
+    };
+
     [Fact]
     public async Task GetBuildingRiskSummariesAsync_ComputesMatchedCountAndMatchRatePerBuilding()
     {
@@ -62,15 +74,21 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         _context.NetworkTelemetrySnapshots.Add(snapshot);
         await _context.SaveChangesAsync();
 
-        var importedItem = Guid.NewGuid();
+        var importedItemA = Guid.NewGuid();
+        var importedItemB = Guid.NewGuid();
         var syncedEquipment = Guid.NewGuid();
 
+        _context.ImportedInventoryItems.AddRange(
+            Inventory(importedItemA, "SR-BLD-A"),
+            Inventory(Guid.NewGuid(), "SR-BLD-A"),
+            Inventory(importedItemB, "SR-BLD-B"));
+
         _context.NetworkTelemetryObservations.AddRange(
-            Device(snapshot.Id, "SR-BLD-A", importedInventoryItemId: importedItem),
-            Device(snapshot.Id, "SR-BLD-A", importedInventoryItemId: importedItem),
+            Device(snapshot.Id, "SR-BLD-A", importedInventoryItemId: importedItemA),
+            Device(snapshot.Id, "SR-BLD-A", importedInventoryItemId: importedItemA),
             Device(snapshot.Id, "SR-BLD-A", syncedEquipmentId: syncedEquipment),
             Device(snapshot.Id, "SR-BLD-A"),
-            Device(snapshot.Id, "SR-BLD-B", importedInventoryItemId: importedItem),
+            Device(snapshot.Id, "SR-BLD-B", importedInventoryItemId: importedItemB),
             Device(snapshot.Id, "SR-BLD-B"),
             new NetworkTelemetryObservation
             {
@@ -89,13 +107,17 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
 
         var buildingA = Assert.Single(summaries, item => item.BuildingExternalId == "SR-BLD-A");
         Assert.Equal(4, buildingA.DeviceCount);
-        Assert.Equal(3, buildingA.MatchedCount);
-        Assert.Equal(75.0, buildingA.MatchRate);
+        Assert.Equal(2, buildingA.InventoryCount);
+        Assert.Equal(1, buildingA.ObservedInventoryCount);
+        Assert.Equal(1, buildingA.MatchedCount);
+        Assert.Equal(50.0, buildingA.MatchRate);
 
         var buildingB = Assert.Single(summaries, item => item.BuildingExternalId == "SR-BLD-B");
         Assert.Equal(2, buildingB.DeviceCount);
         Assert.Equal(1, buildingB.MatchedCount);
-        Assert.Equal(50.0, buildingB.MatchRate);
+        Assert.Equal(1, buildingB.InventoryCount);
+        Assert.Equal(1, buildingB.ObservedInventoryCount);
+        Assert.Equal(100.0, buildingB.MatchRate);
 
         Assert.DoesNotContain(summaries, item => item.BuildingExternalId == "");
         Assert.Equal(2, summaries.Count);
@@ -118,6 +140,9 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         _context.NetworkTelemetryObservations.AddRange(
             Device(snapshot.Id, "SR-BLD-EMPTY"),
             Device(snapshot.Id, "SR-BLD-EMPTY"));
+        _context.ImportedInventoryItems.AddRange(
+            Inventory(Guid.NewGuid(), "SR-BLD-EMPTY"),
+            Inventory(Guid.NewGuid(), "SR-BLD-EMPTY"));
         await _context.SaveChangesAsync();
 
         var service = BuildService();
@@ -127,12 +152,14 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         var summary = Assert.Single(summaries);
         Assert.Equal("SR-BLD-EMPTY", summary.BuildingExternalId);
         Assert.Equal(2, summary.DeviceCount);
+        Assert.Equal(2, summary.InventoryCount);
+        Assert.Equal(0, summary.ObservedInventoryCount);
         Assert.Equal(0, summary.MatchedCount);
         Assert.Equal(0.0, summary.MatchRate);
     }
 
     [Fact]
-    public async Task GetBuildingRiskSummariesAsync_CountsFullMatchWhenOnlyImportedInventoryIsLinked()
+    public async Task GetBuildingRiskSummariesAsync_DeduplicatesRepeatedCaptureRowsPerInventory()
     {
         var snapshot = new NetworkTelemetrySnapshot
         {
@@ -146,6 +173,7 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         await _context.SaveChangesAsync();
 
         var importedItem = Guid.NewGuid();
+        _context.ImportedInventoryItems.Add(Inventory(importedItem, "SR-BLD-IMPORTED"));
         var observations = Enumerable.Range(0, 40)
             .Select(_ => Device(snapshot.Id, "SR-BLD-IMPORTED", importedInventoryItemId: importedItem))
             .ToList();
@@ -159,8 +187,10 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
 
         var summary = Assert.Single(summaries);
         Assert.Equal(41, summary.DeviceCount);
-        Assert.Equal(40, summary.MatchedCount);
-        Assert.Equal(97.6, summary.MatchRate);
+        Assert.Equal(1, summary.InventoryCount);
+        Assert.Equal(1, summary.ObservedInventoryCount);
+        Assert.Equal(1, summary.MatchedCount);
+        Assert.Equal(100.0, summary.MatchRate);
     }
 
     [Fact]
@@ -186,6 +216,9 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         await _context.SaveChangesAsync();
 
         var importedItem = Guid.NewGuid();
+        _context.ImportedInventoryItems.AddRange(
+            Inventory(importedItem, "SR-BLD-LATEST"),
+            Inventory(Guid.NewGuid(), "SR-BLD-LATEST"));
         _context.NetworkTelemetryObservations.AddRange(
             Device(latest.Id, "SR-BLD-LATEST", importedInventoryItemId: importedItem),
             Device(latest.Id, "SR-BLD-LATEST", importedInventoryItemId: importedItem),
@@ -202,8 +235,10 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         var summary = Assert.Single(result.BuildingRiskSummaries);
         Assert.Equal("SR-BLD-LATEST", summary.BuildingExternalId);
         Assert.Equal(3, summary.DeviceCount);
-        Assert.Equal(2, summary.MatchedCount);
-        Assert.Equal(66.7, summary.MatchRate);
+        Assert.Equal(2, summary.InventoryCount);
+        Assert.Equal(1, summary.ObservedInventoryCount);
+        Assert.Equal(1, summary.MatchedCount);
+        Assert.Equal(50.0, summary.MatchRate);
     }
 
     [Fact]
@@ -216,6 +251,39 @@ public class NetworkTelemetryBuildingMatchTests : IDisposable
         Assert.Equal(Guid.Empty, result.SnapshotId);
         Assert.Null(result.ObservedAtUtc);
         Assert.Empty(result.BuildingRiskSummaries);
+    }
+
+    [Fact]
+    public async Task GetMatchingSummaryAsync_UsesInventoryCoverageInsteadOfCaptureRows()
+    {
+        var snapshot = new NetworkTelemetrySnapshot
+        {
+            CampusKey = "test-campus",
+            SourceName = "test",
+            SourceType = "wmi",
+            Status = "completed",
+            ObservedAtUtc = DateTime.UtcNow
+        };
+        _context.NetworkTelemetrySnapshots.Add(snapshot);
+
+        var observedInventory = Guid.NewGuid();
+        _context.ImportedInventoryItems.AddRange(
+            Inventory(observedInventory, "SR-BLD-COVERAGE"),
+            Inventory(Guid.NewGuid(), "SR-BLD-COVERAGE"));
+        _context.NetworkTelemetryObservations.AddRange(
+            Device(snapshot.Id, "SR-BLD-COVERAGE", importedInventoryItemId: observedInventory),
+            Device(snapshot.Id, "SR-BLD-COVERAGE"));
+        await _context.SaveChangesAsync();
+
+        var result = await BuildService().GetMatchingSummaryAsync(snapshot.Id);
+
+        Assert.True(result.Found);
+        Assert.Equal(2, result.DeviceCount);
+        Assert.Equal(1, result.MatchedCount);
+        Assert.Equal(2, result.InventoryCount);
+        Assert.Equal(1, result.ObservedInventoryCount);
+        Assert.Equal(50.0, result.InventoryCoverageRate);
+        Assert.Equal(50.0, result.MatchRate);
     }
 
     private NetworkTelemetryService BuildService()

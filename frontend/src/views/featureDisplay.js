@@ -3575,6 +3575,8 @@ const loadBuildingMatchData = async () => {
 
         result.set(key, {
           deviceCount: Number(summary?.deviceCount) || 0,
+          inventoryCount: Number(summary?.inventoryCount) || 0,
+          observedInventoryCount: Number(summary?.observedInventoryCount) || 0,
           matchedCount: Number(summary?.matchedCount) || 0,
           matchRate,
         });
@@ -3602,7 +3604,7 @@ const applyBuildingMatchStyle = (layer) => {
   if (!featureId || !buildingMatchData) return false;
 
   const summary = buildingMatchData.get(featureId);
-  if (!summary || summary.deviceCount <= 0 || summary.matchRate === null) return false;
+  if (!summary || summary.inventoryCount <= 0 || summary.matchRate === null) return false;
 
   const fillColor = buildingMatchColor(summary.matchRate);
   if (!fillColor) return false;
@@ -3633,7 +3635,7 @@ const createMatchBubbleForLayer = async (feature, layer) => {
   applyBuildingMatchStyle(layer);
 
   const summary = data.get(featureId);
-  if (!summary || summary.deviceCount <= 0 || summary.matchRate === null) return;
+  if (!summary || summary.inventoryCount <= 0 || summary.matchRate === null) return;
 
   const label = buildingMatchPercentLabel(summary.matchRate);
   if (!label) return;
@@ -3643,7 +3645,7 @@ const createMatchBubbleForLayer = async (feature, layer) => {
   const marker = L.marker(layer.getBounds().getCenter(), {
     interactive: true,
     keyboard: true,
-    title: `${summary.matchedCount} de ${summary.deviceCount} dispositivos coinciden con inventario (${label})`,
+    title: `${summary.observedInventoryCount} de ${summary.inventoryCount} inventarios fueron detectados en la captura de red (${label})`,
     icon: L.divIcon({
       className: "building-match-bubble",
       html: `<button type="button" style="background-color:${fillColor};" aria-label="${label} de coincidencia de inventario">${label}</button>`,

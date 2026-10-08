@@ -233,6 +233,8 @@ public class NetworkTelemetryBuildingRiskSummaryViewModel
 {
     public string BuildingExternalId { get; set; } = string.Empty;
     public int DeviceCount { get; set; }
+    public int InventoryCount { get; set; }
+    public int ObservedInventoryCount { get; set; }
     public int CriticalCount { get; set; }
     public int HighCount { get; set; }
     public int MediumCount { get; set; }
