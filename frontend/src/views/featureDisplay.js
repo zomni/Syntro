@@ -1266,7 +1266,10 @@ const buildDeviceControlsHtml = (
   extraActions = "",
   sectorOptions = [],
   sectorFilter = "",
-  filtersOpen = false
+  filtersOpen = false,
+  availableTypes = [],
+  typeCounts = {},
+  typeFilter = ""
 ) => {
   const sizeOptions = [5, 10, 20, 50];
   const resolvedSize = Math.max(5, Number(pageSize) || 5);
@@ -1292,6 +1295,23 @@ const buildDeviceControlsHtml = (
 
   const hasSectorFilters = sectorOptions.length > 0;
   const activeSector = hasSectorFilters ? sectorOptions.find((s) => s.roomId === sectorFilter) : null;
+  const activeType = normalizeDeviceType(typeFilter || "all");
+  const typeFilterButtons = ["all", ...availableTypes]
+    .map((type) => {
+      const isActive = activeType === type;
+      const count = type === "all" ? Object.values(typeCounts).reduce((sum, value) => sum + (Number(value) || 0), 0) : typeCounts[type] || 0;
+      const label = type === "all" ? "Todos" : getDeviceTypeLabel(type);
+      const icon = type === "all" ? resizeIcon(PACKAGE_ICON_SVG) : getDeviceTypeIconHtml(type);
+      return `
+        <button
+          class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
+          style="${getChipButtonStyle(isActive, true)}"
+          onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${escapeHtml(type)}')"
+        >
+          ${icon} ${escapeHtml(label)} · ${count}
+        </button>`;
+    })
+    .join("");
 
   let filtersButtonHtml = "";
   let activeFilterBannerHtml = "";
@@ -1369,6 +1389,11 @@ const buildDeviceControlsHtml = (
     </div>
     ${activeFilterBannerHtml}
     ${filtersPanelHtml}
+    ${availableTypes.length ? `
+      <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+        <div style="font-size:12px; color:#475569;">Filtrar por tipo</div>
+        ${typeFilterButtons}
+      </div>` : ""}
     <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
       <div style="font-size:12px; color:#475569;">Mostrar</div>
       ${sizeButtons}
@@ -2755,6 +2780,8 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
       : deviceScope === "building"
         ? "edificio completo"
         : `piso ${floorLabel}`;
+    const availableDeviceTypes = getAvailableDeviceTypes(scopeDevices);
+    const deviceTypeCounts = countDevicesByType(scopeDevices);
 
     contentHtml = `
       <div style="${sectionBoxStyle}">
@@ -2767,7 +2794,19 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
             : ""
         }
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen)}
+          ${buildDeviceControlsHtml(
+            featureId,
+            deviceQuery,
+            deviceSearchOpen,
+            devicePageSize,
+            adminActionsHtml,
+            sectorOptionsForFilter,
+            activeSectorFilter,
+            sectorFiltersOpen,
+            availableDeviceTypes,
+            deviceTypeCounts,
+            deviceTypeFilter
+          )}
         </div>
         <div style="margin-top:4px;">
           ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
