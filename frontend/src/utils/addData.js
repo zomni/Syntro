@@ -45,6 +45,16 @@ var roomsPane =
 if (roomsPane) {
   roomsPane.style.zIndex = 450;
 }
+// Capa propia para los iconos de servicios por piso: 455 va justo encima de
+// roomsPane (450, sectores) y debajo de markerPane (600), de modo que el
+// orden lo decide el z-index de la capa y no el z interno del marcador.
+var iconsPane =
+  typeof map.createPane === "function" && !map.getPane("iconsPane")
+    ? map.createPane("iconsPane")
+    : map.getPane("iconsPane");
+if (iconsPane) {
+  iconsPane.style.zIndex = 455;
+}
 
 let buildingsCatalogCache = new Map();
 let renderSequence = 0;
@@ -452,7 +462,7 @@ export const renderMapMarkerLayer = (marker) => {
 
   const layer = L.marker([marker.latitude, marker.longitude], {
     icon: buildStaticMarkerIcon(marker.iconKey, staticMarkerSizeForZoom(map.getZoom())),
-    pane: "roomsPane",
+    pane: "iconsPane",
     interactive: false,
     keyboard: false,
     zIndexOffset: 400,

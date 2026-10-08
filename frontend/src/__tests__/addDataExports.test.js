@@ -39,4 +39,18 @@ describe("addData.js", () => {
     expect(source).toMatch(/shouldRenderRoomForFloor\(room,\s*floorNumber,\s*allowedBuildingIds\)/);
     expect(source).not.toMatch(/if\s*\(!allowedBuildingIds\.has\(room\.buildingExternalId\)\)\s*continue;/);
   });
+
+  test("iconos de servicios viven en iconsPane por encima de los sectores", () => {
+    // Los iconos estaban en roomsPane (450) junto con los sectores manuales:
+    // el orden dependia del z interno del marcador y los sectores los tapaban.
+    // El pane con z-index 455 lo decide a nivel de capa: 450 < 455 < 600.
+    expect(source).toMatch(/map\.createPane\("iconsPane"\)/);
+    expect(source).toMatch(/iconsPane\.style\.zIndex\s*=\s*455/);
+    expect(source).toMatch(/roomsPane\.style\.zIndex\s*=\s*450/);
+    expect(source).toMatch(
+      /pane:\s*"iconsPane",\s*interactive:\s*false,\s*keyboard:\s*false,\s*zIndexOffset:\s*400/
+    );
+    expect(455).toBeGreaterThan(450);
+    expect(455).toBeLessThan(600);
+  });
 });
