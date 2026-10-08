@@ -47,11 +47,14 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
     expect(css).toMatch(/\.map-equipment-type-filter\.building-match-active \.map-equipment-type-filter-field \{/);
   });
 
-  it("reparte las filas del panel uniformemente de costado a costado", () => {
-    expect(css).toMatch(/\.map-equipment-type-buttons \{[^}]*justify-content: space-between;/);
-    expect(css).toMatch(/\.map-floor-filter-buttons \{[^}]*justify-content: space-between;/);
-    expect(css).toMatch(/\.map-filter-icon-row \{[^}]*justify-content: space-between;/);
-    expect(css).toMatch(/\.map-filter-icon-row \{[^}]*flex: 1 1 auto;/);
-    expect(css).toMatch(/body\.map-ui-wayfinding \.map-equipment-type-filter \{[^}]*justify-content: space-between;/);
+  it("centra el contenido del panel con los botones agrupados", () => {
+    expect(css).toMatch(/\.map-equipment-type-buttons \{[^}]*justify-content: center;/);
+    expect(css).toMatch(/\.map-floor-filter-buttons::before,\s*\.map-floor-filter-buttons::after \{[^}]*margin: auto;/);
+    expect(css).toMatch(/\.map-filter-icon-row \{[^}]*justify-content: center;/);
+    expect(css).toMatch(/body\.map-ui-wayfinding \.map-equipment-type-filter \{[^}]*justify-content: center;/);
+    expect(css).toMatch(/\.map-equipment-type-filter-field small \{[^}]*text-align: center;/);
+    expect(css).toMatch(/\.map-floor-filter > small \{[^}]*text-align: center;/);
+    expect(css).not.toMatch(/\.map-equipment-type-filter \{[^}]*space-between/);
+    expect(css).not.toMatch(/\.map-filter-icon-row \{[^}]*space-between/);
   });
 });

@@ -224,14 +224,15 @@
 .map-equipment-type-filter-field small {
     color: var(--pi-gray-500);
     font: 700 10px/1.2 sans-serif;
+    text-align: center;
     text-transform: uppercase;
     letter-spacing: 0.03em;
 }
 
-/* Filas del panel repartidas uniformemente de costado a costado. */
+/* Filas del panel: botones agrupados y centrados. */
 .map-equipment-type-buttons {
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     gap: 6px;
 }
 
@@ -283,16 +284,13 @@
 }
 
 /* Fila de toggles de solo-icono del panel de filtros; aqui caben tambien los
-   botones de vista satelital y de coincidencias movidos desde el badge.
-   flex:1 la estira hasta los costados tambien en la tira de wayfinding. */
+   botones de vista satelital y de coincidencias movidos desde el badge. */
 .map-filter-icon-row {
     display: flex;
-    flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     gap: 6px;
-    min-width: 0;
 }
 
 .map-filter-icon-row .building-label-toggle {
@@ -878,16 +876,24 @@ body.session-warning-open .leaflet-container {
 .map-floor-filter > small {
     color: var(--pi-gray-500);
     font: 700 10px/1.2 sans-serif;
+    text-align: center;
     text-transform: uppercase;
 }
 
 .map-floor-filter-buttons {
     display: flex;
     flex-wrap: nowrap;
-    justify-content: space-between;
     gap: 4px;
     overflow-x: auto;
     padding-bottom: 2px;
+}
+
+/* Centra el grupo de pisos; si desborda, los margins auto llegan a 0 y el
+   scroll horizontal sigue alcanzando el primer boton. */
+.map-floor-filter-buttons::before,
+.map-floor-filter-buttons::after {
+    content: "";
+    margin: auto;
 }
 
 .map-floor-filter-buttons .floorButton {
@@ -3257,7 +3263,7 @@ body.map-ui-wayfinding .map-floor-filter {
 body.map-ui-wayfinding .map-equipment-type-filter {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     gap: 6px;
     padding: 4px 8px;
 }
