@@ -40,6 +40,14 @@ describe("burbujas de sectores", () => {
     expect(source).toContain("iconAnchor: isEmpty ? [8.5, 8.5] : [17, 17]");
     expect(css).toMatch(/\.building-equipment-bubble\.is-empty button \{[\s\S]*?width: 17px;[\s\S]*?height: 17px;/);
   });
+
+  it("un sector unico no lleva contador propio; solo el total del piso", () => {
+    expect(source).toContain("const showSectorCounters = sectors.length >= 2;");
+    expect(source).toContain("if (!canViewEquipment || !showSectorCounters) continue;");
+    expect(source).toContain(
+      "placeFloorTotalBubble(overlay, floorRing, devicesInFloor.length, floor, featureId);"
+    );
+  });
 });
 
 describe("subtitulo de sala seleccionada", () => {

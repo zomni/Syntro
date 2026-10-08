@@ -3281,6 +3281,9 @@ const renderFloorSectors = async (feature) => {
   const sectors = filterRoomsByFloor(allRooms, floor).filter(
     (room) => room.type === "sector" && room.geometryJson
   );
+  // Un sector unico no necesita contador propio: el total del piso ya lo
+  // resume. Solo se pintan contadores de sector si el piso tiene 2 o mas.
+  const showSectorCounters = sectors.length >= 2;
   const devicesInFloor = filterDevicesByFloor(allDevices, sectors, allRooms, floor);
 
   const sectorCountByRoom = new Map();
@@ -3352,7 +3355,7 @@ const renderFloorSectors = async (feature) => {
       dropTargets.push({ roomId: sector.roomId, ring: latLngs, polygon });
     }
 
-    if (!canViewEquipment) continue;
+    if (!canViewEquipment || !showSectorCounters) continue;
 
     const count = sectorCountByRoom.get(sector.roomId) || 0;
     const centroid = ringCentroidLatLng(latLngs);
