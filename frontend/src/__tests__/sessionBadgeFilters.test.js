@@ -28,17 +28,41 @@ describe("badge de sesion y botones movidos al panel de filtros", () => {
     expect(badgeSource).toContain('session?.role || "",');
   });
 
-  it("mueve satelital y coincidencias al panel de filtros y los devuelve en wayfinding", () => {
+  it("mueve satelital y coincidencias al panel de filtros y los estaciona en wayfinding", () => {
     expect(displaySource).toContain("export const syncSessionButtonsToFilters = () => {");
     expect(displaySource).toContain('"#map-equipment-filters .map-filter-icon-row"');
     expect(displaySource).toContain('[".session-mode-globe", ".session-mode-match"].forEach');
+    expect(displaySource).toContain('"session-mode-stash"');
     expect(badgeSource).toContain("syncSessionButtonsToFilters();");
     expect(displaySource).toContain("syncSessionButtonsToFilters();");
   });
 
-  it("recoloca los botones movidos antes de re-renderizar el badge", () => {
-    expect(badgeSource).toContain("if (button && !badge.contains(button)) badge.appendChild(button);");
-    expect(displaySource).toContain("heading.prepend(button);");
+  it("el badge solo lleva cajon, fila usuario+ojo y boton de sesion", () => {
+    expect(badgeSource).not.toContain("session-mode-heading");
+    expect(badgeSource).not.toContain("session-mode-info");
+    expect(badgeSource).toContain('<div class="session-mode-user-row">');
+    expect(badgeSource).toContain("ensureSessionToggleButtons(session);");
+    expect(badgeSource).toContain("ensureSessionButtonStash");
+    // Globe/match se crean con createElement fuera del badge y se estacionan.
+    expect(badgeSource).not.toContain('<button type="button" class="session-mode-globe"');
+    expect(badgeSource).not.toContain("badge.contains(button)");
+    expect(css).toContain(".session-mode-user-row {");
+    expect(css).not.toContain(".session-mode-heading {");
+    expect(css).not.toContain(".session-mode-heading-buttons");
+    expect(css).not.toContain(".session-mode-info {");
+  });
+
+  it("el email queda con el ojo a su derecha y cerrar sesion debajo", () => {
+    const rowStart = badgeSource.indexOf('<div class="session-mode-user-row">');
+    expect(rowStart).toBeGreaterThan(-1);
+    expect(badgeSource.indexOf("${userLabel}", rowStart)).toBeGreaterThan(rowStart);
+    expect(badgeSource.indexOf('class="session-mode-visibility"', rowStart)).toBeGreaterThan(rowStart);
+    expect(badgeSource.indexOf("${userLabel}", rowStart)).toBeLessThan(
+      badgeSource.indexOf('class="session-mode-visibility"', rowStart)
+    );
+    expect(badgeSource.indexOf('class="session-mode-logout"')).toBeGreaterThan(
+      badgeSource.indexOf("</div>", rowStart)
+    );
   });
 
   it("usa currentTarget para seguir tocando los botones una vez movidos", () => {
@@ -68,8 +92,10 @@ describe("badge de sesion y botones movidos al panel de filtros", () => {
   });
 
 
-  it("sin texto de modo, los botones ocupan el hueco a la izquierda", () => {
-    expect(css).not.toMatch(/\.session-mode-heading-buttons \{[^}]*margin-left: auto/);
+  it("sin texto de modo, el badge no tiene huecos ni heading", () => {
+    expect(css).not.toContain(".session-mode-heading-buttons");
+    expect(css).not.toMatch(/\.session-mode-badge \{[^}]*justify-content: space-between/);
+    expect(css).toMatch(/\.session-mode-badge \{[\s\S]*?justify-content: flex-start;/);
   });
 
   it("repinta satelital/coincidencias con la paleta del panel de filtros", () => {

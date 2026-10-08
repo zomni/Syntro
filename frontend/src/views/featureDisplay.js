@@ -1520,35 +1520,21 @@ const syncFloorButtonsToFilter = () => {
   });
 };
 
-// La vista satelital y las coincidencias de inventario viven en el badge de
-// sesion; en la vista campus se muestran junto al resto de toggles de solo-icono
-// del panel de filtros. En wayfinding el badge esta oculto, asi que vuelven a el
-// para conservar el comportamiento actual.
+// Los botones satelital/coincidencias nunca viven en el badge (solo cajon de
+// estado, fila usuario+ojo y boton de sesion): se crean estacionados en
+// #session-mode-stash y aqui se mueven a la fila de iconos de Filtros en la
+// vista campus. En wayfinding (o si aun no hay fila) vuelven al stash, que
+// esta oculto: el comportamiento visible es el mismo que tenian antes al
+// volver al badge, que tambien esta oculto en wayfinding.
 export const syncSessionButtonsToFilters = () => {
-  const badge = document.getElementById("session-mode-badge");
-  if (!badge) return;
-
-  const heading = badge.querySelector(".session-mode-heading-buttons");
   const iconRow = document.querySelector("#map-equipment-filters .map-filter-icon-row");
-  const target = !isWayfindingMode() && iconRow ? iconRow : null;
+  const stash = document.getElementById("session-mode-stash");
+  const target = !isWayfindingMode() && iconRow ? iconRow : stash;
+  if (!target) return;
 
   [".session-mode-globe", ".session-mode-match"].forEach((selector) => {
-    const button = badge.querySelector(selector) || document.querySelector(selector);
-    if (!button) return;
-
-    if (target) {
-      if (button.parentElement !== target) target.appendChild(button);
-      return;
-    }
-
-    if (button.parentElement === heading || !heading) return;
-    // Orden original del heading: satelital, ojo, coincidencias.
-    if (button.classList.contains("session-mode-globe")) {
-      heading.prepend(button);
-    } else {
-      const eye = heading.querySelector(".session-mode-visibility");
-      heading.insertBefore(button, eye ? eye.nextSibling : null);
-    }
+    const button = document.querySelector(selector);
+    if (button && button.parentElement !== target) target.appendChild(button);
   });
 };
 
