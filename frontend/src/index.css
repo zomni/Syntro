@@ -195,6 +195,12 @@
     flex: 0 0 auto;
 }
 
+/* Ocultado de botones/paneles del mapa: al ser .building-label-toggle
+   display:inline-flex !important, el ocultado no puede vivir en style.display. */
+.is-filter-hidden {
+    display: none !important;
+}
+
 .map-equipment-type-filter {
     display: grid;
     gap: 7px;
@@ -251,77 +257,18 @@
 }
 
 .map-equipment-type-icon {
-    position: relative;
-    display: inline-block;
-    width: 17px;
-    height: 17px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
     color: inherit;
 }
 
-/* Monitor: pantalla + cuello + base dibujados en CSS. */
-.map-equipment-type-icon-pc {
-    box-sizing: border-box;
-    height: 11px;
-    border: 2px solid currentColor;
-    border-radius: 3px;
-}
-
-.map-equipment-type-icon-pc::before {
-    content: "";
-    position: absolute;
-    top: 11px;
-    left: 50%;
-    width: 2px;
-    height: 4px;
-    margin-left: -1px;
-    background: currentColor;
-}
-
-.map-equipment-type-icon-pc::after {
-    content: "";
-    position: absolute;
-    top: 15px;
-    left: 50%;
-    width: 10px;
-    height: 2px;
-    margin-left: -5px;
-    border-radius: 1px;
-    background: currentColor;
-}
-
-/* Impresora: cuerpo + hoja saliendo por arriba y por abajo. */
-.map-equipment-type-icon-printer {
-    box-sizing: border-box;
-    height: 9px;
-    margin-top: 4px;
-    border: 2px solid currentColor;
-    border-radius: 3px;
-}
-
-.map-equipment-type-icon-printer::before {
-    content: "";
-    position: absolute;
-    top: -6px;
-    left: 3px;
-    box-sizing: border-box;
-    width: 9px;
-    height: 6px;
-    border: 2px solid currentColor;
-    border-bottom: 0;
-    border-radius: 2px 2px 0 0;
-}
-
-.map-equipment-type-icon-printer::after {
-    content: "";
-    position: absolute;
-    top: 9px;
-    left: 3px;
-    box-sizing: border-box;
-    width: 9px;
-    height: 5px;
-    border: 2px solid currentColor;
-    border-top: 0;
-    border-radius: 0 0 2px 2px;
+.map-equipment-type-icon svg {
+    display: block;
+    width: 15px;
+    height: 15px;
 }
 
 .map-equipment-type-filter .building-label-toggle {
@@ -353,8 +300,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 18px;
-    font: 700 13px/1 sans-serif;
+    min-width: 16px;
+    line-height: 0;
+}
+
+.filter-toggle-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
 }
 
 .session-mode-badge {
@@ -2557,8 +2510,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     display: flex;
     flex: 0 0 auto;
     gap: 4px;
-    /* El heading ya no tiene texto de modo de vista: los botones se quedan a la derecha. */
-    margin-left: auto;
 }
 
 .session-mode-globe {

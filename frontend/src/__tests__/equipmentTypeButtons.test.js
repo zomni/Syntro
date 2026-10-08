@@ -12,8 +12,10 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
   });
 
   it("crea un boton por tipo con icono, aria y disabled si no hay datos", () => {
-    expect(source).toContain('{ type: "pc", label: "Filtrar PC", iconClass: "map-equipment-type-icon-pc" }');
-    expect(source).toContain('{ type: "printer", label: "Filtrar impresoras", iconClass: "map-equipment-type-icon-printer" }');
+    expect(source).toContain('{ type: "pc", label: "Filtrar PC" }');
+    expect(source).toContain('{ type: "printer", label: "Filtrar impresoras" }');
+    expect(source).toContain("const EQUIPMENT_TYPE_ICONS = {");
+    expect(source).toContain("EQUIPMENT_TYPE_ICONS[type]");
     expect(source).toContain("button.dataset.type = type;");
     expect(source).toContain("button.disabled = !availableTypes.includes(type);");
   });
@@ -32,14 +34,16 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
     );
   });
 
-  it("dibuja los iconos PC e impresora en CSS sobre currentColor", () => {
-    expect(css).toContain(".map-equipment-type-icon-pc");
-    expect(css).toContain(".map-equipment-type-icon-printer");
-    expect(css).toMatch(/\.map-equipment-type-icon \{[\s\S]*?color: inherit;/);
+  it("dibuja los iconos PC e impresora como SVG inline con currentColor", () => {
+    expect(source).toMatch(/pc: `<svg [\s\S]*?<rect x="2" y="3" width="12" height="8" rx="1.5"\/>/);
+    expect(source).toMatch(/printer: `<svg [\s\S]*?<rect x="2" y="6.5" width="12" height="5.5" rx="1.5"\/>/);
+    expect(css).toContain(".map-equipment-type-icon svg {");
+    expect(css).not.toContain(".map-equipment-type-icon-pc");
+    expect(css).not.toContain(".map-equipment-type-icon-printer");
   });
 
   it("mantiene el campo visible/oculto con el mismo criterio que antes", () => {
-    expect(source).toContain("const field = document.querySelector(\".map-equipment-type-filter-field\");");
+    expect(source).toContain('if (field) field.classList.toggle("is-filter-hidden", !canSeeCounters);');
     expect(css).toMatch(/\.map-equipment-type-filter\.building-match-active \.map-equipment-type-filter-field \{/);
   });
 });

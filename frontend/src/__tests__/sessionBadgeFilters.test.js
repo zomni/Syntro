@@ -48,13 +48,28 @@ describe("badge de sesion y botones movidos al panel de filtros", () => {
   });
 
   it("los toggles de la fila son de solo-icono con estado en title", () => {
-    expect(displaySource).toContain("const createFilterToggleButton = ({ id, title, glyph, ariaPressed }) => {");
-    expect(displaySource).toContain('glyph: "Aa"');
-    expect(displaySource).toContain('glyph: "↝"');
-    expect(displaySource).toContain('glyph: "#"');
+    expect(displaySource).toContain("const createFilterToggleButton = ({ id, title, icon, ariaPressed }) => {");
+    expect(displaySource).toContain("const FILTER_TOGGLE_ICONS = {");
+    expect(displaySource).toContain("icon: FILTER_TOGGLE_ICONS.names");
+    expect(displaySource).toContain("icon: FILTER_TOGGLE_ICONS.routes");
+    expect(displaySource).toContain("icon: FILTER_TOGGLE_ICONS.counter");
+    expect(displaySource).not.toContain("glyph:");
     expect(displaySource).toContain('const title = isVisible ? "Ocultar nombres" : "Mostrar nombres";');
     expect(css).toContain(".map-filter-icon-row {");
     expect(css).toContain(".filter-toggle-icon {");
+    expect(css).toContain(".filter-toggle-icon svg {");
+  });
+
+  it("los iconos de los toggles son SVG inline con stroke currentColor", () => {
+    expect(displaySource).toMatch(/const SVG_ICON_ATTRS = 'width="16" height="16" viewBox="0 0 16 16"[^']*stroke="currentColor"/);
+    expect(displaySource).toMatch(/names: `<svg \$\{SVG_ICON_ATTRS\}>/);
+    expect(displaySource).toMatch(/routes: `<svg \$\{SVG_ICON_ATTRS\}>/);
+    expect(displaySource).toMatch(/counter: `<svg \$\{SVG_ICON_ATTRS\}>/);
+  });
+
+
+  it("sin texto de modo, los botones ocupan el hueco a la izquierda", () => {
+    expect(css).not.toMatch(/\.session-mode-heading-buttons \{[^}]*margin-left: auto/);
   });
 
   it("repinta satelital/coincidencias con la paleta del panel de filtros", () => {

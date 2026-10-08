@@ -438,9 +438,22 @@ const initEquipmentBubbleToggle = () => {
   bindEquipmentBubbleToggleButton(document.getElementById("equipment-bubble-toggle"));
 };
 
+// Iconos SVG inline de los botones de filtro/toggle: stroke con currentColor
+// para heredar el color del boton en cualquier panel (filtros o wayfinding).
+const SVG_ICON_ATTRS = 'width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"';
+const FILTER_TOGGLE_ICONS = {
+  names: `<svg ${SVG_ICON_ATTRS}><path d="M8 2H4a2 2 0 0 0-2 2v4l7 7 6-6-7-7Z"/><circle cx="5.4" cy="5.4" r="1.1"/></svg>`,
+  routes: `<svg ${SVG_ICON_ATTRS}><circle cx="4" cy="12" r="2"/><circle cx="12" cy="4" r="2"/><path d="M4 10V7a3 3 0 0 1 3-3h3"/></svg>`,
+  counter: `<svg ${SVG_ICON_ATTRS}><path d="M6.8 2.5 4.7 13.5"/><path d="M11.3 2.5 9.2 13.5"/><path d="M3 6.2h10"/><path d="M3 9.8h10"/></svg>`,
+};
+const EQUIPMENT_TYPE_ICONS = {
+  pc: `<svg ${SVG_ICON_ATTRS}><rect x="2" y="3" width="12" height="8" rx="1.5"/><path d="M8 11v2"/><path d="M5.5 13.5h5"/></svg>`,
+  printer: `<svg ${SVG_ICON_ATTRS}><path d="M5 6.5V3h6v3.5"/><rect x="2" y="6.5" width="12" height="5.5" rx="1.5"/><path d="M5 12v2.5h6V12"/></svg>`,
+};
+
 // Botones de solo-icono del panel de filtros: el estado (mostrar/ocultar) vive
-// en title/aria-label y aria-pressed; el glyph solo indica la accion.
-const createFilterToggleButton = ({ id, title, glyph, ariaPressed }) => {
+// en title/aria-label y aria-pressed; el icono solo indica la accion.
+const createFilterToggleButton = ({ id, title, icon, ariaPressed }) => {
   const button = document.createElement("button");
   button.id = id;
   button.className = "dashboard-link building-label-toggle is-muted";
@@ -448,7 +461,7 @@ const createFilterToggleButton = ({ id, title, glyph, ariaPressed }) => {
   button.setAttribute("aria-pressed", ariaPressed);
   button.title = title;
   button.setAttribute("aria-label", title);
-  button.innerHTML = `<span class="filter-toggle-icon" aria-hidden="true">${glyph}</span>`;
+  button.innerHTML = `<span class="filter-toggle-icon" aria-hidden="true">${icon}</span>`;
   return button;
 };
 
@@ -1555,7 +1568,7 @@ const ensureWayfindingControls = () => {
     const labelToggle = createFilterToggleButton({
       id: "building-label-toggle",
       title: "Mostrar nombres",
-      glyph: "Aa",
+      icon: FILTER_TOGGLE_ICONS.names,
       ariaPressed: "false",
     });
     wrapper.appendChild(labelToggle);
@@ -1565,7 +1578,7 @@ const ensureWayfindingControls = () => {
     const routeVisibilityToggle = createFilterToggleButton({
       id: "walking-route-toggle",
       title: "Mostrar rutas",
-      glyph: "↝",
+      icon: FILTER_TOGGLE_ICONS.routes,
       ariaPressed: "false",
     });
     wrapper.appendChild(routeVisibilityToggle);
@@ -1645,9 +1658,9 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   typeButtonsRow.className = "map-equipment-type-buttons";
 
   [
-    { type: "pc", label: "Filtrar PC", iconClass: "map-equipment-type-icon-pc" },
-    { type: "printer", label: "Filtrar impresoras", iconClass: "map-equipment-type-icon-printer" },
-  ].forEach(({ type, label, iconClass }) => {
+    { type: "pc", label: "Filtrar PC" },
+    { type: "printer", label: "Filtrar impresoras" },
+  ].forEach(({ type, label }) => {
     const button = document.createElement("button");
     button.type = "button";
     button.id = `map-equipment-type-${type}`;
@@ -1656,7 +1669,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
     button.title = label;
     button.setAttribute("aria-label", label);
     button.setAttribute("aria-pressed", "false");
-    button.innerHTML = `<span class="map-equipment-type-icon ${iconClass}" aria-hidden="true"></span>`;
+    button.innerHTML = `<span class="map-equipment-type-icon" aria-hidden="true">${EQUIPMENT_TYPE_ICONS[type]}</span>`;
     button.disabled = !availableTypes.includes(type);
     L.DomEvent.disableClickPropagation(button);
 
@@ -1687,7 +1700,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const labelToggle = createFilterToggleButton({
     id: "building-label-toggle",
     title: "Mostrar nombres",
-    glyph: "Aa",
+    icon: FILTER_TOGGLE_ICONS.names,
     ariaPressed: "false",
   });
   iconRow.appendChild(labelToggle);
@@ -1697,7 +1710,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const routeVisibilityToggle = createFilterToggleButton({
     id: "walking-route-toggle",
     title: "Mostrar rutas",
-    glyph: "↝",
+    icon: FILTER_TOGGLE_ICONS.routes,
     ariaPressed: "false",
   });
   iconRow.appendChild(routeVisibilityToggle);
@@ -1706,7 +1719,7 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   const equipmentBubbleToggle = createFilterToggleButton({
     id: "equipment-bubble-toggle",
     title: "Ocultar contador",
-    glyph: "#",
+    icon: FILTER_TOGGLE_ICONS.counter,
     ariaPressed: "true",
   });
   iconRow.appendChild(equipmentBubbleToggle);
@@ -1730,13 +1743,15 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
 const syncEquipmentTypeFilterVisibility = () => {
   const canSeeCounters = !isWayfindingMode() && lastKnownSessionIsAuthenticated;
 
+  // Clase y no style.display: .building-label-toggle usa display:inline-flex
+  // !important y un estilo en linea no puede ocultarlo.
   const field = document.querySelector(".map-equipment-type-filter-field");
-  if (field) field.style.display = canSeeCounters ? "" : "none";
+  if (field) field.classList.toggle("is-filter-hidden", !canSeeCounters);
 
   // El contador solo existe para sesiones autenticadas, asi que su boton de
   // ocultar sigue exactamente el mismo criterio.
   const equipmentToggle = document.getElementById("equipment-bubble-toggle");
-  if (equipmentToggle) equipmentToggle.style.display = canSeeCounters ? "" : "none";
+  if (equipmentToggle) equipmentToggle.classList.toggle("is-filter-hidden", !canSeeCounters);
 };
 
 const buildRoomsMap = (rooms) => {

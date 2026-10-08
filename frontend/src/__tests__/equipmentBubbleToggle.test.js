@@ -31,7 +31,10 @@ describe("boton para ocultar el contador de equipos", () => {
 
   it("el boton solo se muestra con la sesion que permite ver el contador", () => {
     expect(source).toContain("const canSeeCounters = !isWayfindingMode() && lastKnownSessionIsAuthenticated;");
-    expect(source).toContain('if (equipmentToggle) equipmentToggle.style.display = canSeeCounters ? "" : "none";');
+    expect(source).toContain('if (equipmentToggle) equipmentToggle.classList.toggle("is-filter-hidden", !canSeeCounters);');
+    // display:inline-flex !important de .building-label-toggle ganaba al
+    // style.display, por eso el ocultado vive en una clase con !important.
+    expect(css).toMatch(/\.is-filter-hidden \{\s*display: none !important;/);
   });
 
   it("restaura el estado guardado al arranque", () => {
