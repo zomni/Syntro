@@ -357,6 +357,8 @@ const EQUIPMENT_SYNC_RETRY_MS = 5000;
 const BACKEND_SESSION_CACHE_MS = 15000;
 const BUILDING_LABELS_STORAGE_KEY = "syntro_building_labels_visible";
 let buildingLabelsVisible = window.sessionStorage?.getItem(BUILDING_LABELS_STORAGE_KEY) === "true";
+const EQUIPMENT_BUBBLES_STORAGE_KEY = "syntro_equipment_bubbles_visible";
+let equipmentBubblesVisible = window.sessionStorage?.getItem(EQUIPMENT_BUBBLES_STORAGE_KEY) !== "false";
 
 const setBuildingLabelsVisible = (isVisible) => {
   buildingLabelsVisible = Boolean(isVisible);
@@ -391,6 +393,45 @@ const bindBuildingLabelToggleButton = (button) => {
 const initBuildingLabelToggle = () => {
   setBuildingLabelsVisible(buildingLabelsVisible);
   bindBuildingLabelToggleButton(document.getElementById("building-label-toggle"));
+};
+
+// Oculta solo la vista del contador de equipos de la vista general; no toca
+// los datos ni los contadores de sectores de la vista edificio (viven fuera
+// de #map). El boton lo crea ensureMapEquipmentTypeFilter y solo se muestra
+// con la misma sesion que permite ver el contador.
+const setEquipmentBubblesVisible = (isVisible) => {
+  equipmentBubblesVisible = Boolean(isVisible);
+  document.documentElement.classList.toggle("equipment-bubbles-hidden", !isVisible);
+
+  const button = document.getElementById("equipment-bubble-toggle");
+  if (button) {
+    button.textContent = isVisible ? "Ocultar contador" : "Mostrar contador";
+    button.setAttribute("aria-pressed", String(isVisible));
+    button.classList.toggle("is-muted", !isVisible);
+  }
+
+  scheduleReconcileBuildingNameLabels();
+};
+
+const bindEquipmentBubbleToggleButton = (button) => {
+  if (!button || button.dataset.bound === "true") return;
+
+  button.dataset.bound = "true";
+  L.DomEvent.disableClickPropagation(button);
+
+  button.addEventListener("mousedown", (event) => event.stopPropagation());
+  button.addEventListener("dblclick", (event) => event.stopPropagation());
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setEquipmentBubblesVisible(!equipmentBubblesVisible);
+    window.sessionStorage?.setItem(EQUIPMENT_BUBBLES_STORAGE_KEY, String(equipmentBubblesVisible));
+  });
+};
+
+const initEquipmentBubbleToggle = () => {
+  setEquipmentBubblesVisible(equipmentBubblesVisible);
+  bindEquipmentBubbleToggleButton(document.getElementById("equipment-bubble-toggle"));
 };
 
 // Los nombres permanentes se centran en el bounds de cada edificio, asi que
@@ -1585,6 +1626,16 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
   wrapper.appendChild(routeVisibilityToggle);
   bindWalkingRouteToggleButton(routeVisibilityToggle);
 
+  const equipmentBubbleToggle = document.createElement("button");
+  equipmentBubbleToggle.id = "equipment-bubble-toggle";
+  equipmentBubbleToggle.className = "dashboard-link building-label-toggle is-muted";
+  equipmentBubbleToggle.type = "button";
+  equipmentBubbleToggle.setAttribute("aria-pressed", "true");
+  equipmentBubbleToggle.textContent = "Ocultar contador";
+  wrapper.appendChild(equipmentBubbleToggle);
+  bindEquipmentBubbleToggleButton(equipmentBubbleToggle);
+  setEquipmentBubblesVisible(equipmentBubblesVisible);
+
   const routeToggle = document.getElementById("route-planner-toggle");
   const navigationGroup = document.getElementById("navigation-panel-group");
   if (navigationGroup) {
@@ -1598,9 +1649,15 @@ const ensureMapEquipmentTypeFilter = (summaryMap) => {
 };
 
 const syncEquipmentTypeFilterVisibility = () => {
+  const canSeeCounters = !isWayfindingMode() && lastKnownSessionIsAuthenticated;
+
   const field = document.querySelector(".map-equipment-type-filter-field");
-  if (!field) return;
-  field.style.display = !isWayfindingMode() && lastKnownSessionIsAuthenticated ? "" : "none";
+  if (field) field.style.display = canSeeCounters ? "" : "none";
+
+  // El contador solo existe para sesiones autenticadas, asi que su boton de
+  // ocultar sigue exactamente el mismo criterio.
+  const equipmentToggle = document.getElementById("equipment-bubble-toggle");
+  if (equipmentToggle) equipmentToggle.style.display = canSeeCounters ? "" : "none";
 };
 
 const buildRoomsMap = (rooms) => {
@@ -3874,12 +3931,14 @@ if (document.readyState === "loading") {
     "DOMContentLoaded",
     () => {
       initBuildingLabelToggle();
+      initEquipmentBubbleToggle();
       startEquipmentSyncMonitor();
     },
     { once: true }
   );
 } else {
   initBuildingLabelToggle();
+  initEquipmentBubbleToggle();
   startEquipmentSyncMonitor();
 }
 

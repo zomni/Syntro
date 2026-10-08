@@ -2164,6 +2164,13 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     opacity: 0 !important;
 }
 
+/* Solo la vista general (#map): los contadores de sectores de la vista
+   edificio viven en su propio mapa y no deben tocarse. */
+.equipment-bubbles-hidden #map .building-equipment-bubble {
+    display: none;
+    visibility: hidden;
+}
+
 #map-status-panel {
     position: fixed;
     top: 12px;
