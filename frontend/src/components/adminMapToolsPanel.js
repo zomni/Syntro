@@ -12,6 +12,7 @@ const sectionDefinitions = {
   rooms: ["Sectores", "&#9635;"],
   routes: ["Rutas", "&#8734;"],
 };
+const sectionOrderKeys = Object.keys(sectionDefinitions);
 const activeModes = new Map([
   ["manual-building", "manual-building-editor-toggle"],
   ["geometry-shape", "building-shape-editor-button"],
@@ -189,6 +190,21 @@ export const getAdminMapToolsButtons = () => {
   return document.getElementById(buttonsId);
 };
 
+// Las secciones se crean bajo demanda y en el orden en que cada modulo
+// termine de inicializar; sin este reordenamiento su posicion visual cambia
+// con cada F5 (o al reactivar una herramienta que borro y re-crea su seccion).
+const reorderAdminMapToolSections = (buttons) => {
+  if (!buttons) return;
+
+  sectionOrderKeys.forEach((key) => {
+    const section = buttons.querySelector(`[data-admin-tool-section="${key}"]`);
+    if (section) buttons.appendChild(section);
+  });
+
+  const footer = buttons.querySelector(`#${footerId}`);
+  if (footer) buttons.appendChild(footer);
+};
+
 export const setAdminMapToolsStatus = (message) => {
   const status = document.getElementById(statusId);
   if (!status) return;
@@ -233,8 +249,7 @@ export const getAdminMapToolSection = (key) => {
     buttons.appendChild(section);
   }
 
-  const footer = buttons.querySelector(`#${footerId}`);
-  if (footer) buttons.appendChild(footer);
+  reorderAdminMapToolSections(buttons);
 
   return section.querySelector(".admin-map-tool-section-body");
 };
