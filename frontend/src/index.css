@@ -2143,6 +2143,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     text-align: center;
     white-space: nowrap;
     pointer-events: none;
+    transition: transform 120ms ease;
 }
 
 .building-name-label::before {

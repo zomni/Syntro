@@ -343,6 +343,7 @@ const removeMatchBubbleMarker = (featureId, marker) => {
     map.removeLayer(marker);
   }
   discardMatchBubble(featureId, marker);
+  scheduleReconcileBuildingNameLabels();
 };
 
 const removeAllMatchBubbles = () => {
@@ -367,6 +368,8 @@ const setBuildingLabelsVisible = (isVisible) => {
     button.setAttribute("aria-pressed", String(isVisible));
     button.classList.toggle("is-muted", !isVisible);
   }
+
+  scheduleReconcileBuildingNameLabels();
 };
 
 const bindBuildingLabelToggleButton = (button) => {
@@ -389,6 +392,108 @@ const initBuildingLabelToggle = () => {
   setBuildingLabelsVisible(buildingLabelsVisible);
   bindBuildingLabelToggleButton(document.getElementById("building-label-toggle"));
 };
+
+// Los nombres permanentes se centran en el bounds de cada edificio, asi que
+// edificios vecinos (y las burbujas de equipos, que comparten centro) se pisan.
+// La estrategia es intentar mover la etiqueta a un hueco libre y solo ocultarla
+// si no cabe en ningun offset; el resultado es determinista y se recalcula
+// cuando cambia la geometria visible del mapa.
+const LABEL_RECONCILE_DEBOUNCE_MS = 100;
+const LABEL_COLLISION_MARGIN = 3;
+const LABEL_OFFSET_CANDIDATES = [
+  [0, -22],
+  [0, 22],
+  [-70, 0],
+  [70, 0],
+  [0, -44],
+  [0, 44],
+  [-140, 0],
+  [140, 0],
+  [0, -66],
+  [0, 66],
+];
+let labelReconcileHandle = null;
+
+const rectsOverlap = (a, b, margin) =>
+  a.left < b.right + margin && a.right > b.left - margin && a.top < b.bottom + margin && a.bottom > b.top - margin;
+
+const moveRect = (rect, x, y) => ({
+  left: rect.left + x,
+  right: rect.right + x,
+  top: rect.top + y,
+  bottom: rect.bottom + y,
+});
+
+const hasVisibleRect = (element) => {
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+};
+
+const reconcileBuildingNameLabels = () => {
+  const labels = Array.from(document.querySelectorAll(".building-name-label"));
+
+  if (!buildingLabelsVisible) {
+    labels.forEach((label) => {
+      label.style.transform = "";
+      label.style.visibility = "";
+    });
+    return;
+  }
+
+  const obstacles = Array.from(document.querySelectorAll(".building-equipment-bubble, .building-match-bubble"))
+    .filter(hasVisibleRect)
+    .map((element) => element.getBoundingClientRect());
+
+  const visibleLabels = labels.filter(hasVisibleRect);
+
+  // Prioridad determinista: primero los nombres mas largos (los que mas
+  // hueco necesitan), con desempate por posicion para que entre recalculos
+  // no se alternen las etiquetas que quedan ocultas.
+  visibleLabels.sort((a, b) => {
+    const rectA = a.getBoundingClientRect();
+    const rectB = b.getBoundingClientRect();
+    if (rectB.width !== rectA.width) return rectB.width - rectA.width;
+    if (rectA.top !== rectB.top) return rectA.top - rectB.top;
+    return rectA.left - rectB.left;
+  });
+
+  const accepted = [...obstacles];
+  const isFree = (rect) => !accepted.some((other) => rectsOverlap(rect, other, LABEL_COLLISION_MARGIN));
+
+  visibleLabels.forEach((label) => {
+    label.style.transform = "";
+    label.style.visibility = "";
+
+    const baseRect = label.getBoundingClientRect();
+    if (isFree(baseRect)) {
+      accepted.push(baseRect);
+      return;
+    }
+
+    const offset = LABEL_OFFSET_CANDIDATES.find(([x, y]) => isFree(moveRect(baseRect, x, y)));
+    if (!offset) {
+      // Sin hueco en ninguna posicion: se oculta hasta el proximo recalculo.
+      label.style.visibility = "hidden";
+      return;
+    }
+
+    const [x, y] = offset;
+    label.style.transform = `translate(${x}px, ${y}px)`;
+    accepted.push(moveRect(baseRect, x, y));
+  });
+};
+
+const scheduleReconcileBuildingNameLabels = () => {
+  if (labelReconcileHandle) window.clearTimeout(labelReconcileHandle);
+  labelReconcileHandle = window.setTimeout(() => {
+    labelReconcileHandle = null;
+    reconcileBuildingNameLabels();
+  }, LABEL_RECONCILE_DEBOUNCE_MS);
+};
+
+map.on("zoomend", scheduleReconcileBuildingNameLabels);
+map.on("moveend", scheduleReconcileBuildingNameLabels);
+window.addEventListener("resize", scheduleReconcileBuildingNameLabels);
 
 const updateBackendSessionCache = (session) => {
   backendSessionCache = session || { isAuthenticated: false, isAdmin: false };
@@ -1015,6 +1120,7 @@ const bindBuildingNameLabel = (feature, layer) => {
   }
 
   setBuildingLabelsVisible(buildingLabelsVisible);
+  scheduleReconcileBuildingNameLabels();
 };
 
 const escapeHtml = (value) => {
@@ -1288,6 +1394,7 @@ const createEquipmentBubbleIcon = (count, { emptyWhenZero = false } = {}) => {
 };
 
 const updateBuildingEquipmentBubbles = () => {
+  scheduleReconcileBuildingNameLabels();
   if (buildingMatchModeActive) return;
 
   if (!window.syntroBackendSession?.isAuthenticated) {
@@ -3446,6 +3553,7 @@ const createMatchBubbleForLayer = async (feature, layer) => {
 
   if (!map.hasLayer(marker) && layer?._map) {
     marker.addTo(map);
+    scheduleReconcileBuildingNameLabels();
   }
 
   layer.on("remove", () => {
@@ -3557,6 +3665,7 @@ const createEquipmentBubbleForLayer = async (feature, layer) => {
       map.removeLayer(marker);
     }
     buildingEquipmentBubbleEntries.delete(featureId);
+    scheduleReconcileBuildingNameLabels();
   });
 };
 
@@ -3804,7 +3913,10 @@ window.addEventListener("syntro-campus-changed", () => {
 });
 
 window.addEventListener("syntro-map-data-refreshed", () => {
-  window.setTimeout(() => setBuildingLabelsVisible(buildingLabelsVisible), 80);
+  window.setTimeout(() => {
+    setBuildingLabelsVisible(buildingLabelsVisible);
+    scheduleReconcileBuildingNameLabels();
+  }, 80);
 });
 
 
