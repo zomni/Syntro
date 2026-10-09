@@ -1948,6 +1948,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
 }
 
 .building-equipment-bubble button {
+    box-sizing: border-box;
     width: 34px;
     height: 34px;
     border: 2px solid rgba(var(--pi-surface-rgb), 0.95);
@@ -1956,7 +1957,11 @@ html[data-admin-map-tool-mode="geometry-move"] .building-equipment-bubble {
     box-shadow: 0 8px 18px rgba(var(--pi-ink-rgb), 0.26);
     color: var(--pi-surface);
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font: 800 12px/1 sans-serif;
+    padding: 0;
     text-align: center;
 }
 

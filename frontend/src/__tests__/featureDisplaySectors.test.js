@@ -41,6 +41,10 @@ describe("burbujas de sectores", () => {
     expect(css).toMatch(/\.building-equipment-bubble\.is-empty button \{[\s\S]*?width: 17px;[\s\S]*?height: 17px;/);
   });
 
+  it("centra los contadores de tres digitos dentro de la burbuja", () => {
+    expect(css).toMatch(/\.building-equipment-bubble button \{[\s\S]*?box-sizing: border-box;[\s\S]*?display: flex;[\s\S]*?align-items: center;[\s\S]*?justify-content: center;[\s\S]*?padding: 0;/);
+  });
+
   it("un sector unico no lleva contador propio; solo el total del piso", () => {
     expect(source).toContain("const showSectorCounters = sectors.length >= 2;");
     expect(source).toContain("if (!canViewEquipment || !showSectorCounters) continue;");
