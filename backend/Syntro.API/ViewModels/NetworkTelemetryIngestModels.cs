@@ -235,6 +235,8 @@ public class NetworkTelemetryBuildingRiskSummaryViewModel
     public int DeviceCount { get; set; }
     public int InventoryCount { get; set; }
     public int ObservedInventoryCount { get; set; }
+    public Dictionary<string, NetworkTelemetryBuildingTypeMatchSummaryViewModel> ByType { get; set; } =
+        new Dictionary<string, NetworkTelemetryBuildingTypeMatchSummaryViewModel>();
     public int CriticalCount { get; set; }
     public int HighCount { get; set; }
     public int MediumCount { get; set; }
@@ -242,6 +244,13 @@ public class NetworkTelemetryBuildingRiskSummaryViewModel
     public int MaxRiskScore { get; set; }
     public string MaxRiskLevel { get; set; } = "low";
     public int MatchedCount { get; set; }
+    public double MatchRate { get; set; }
+}
+
+public class NetworkTelemetryBuildingTypeMatchSummaryViewModel
+{
+    public int InventoryCount { get; set; }
+    public int ObservedInventoryCount { get; set; }
     public double MatchRate { get; set; }
 }
 

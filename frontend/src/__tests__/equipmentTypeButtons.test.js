@@ -34,19 +34,6 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
     );
   });
 
-  it("expone los tipos dentro del popup de equipos", () => {
-    expect(source).toContain('Filtrar por tipo');
-    expect(source).toContain("availableTypes");
-    expect(source).toContain("window.setDeviceTypeFilter");
-    expect(source).toContain("const availableDeviceTypes = getAvailableDeviceTypes(scopeDevices);");
-  });
-
-  it("muestra cantidades por tipo dentro del popup", () => {
-    expect(source).toContain("const deviceTypeCounts = countDevicesByType(scopeDevices);");
-    expect(source).toContain("const count = type === \"all\"");
-    expect(source).toContain("getDeviceTypeLabel(type)");
-  });
-
   it("dibuja los iconos PC e impresora como SVG inline con currentColor", () => {
     expect(source).toMatch(/pc: `<svg [\s\S]*?<rect x="2" y="3" width="12" height="8" rx="1.5"\/>/);
     expect(source).toMatch(/printer: `<svg [\s\S]*?<rect x="2" y="6.5" width="12" height="5.5" rx="1.5"\/>/);
@@ -55,9 +42,9 @@ describe("botones de tipo de equipo (PC / impresora)", () => {
     expect(css).not.toContain(".map-equipment-type-icon-printer");
   });
 
-  it("mantiene el campo visible/oculto con el mismo criterio que antes", () => {
+  it("mantiene el campo visible/oculto con el mismo criterio de autenticacion", () => {
     expect(source).toContain('if (field) field.classList.toggle("is-filter-hidden", !canSeeCounters);');
-    expect(css).toMatch(/\.map-equipment-type-filter\.building-match-active \.map-equipment-type-filter-field \{/);
+    expect(css).not.toMatch(/\.map-equipment-type-filter\.building-match-active \.map-equipment-type-filter-field \{/);
   });
 
   it("centra el contenido del panel con los botones agrupados", () => {

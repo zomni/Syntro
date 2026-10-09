@@ -2435,6 +2435,11 @@ public class NetworkTelemetryService
             ? string.Empty
             : value.Trim().ToUpperInvariant();
 
+    private static string NormalizeInventoryCategory(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? "other"
+            : value.Trim().ToLowerInvariant();
+
     private static string Clean(string? value)
         => string.IsNullOrWhiteSpace(value)
             ? string.Empty
@@ -2645,11 +2650,16 @@ public class NetworkTelemetryService
             .Select(item => new
             {
                 item.Id,
-                item.AssignedBuildingExternalId
+                item.AssignedBuildingExternalId,
+                item.InferredCategory
             })
             .ToListAsync(cancellationToken);
 
-        var inventoryById = inventoryRows.ToDictionary(item => item.Id, item => item.AssignedBuildingExternalId);
+        var inventoryById = inventoryRows.ToDictionary(
+            item => item.Id,
+            item => new InventoryCoverageRow(
+                item.AssignedBuildingExternalId,
+                NormalizeInventoryCategory(item.InferredCategory)));
         var inventoryByBuilding = inventoryRows
             .GroupBy(item => item.AssignedBuildingExternalId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
@@ -2675,7 +2685,17 @@ public class NetworkTelemetryService
             summaries[buildingExternalId] = new NetworkTelemetryBuildingRiskSummaryViewModel
             {
                 BuildingExternalId = buildingExternalId,
-                InventoryCount = inventoryCount
+                InventoryCount = inventoryCount,
+                ByType = inventoryRows
+                    .Where(item => string.Equals(item.AssignedBuildingExternalId, buildingExternalId, StringComparison.OrdinalIgnoreCase))
+                    .GroupBy(item => NormalizeInventoryCategory(item.InferredCategory), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => new NetworkTelemetryBuildingTypeMatchSummaryViewModel
+                        {
+                            InventoryCount = group.Count()
+                        },
+                        StringComparer.OrdinalIgnoreCase)
             };
             observedInventoryIds[buildingExternalId] = [];
         }
@@ -2683,8 +2703,8 @@ public class NetworkTelemetryService
         foreach (var observation in observations)
         {
             var buildingExternalId = observation.ImportedInventoryItemId is Guid importedId &&
-                                     inventoryById.TryGetValue(importedId, out var assignedBuilding)
-                ? assignedBuilding
+                                     inventoryById.TryGetValue(importedId, out var inventoryMatch)
+                ? inventoryMatch.BuildingExternalId
                 : observation.BuildingExternalId;
 
             if (string.IsNullOrWhiteSpace(buildingExternalId))
@@ -2710,9 +2730,18 @@ public class NetworkTelemetryService
             summary.MaxRiskScore = Math.Max(summary.MaxRiskScore, observation.RiskScore);
 
             if (observation.ImportedInventoryItemId is Guid observedId &&
-                inventoryById.ContainsKey(observedId))
+                inventoryById.TryGetValue(observedId, out var observedInventory))
             {
-                observedInventoryIds[buildingExternalId].Add(observedId);
+                if (observedInventoryIds[buildingExternalId].Add(observedId))
+                {
+                    if (!summary.ByType.TryGetValue(observedInventory.Category, out var typeSummary))
+                    {
+                        typeSummary = new NetworkTelemetryBuildingTypeMatchSummaryViewModel();
+                        summary.ByType[observedInventory.Category] = typeSummary;
+                    }
+
+                    typeSummary.ObservedInventoryCount++;
+                }
             }
         }
 
@@ -2725,6 +2754,16 @@ public class NetworkTelemetryService
                 summary.MatchRate = summary.InventoryCount == 0
                     ? 0
                     : Math.Round(observedCount * 100.0 / summary.InventoryCount, 1);
+                summary.ByType = summary.ByType.ToDictionary(
+                    entry => entry.Key,
+                    entry =>
+                    {
+                        entry.Value.MatchRate = entry.Value.InventoryCount == 0
+                            ? 0
+                            : Math.Round(entry.Value.ObservedInventoryCount * 100.0 / entry.Value.InventoryCount, 1);
+                        return entry.Value;
+                    },
+                    StringComparer.OrdinalIgnoreCase);
                 summary.MaxRiskLevel = summary.DeviceCount == 0
                     ? "low"
                     : summary.CriticalCount > 0
@@ -2810,6 +2849,8 @@ public class NetworkTelemetryService
         string OrganizationalUnit,
         string AssignedBuildingExternalId,
         string AssignedRoomExternalId);
+
+    private sealed record InventoryCoverageRow(string BuildingExternalId, string Category);
 
     internal sealed record SyncedEquipmentMatchRecord(
         Guid Id,

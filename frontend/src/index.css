@@ -2201,10 +2201,6 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     }
 }
 
-.map-equipment-type-filter.building-match-active .map-equipment-type-filter-field {
-    display: none;
-}
-
 .building-name-label {
     width: auto;
     min-width: 56px;
