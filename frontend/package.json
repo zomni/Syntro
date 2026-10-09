@@ -6,7 +6,7 @@
   "scripts": {
     "test": "jest",
     "build": "node create_dist.js && webpack",
-    "dev": "docker compose -f ../docker-compose.yml up -d --build && echo \"\n************************************************\n* Started development stack on localhost:8080 *\n************************************************\n\"",
+    "dev": "docker compose -f ../docker-compose.yml up -d --build && echo \"\n************************************************\n* Started development stack on localhost:8081 *\n************************************************\n\"",
     "stop-dev": "docker compose -f ../docker-compose.yml down && echo \"\n****************************\n* Ended development stack  *\n****************************\n\""
   },
   "author": "Syntro contributors",
@@ -18,8 +18,5 @@
     "jest": "^29.7.0",
     "webpack": "^5.73.0",
     "webpack-cli": "^4.10.0"
-  },
-  "dependencies": {
-    "leaflet-path-transform": "^1.9.0"
   }
 }

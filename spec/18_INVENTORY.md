@@ -1,37 +1,37 @@
-# Inventory
+# Inventario
 
-## Purpose
+## Propósito
 
-Manage equipment assets, their assignment to locations, and imported inventory.
+Gestionar los activos de equipo, su asignación a ubicaciones y el inventario importado.
 
-## Entities
+## Entidades
 
-- ImportedInventoryItem: imported or manually created inventory.
-- InventoryAliasRule: rules to map textual locations to buildings/rooms.
-- SyncedEquipment: historical/synced equipment by building/room.
+- ImportedInventoryItem: inventario importado o creado manualmente.
+- InventoryAliasRule: reglas para mapear ubicaciones textuales a buildings/rooms.
+- SyncedEquipment: equipos históricos/sincronizados por building/room.
 
-## ImportedInventoryItem Fields
+## Campos de ImportedInventoryItem
 
-- SerialNumber: priority identifier.
-- InferredCategory: normalized category (configurable, SPEC 08).
-- InferredStatus: operational status.
-- AssignedBuildingExternalId: assigned building.
-- AssignedRoomExternalId: assigned room.
-- AssignedFloor: assigned floor.
-- DeliveryFormPdfFileName: associated PDF, if any.
-- MatchedBuildingExternalId / MatchedRoomExternalId: automatic reconciliation suggestions.
-- AssignmentUpdatedAtUtc: last manual assignment date.
+- SerialNumber: identificador prioritario.
+- InferredCategory: categoría normalizada (configurable, SPEC 08).
+- InferredStatus: estado operativo.
+- AssignedBuildingExternalId: building asignado.
+- AssignedRoomExternalId: room asignado.
+- AssignedFloor: piso asignado.
+- DeliveryFormPdfFileName: PDF asociado, si existe.
+- MatchedBuildingExternalId / MatchedRoomExternalId: sugerencias de reconciliación automática.
+- AssignmentUpdatedAtUtc: fecha de la última asignación manual.
 
-## Flows
+## Flujos
 
-- Excel import with configurable category mapping.
-- Manual create/edit/delete.
-- Assignment to building/room/floor.
-- Reconciliation of inventory against locations.
-- PDF attachment per equipment.
+- Importación de Excel con mapeo de categorías configurable.
+- Crear/editar/eliminar manual.
+- Asignación a building/room/floor.
+- Reconciliación del inventario contra ubicaciones.
+- Adjuntar PDF por equipo.
 
-## Rules
+## Reglas
 
-- The backend is the priority data source for inventory.
-- Sensitive inventory mutations are audited.
-- No client-specific normalization (SPEC 08).
+- El backend es la fuente de datos prioritaria para el inventario.
+- Las mutaciones sensibles de inventario se auditan.
+- Sin normalización específica del cliente (SPEC 08).

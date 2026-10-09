@@ -1,41 +1,41 @@
-# Audit & Backups
+# Auditoría y Respaldos
 
-## Purpose
+## Propósito
 
-Formal audit logging and scheduled database backups.
+Registro formal de auditoría y respaldos programados de la base de datos.
 
-## Audit
+## Auditoría
 
-`AuditLogEntries` records:
+`AuditLogEntries` registra:
 
-- user
+- usuario
 - IP
 - user-agent
-- resource
-- result
-- severity
-- previous and new value
+- recurso
+- resultado
+- severidad
+- valor anterior y nuevo
 
-Audited actions:
+Acciones auditadas:
 
-- Inventory mutations
-- Database export/import/restore
-- PDF upload/download/delete
-- Login / logout / MFA / denied access
-- Critical configuration changes
-- Map editor mutations (manual buildings, geometry overrides, walking routes)
-- Points of interest mutations (create/update/delete, see SPEC 09)
+- Mutaciones de inventario
+- Exportación/importación/restauración de base de datos
+- Subida/descarga/eliminación de PDF
+- Login / logout / MFA / acceso denegado
+- Cambios de configuración críticos
+- Mutaciones de los editores de mapa (edificios manuales, overrides de geometría, rutas peatonales)
+- Mutaciones de puntos de interés (crear/actualizar/eliminar, ver SPEC 09)
 
-## Backups
+## Respaldos
 
-- SQLite backups via a hosted service.
-- Backup hash and history in `BackupHistories`.
-- Retention policy and cleanup of expired backups.
-- Manual backup endpoint.
-- Database export / import / restore from the dashboard.
+- Respaldos SQLite vía un hosted service.
+- Hash e historial de respaldos en `BackupHistories`.
+- Política de retención y limpieza de respaldos expirados.
+- Endpoint de respaldo manual.
+- Exportación / importación / restauración de base de datos desde el dashboard.
 
-## Rules
+## Reglas
 
-- The database file is not versioned.
-- Backup path and retention are configurable.
-- Backup history entries are auditable.
+- El archivo de base de datos no se versiona.
+- La ruta de respaldo y la retención son configurables.
+- Las entradas del historial de respaldos son auditables.

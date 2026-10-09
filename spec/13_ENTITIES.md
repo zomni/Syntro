@@ -1,67 +1,67 @@
-# Core Entities
+# Entidades Núcleo
 
 ## Campus
-Top-level site configured in the template configuration. Drives map bounds, center, floors and data paths.
+Sitio de nivel superior configurado en la configuración de la plantilla. Define bounds, centro, pisos y rutas de datos del mapa.
 
 ## Building
-A physical building inside a campus.
+Edificio físico dentro de un campus.
 
 ## Floor
-A level inside a building.
+Nivel dentro de un building.
 
 ## Room
-A space inside a building.
+Espacio dentro de un building.
 
 ## Equipment
-An inventory asset identified by serial number.
+Activo de inventario identificado por número de serie.
 
 ## Category
-Configurable inventory classification (for example pc, printer, scanner).
+Clasificación de inventario configurable (por ejemplo pc, printer, scanner).
 
 ## PointOfInterest
-A map marker with a type, name and coordinates.
+Marcador del mapa con tipo, nombre y coordenadas.
 
 ## SyncedBuilding / SyncedRoom
-Locations managed or overridden by the backend.
+Ubicaciones gestionadas o sobreescritas por el backend.
 
 ## ManualRoom
-A room created from the map (`roomEditor.js`). Belongs to a building (`BuildingExternalId`)
-and a `Floor`, identified by `ExternalId` (`MAN-*` prefix in the editor, unique), polygon
-geometry in `GeometryJson`, plus display metadata (ShortName, Type, Unit, Service, Status,
-Capacity, Notes). SERVER entity: `ManualRoom` (auditable, soft delete).
+Una sala creada desde el mapa (`roomEditor.js`). Pertenece a un building (`BuildingExternalId`)
+y a un `Floor`, se identifica por `ExternalId` (prefijo `MAN-*` en el editor, único), geometría
+de polígono en `GeometryJson`, más metadatos de visualización (ShortName, Type, Unit, Service,
+Status, Capacity, Notes). Entidad SERVER: `ManualRoom` (auditable, soft delete).
 
 ## Organization / CampusSite
-Multi-tenant containers: an `Organization` owns `CampusSite` records (each with a
-`CampusKey`, name, school, floors, defaultFloor, center/zoom/bounds); a site maps to a
-campus in the runtime frontend config. Only `superadmin` manages organizations; org
-admins can only access their own sites.
+Contenedores multi-tenant: una `Organization` posee registros `CampusSite` (cada uno con
+`CampusKey`, nombre, school, pisos, defaultFloor, centro/zoom/bounds); un sitio mapea a un
+campus en la configuración runtime del frontend. Solo `superadmin` gestiona organizaciones; los
+admins de org solo pueden acceder a sus propios sitios.
 
 ## ManualBuilding
-A building created from the map.
+Un building creado desde el mapa.
 
 ## BuildingGeometryOverride
-Polygon edit or move applied to an existing building.
+Edición o movimiento de polígono aplicado a un building existente.
 
 ## WalkingRouteNode / WalkingRouteEdge
-Nodes and edges of the walkable network.
+Nodos y aristas de la red peatonal.
 
 ## NetworkTelemetrySnapshot
-One scheduled scan result for a target.
+Un resultado de escaneo programado para un objetivo.
 
 ## NetworkTelemetryObservation
-A single probe result inside a snapshot.
+Un único resultado de sonda dentro de un snapshot.
 
 ## ImportedInventoryItem
-Inventory imported from Excel or created from a delivery form.
+Inventario importado desde Excel o creado desde un formulario de entrega.
 
 ## AuthUser
-Account with access to the platform.
+Cuenta con acceso a la plataforma.
 
 Roles
-- superadmin (multi-tenant: manages organizations/sites, sees all campuses)
+- superadmin (multi-tenant: gestiona organizaciones/sitios, ve todos los campuses)
 - admin
 - editor
 - viewer
 - auditor
 
-Every entity uses the common audit invariants defined in SPEC 14.
+Toda entidad usa las invariantes de auditoría comunes definidas en SPEC 14.

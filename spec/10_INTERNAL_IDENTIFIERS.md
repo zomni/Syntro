@@ -1,29 +1,29 @@
-# Internal Application Identifiers
+# Identificadores Internos de la Aplicación
 
-## Purpose
+## Propósito
 
-Centralize internal application prefixes (storage, events, window names) so the application can rename them without touching every file.
+Centralizar los prefijos internos de la aplicación (almacenamiento, eventos, nombres de ventana) para poder renombrarlos sin tocar cada archivo.
 
-## Current State
+## Estado Actual
 
-- Storage prefixes `sotero_map_*`: `networkTelemetryStorage.js`, `buildingBackupStorage.js`, `featureDisplay.js:259`, `walkingRouteLayer.js`, `walkingRouteStorage.js`.
-- Custom events `sotero-*`: `sotero-map-data-refreshed`, `sotero-session-changed`, `sotero-admin-map-tool-mode`, `sotero-building-layer-click`.
-- Window name `sotero-dashboard`; globals `window.openSoteroDashboard`, `soteroAdminMapToolMode`.
+- Prefijos de almacenamiento `sotero_map_*`: `networkTelemetryStorage.js`, `buildingBackupStorage.js`, `featureDisplay.js:259`, `walkingRouteLayer.js`, `walkingRouteStorage.js`.
+- Eventos personalizados `sotero-*`: `sotero-map-data-refreshed`, `sotero-session-changed`, `sotero-admin-map-tool-mode`, `sotero-building-layer-click`.
+- Nombre de ventana `sotero-dashboard`; globals `window.openSoteroDashboard`, `soteroAdminMapToolMode`.
 
-## Required Changes
+## Cambios Requeridos
 
-- Concentrate all prefixes and identifiers in a constants module derived from the application configuration (SPEC 01).
-- Replace usages with the module.
+- Concentrar todos los prefijos e identificadores en un módulo de constantes derivado de la configuración de la aplicación (SPEC 01).
+- Reemplazar los usos por el módulo.
 
-## Rules
+## Reglas
 
-- Default values keep current behavior; the configuration allows renaming.
-- No client token remains hardcoded.
+- Los valores por defecto mantienen el comportamiento actual; la configuración permite renombrar.
+- Ningún token del cliente queda hardcodeado.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Changing the prefix in configuration updates storage keys, events and window names.
-- Feature behavior is unchanged.
+- Cambiar el prefijo en configuración actualiza las claves de almacenamiento, los eventos y los nombres de ventana.
+- El comportamiento de las funcionalidades no cambia.
 
 ## Decisiones de implementación
 

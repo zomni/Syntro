@@ -1,51 +1,51 @@
-# Product Identity & Branding
+# Identidad de Producto y Branding
 
-## Purpose
+## Propósito
 
-Remove all client and heritage product identity and make branding configurable.
+Eliminar toda identidad del cliente y de productos heredados y hacer configurable el branding.
 
-## Current State
+## Estado Actual
 
-Frontend (formerly `sotero_map`):
+Frontend (antes `sotero_map`):
 
-- `package.json`: `name: "campusmap"`, heritage repository and author.
+- `package.json`: `name: "campusmap"`, repositorio y autor heredados.
 - `index.html`: `<title>sotero_map</title>`, `lang="fr"`.
-- `LICENSE.md`: heritage copyright holder.
-- Logo `app-logo-frontend.svg` (teal `#1D9E75`) mismatches the CSS theme primary `#2d79a0`.
-- Language leftovers: French in `src/components/markers.js`, English in `src/views/draw.js` and `src/components/autocompleteSearchBox.js`.
+- `LICENSE.md`: titular de copyright heredado.
+- Logo `app-logo-frontend.svg` (teal `#1D9E75`) que no coincide con el color primario del tema CSS `#2d79a0`.
+- Restos de idioma: francés en `src/components/markers.js`, inglés en `src/views/draw.js` y `src/components/autocompleteSearchBox.js`.
 
-Backend (formerly `sotero_map_api`):
+Backend (antes `sotero_map_api`):
 
-- `SetApplicationName("SoteroMap.API")` (DataProtection purpose).
-- Cookies `SoteroMap.Auth` and `SoteroMap.MfaPending`.
-- Claims `sotero:*` in `AuthController.cs` (`sotero:remember_me`, `sotero:can_manage_users`, `sotero:mfa_*`).
-- Header `X-Sotero-Public-Path` in `Program.cs`.
-- MFA issuer `SoteroMap`.
-- Logo `wwwroot/assets/branding/app-logo-backend.svg` (hospital cross).
-- Views: "SoteroMap Admin" titles in `_Layout.cshtml` and auth views.
+- `SetApplicationName("SoteroMap.API")` (propósito de DataProtection).
+- Cookies `SoteroMap.Auth` y `SoteroMap.MfaPending`.
+- Claims `sotero:*` en `AuthController.cs` (`sotero:remember_me`, `sotero:can_manage_users`, `sotero:mfa_*`).
+- Header `X-Sotero-Public-Path` en `Program.cs`.
+- Emisor MFA `SoteroMap`.
+- Logo `wwwroot/assets/branding/app-logo-backend.svg` (cruz de hospital).
+- Vistas: títulos "SoteroMap Admin" en `_Layout.cshtml` y las vistas de autenticación.
 
-## Required Changes
+## Cambios Requeridos
 
-- Rename the npm package to Syntro.
-- Set `<title>` and `lang` to generic template values.
-- Replace cookies with `Syntro.Auth` / `Syntro.MfaPending`.
-- Replace the claims namespace with `syntro:*`.
-- Replace the DataProtection application name and MFA issuer.
-- Replace branding assets with neutral logos.
-- Convert theme colors to CSS variables (single source).
-- Normalize language leftovers to the template locale (es-CL).
-- Replace license and author metadata.
+- Renombrar el paquete npm a Syntro.
+- Establecer `<title>` y `lang` a valores genéricos de plantilla.
+- Reemplazar las cookies por `Syntro.Auth` / `Syntro.MfaPending`.
+- Reemplazar el namespace de claims por `syntro:*`.
+- Reemplazar el nombre de la aplicación de DataProtection y el emisor MFA.
+- Reemplazar los assets de branding por logos neutrales.
+- Convertir los colores del tema a variables CSS (una sola fuente).
+- Normalizar los restos de idioma a la locale de la plantilla (es-CL).
+- Reemplazar los metadatos de licencia y autor.
 
-## Rules
+## Reglas
 
-- No `sotero`, `SoteroMap`, `campusmap`, `CampusMap` or heritage names remain in shipped code or metadata.
-- Rebranding must be achievable through configuration where possible (SPEC 01).
+- No deben quedar `sotero`, `SoteroMap`, `campusmap`, `CampusMap` ni nombres heredados en el código ni en los metadatos enviados.
+- El rebranding debe ser alcanzable por configuración donde sea posible (SPEC 01).
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Grep across both projects returns zero client/heritage tokens in shipped files.
-- `npm run build` and `dotnet build` pass after renaming.
-- Login, MFA and session flows work with the new cookie and claim names.
+- Un grep en ambos proyectos devuelve cero tokens del cliente/heredados en los archivos enviados.
+- `npm run build` y `dotnet build` pasan tras el renombrado.
+- Los flujos de login, MFA y sesión funcionan con los nuevos nombres de cookies y claims.
 
 ## Decisiones de implementación
 

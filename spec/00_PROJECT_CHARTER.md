@@ -1,16 +1,16 @@
-# Project Charter
+# Carta del Proyecto
 
-## Project Name
+## Nombre del Proyecto
 
 Syntro — aplicación de mapeo indoor, inventario de activos y telemetría de red
 para el **Complejo Hospitalario Sotero del Río** (campus único `sotero`).
 
-## Purpose
+## Propósito
 
-Build and operate the indoor mapping, asset inventory and network telemetry
-application for the hospital, as a single-client deployment on a single campus.
+Construir y operar la aplicación de mapeo indoor, inventario de activos y telemetría
+de red para el hospital, como un despliegue de cliente único en un único campus.
 
-## Evolution
+## Evolución
 
 Syntro comenzó como un extracto neutral reutilizable ("white-label") derivado de
 los repositorios cliente y se consolidó como producto de **cliente único**:
@@ -23,38 +23,38 @@ los repositorios cliente y se consolidó como producto de **cliente único**:
   está hardcodeado en el código), pero la operación y configuración apuntan a un
   solo hospital.
 
-## Origin
+## Origen
 
-The application is derived from two existing repositories:
+La aplicación deriva de dos repositorios existentes:
 
-- Frontend: Leaflet-based map application (formerly `sotero_map`).
-- Backend: ASP.NET Core 8 + EF Core SQLite API and admin dashboard (formerly `sotero_map_api`).
+- Frontend: aplicación de mapa basada en Leaflet (antes `sotero_map`).
+- Backend: API ASP.NET Core 8 + EF Core SQLite y panel de administración (antes `sotero_map_api`).
 
-Existing functionality is preserved and reused, not rebuilt.
+La funcionalidad existente se preserva y reutiliza, no se reconstruye.
 
-## Core Objectives
+## Objetivos Principales
 
-- Indoor map application for campus `sotero`
-- Building, floor and room management (incl. sugerencia de salas)
-- Inventory management with configurable categories
-- Admin map editing tools (buildings, geometry, walking routes, POIs)
-- Walking routes and route planning
-- Points of interest management
-- Network telemetry and scheduled captures
-- Equipment delivery forms with PDF generation
-- Authentication, roles, MFA, audit, backups and scoping por organización/campus
+- Aplicación de mapa indoor para el campus `sotero`
+- Gestión de edificios, pisos y salas (incl. sugerencia de salas)
+- Gestión de inventario con categorías configurables
+- Herramientas admin de edición de mapa (edificios, geometría, rutas peatonales, POIs)
+- Rutas peatonales y planificación de rutas
+- Gestión de puntos de interés
+- Telemetría de red y capturas programadas
+- Formularios de entrega de equipos con generación de PDF
+- Autenticación, roles, MFA, auditoría, respaldos y scoping por organización/campus
 
-## Tenets
+## Principios
 
-- Reuse before replace
-- Generalize before rewrite
-- Configure before hardcode
-- Extend before modify
-- Keep backward compatibility
-- Minimize breaking changes
-- No data sensible del cliente hardcodeado en el código
+- Reutilizar antes que reemplazar
+- Generalizar antes que reescribir
+- Configurar antes que hardcodear
+- Extender antes que modificar
+- Mantener compatibilidad hacia atrás
+- Minimizar cambios rupturistas
+- Ningún dato sensible del cliente hardcodeado en el código
 
-## MVP Constraints
+## Restricciones del MVP
 
 - ASP.NET Core 8
 - EF Core + SQLite

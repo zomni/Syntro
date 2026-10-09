@@ -4979,7 +4979,7 @@ public class AdminController : Controller
         if (!string.IsNullOrWhiteSpace(requestHost))
         {
             var requestScheme = string.IsNullOrWhiteSpace(Request?.Scheme) ? "http" : Request.Scheme;
-            return $"{requestScheme}://{requestHost}:8080";
+            return $"{requestScheme}://{requestHost}:8081";
         }
 
         var allowedOrigins = _configuration["AllowedOrigins"];
@@ -4994,7 +4994,7 @@ public class AdminController : Controller
                 return frontendOrigin;
         }
 
-        return "http://localhost:8080";
+        return "http://localhost:8081";
     }
 
     private async Task<bool> HasNoPackageDataAsync(CancellationToken ct = default)

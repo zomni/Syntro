@@ -1,48 +1,48 @@
-# Configuration Layer
+# Capa de Configuración
 
-## Purpose
+## Propósito
 
-Centralize every client-specific setting into a single configurable source of truth, with generic defaults, on backend and frontend.
+Centralizar cada ajuste específico del cliente en una única fuente de verdad configurable, con valores por defecto genéricos, en backend y frontend.
 
-## Current State
+## Estado Actual
 
-Backend defaults couple the API to the client:
+Los valores por defecto del backend acoplan la API al cliente:
 
-- `appsettings.json`: LDAP `HELIOS.ssmso.cl` / `Domain=SSMSO` / `BaseDn=DC=ssmso,DC=cl` / `10.6.50.6`; `MfaSettings:Issuer="SoteroMap"`; `AuthSettings:BreakGlassUsernames="ADMIN"`; `NetworkTelemetrySettings` with client CIDRs and `IngestApiKey="SoteroMapNetworkCollector-2026"`; CORS `localhost:8080,3000`; `FrontendAppUrl`.
-- Database file `soteromap.db` (`SqliteDatabasePathResolver.cs`).
-- Data roots: `SQLITE_DATA_ROOT`, `FrontendDataRoot`, fallback `../../../../../sotero_map/src/data` (`FrontendSyncService.ResolveDataRoot`).
-- Artifact names: `soteromap-backup-*`, `soteromap-data-package-*`, `soteromap-delivery-preview-*`.
+- `appsettings.json`: LDAP `HELIOS.ssmso.cl` / `Domain=SSMSO` / `BaseDn=DC=ssmso,DC=cl` / `10.6.50.6`; `MfaSettings:Issuer="SoteroMap"`; `AuthSettings:BreakGlassUsernames="ADMIN"`; `NetworkTelemetrySettings` con CIDRs del cliente e `IngestApiKey="SoteroMapNetworkCollector-2026"`; CORS `localhost:8080,3000`; `FrontendAppUrl`.
+- Archivo de base de datos `soteromap.db` (`SqliteDatabasePathResolver.cs`).
+- Raíces de datos: `SQLITE_DATA_ROOT`, `FrontendDataRoot`, fallback `../../../../../sotero_map/src/data` (`FrontendSyncService.ResolveDataRoot`).
+- Nombres de artefactos: `soteromap-backup-*`, `soteromap-data-package-*`, `soteromap-delivery-preview-*`.
 
 Frontend:
 
-- `BACKEND_API_URL = "http://" + HOST_URL + ":5000"` in `src/views/map.js`.
-- Storage prefixes, event names, window names and theme colors hardcoded across modules.
+- `BACKEND_API_URL = "http://" + HOST_URL + ":5000"` en `src/views/map.js`.
+- Prefijos de almacenamiento, nombres de eventos, nombres de ventana y colores de tema hardcodeados en todos los módulos.
 
-## Required Changes
+## Cambios Requeridos
 
 Backend:
 
-- Replace client defaults with generic placeholders in `appsettings.json` and `.env.example`.
-- Make the database file name configurable (default `syntro.db`).
-- Make data roots and artifact name prefixes configurable (default `syntro-*`).
-- Keep environment-variable override precedence over appsettings.
+- Reemplazar los defaults del cliente por marcadores genéricos en `appsettings.json` y `.env.example`.
+- Hacer configurable el nombre del archivo de base de datos (default `syntro.db`).
+- Hacer configurables las raíces de datos y los prefijos de nombres de artefactos (default `syntro-*`).
+- Mantener la precedencia de las variables de entorno por sobre appsettings.
 
 Frontend:
 
-- Introduce a config module exposing: API base URL, campus key, storage prefix, event prefix, window name, theme colors and branding.
-- Remove the hardcoded `:5000` port and same-host assumption.
+- Introducir un módulo de configuración que exponga: URL base de la API, clave de campus, prefijo de almacenamiento, prefijo de eventos, nombre de ventana, colores de tema y branding.
+- Eliminar el puerto `:5000` hardcodeado y la suposición de mismo host.
 
-## Rules
+## Reglas
 
-- Defaults must be valid for a blank installation.
-- No client value may remain as a default.
-- Configuration must be overridable per environment without code changes.
+- Los defaults deben ser válidos para una instalación en blanco.
+- Ningún valor del cliente puede permanecer como default.
+- La configuración debe ser sobreescribible por entorno sin cambios de código.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- A fresh checkout runs with generic defaults and no client tokens.
-- Changing one config value rebrands storage keys, events and the API URL.
-- Environment variables override appsettings without code changes.
+- Un checkout nuevo corre con defaults genéricos y sin tokens del cliente.
+- Cambiar un valor de configuración renombra las claves de almacenamiento, los eventos y la URL de la API.
+- Las variables de entorno sobreescriben appsettings sin cambios de código.
 
 ## Decisiones de implementación
 

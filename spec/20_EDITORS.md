@@ -1,87 +1,87 @@
-# Administrative Map Editors
+# Editores Administrativos del Mapa
 
-## Purpose
+## Propósito
 
-Admin tools for editing the map: buildings, geometry, walking routes, points of interest and the floor layout (rooms).
+Herramientas admin para editar el mapa: edificios, geometría, rutas peatonales, puntos de interés y el layout de piso (salas).
 
-## Unified Panel
+## Panel Unificado
 
-`adminMapToolsPanel.js` hosts the admin tools:
+`adminMapToolsPanel.js` aloja las herramientas admin:
 
-- Add building
-- Edit shape
-- Move building
-- Edit routes
-- Delete routes
-- Split vertex
-- Connect building
-- Undo
+- Agregar edificio
+- Editar forma
+- Mover edificio
+- Editar rutas
+- Eliminar rutas
+- Dividir vértice
+- Conectar edificio
+- Deshacer
 
-The panel shows only with an admin session.
+El panel se muestra solo con una sesión de admin.
 
-## Building Editor
+## Editor de Edificios
 
-- Create buildings by drawing a polygon (`manualBuildingEditor.js`).
-- POST to the backend and refresh the map and caches.
+- Crear edificios dibujando un polígono (`manualBuildingEditor.js`).
+- POST al backend y refrescar el mapa y las cachés.
 
-## Geometry Editor
+## Editor de Geometría
 
-- Edit the shape of an existing building (`buildingGeometryEditor.js`).
-- Move a building.
-- Persist the override in the backend.
+- Editar la forma de un edificio existente (`buildingGeometryEditor.js`).
+- Mover un edificio.
+- Persistir el override en el backend.
 
-## Walking Route Editor
+## Editor de Rutas Peatonales
 
-- Create routes by clicks.
-- Free drawing.
-- Move, join and split vertices.
-- Connect routes to building edges.
-- Delete segments and undo the last action.
-- Save and refresh the walking route layer.
+- Crear rutas con clics.
+- Dibujo libre.
+- Mover, unir y dividir vértices.
+- Conectar rutas a los bordes de edificios.
+- Eliminar segmentos y deshacer la última acción.
+- Guardar y refrescar la capa de rutas peatonales.
 
-## Points of Interest Editor
+## Editor de Puntos de Interés
 
-- Create, edit and delete points of interest (SPEC 09). (DONE: `poiEditor.js`)
-- Rendered reusing `markers.js`. (DONE)
-- Add mode: single map click places the point and opens the create form.
-- Manage mode: list all POIs with edit and delete actions.
+- Crear, editar y eliminar marcadores de campus (SPEC 09). (HECHO: `campusMarkerEditor.js`)
+- Renderizados reutilizando `markers.js`. (HECHO)
+- Modo agregar: un clic en el mapa coloca el punto y abre el formulario de creación.
+- Modo gestionar: lista todos los POIs con acciones de editar y eliminar.
 
-## Room Editor (manual rooms, floor layout)
+## Editor de Salas (salas manuales, layout de piso)
 
-`roomEditor.js` edits the floor layout of a building inside a modal Leaflet map
-(`popupMap`, zoom up to 22). It manages manual rooms (SPEC 13 `ManualRoom`).
-Only visible to admins and bound to the current building + floor of the main map.
+`roomEditor.js` edita el layout de piso de un edificio dentro de un mapa Leaflet modal
+(`popupMap`, zoom hasta 22). Gestiona salas manuales (SPEC 13 `ManualRoom`).
+Solo visible para admins y ligado al edificio + piso actual del mapa principal.
 
-- **Drawing**: hand-drawn free polygon, rectangle, circle, and free click-to-vertex
-  drawing; vertex snap.
-- **Multi-selection is always active** (no activation button). Expected gestures:
-  - `ctrl+click` (left) = toggle selection (add/remove a room).
-  - `Ctrl+drag` = move selection as a rigid group (single element → single handler).
-  - `Shift+drag` = rotate selection around the group centroid
-    (single element → rotate around its own center).
-  - Plain drag = no-op; gestures act only when the drag starts on an
-    already-selected element. The map is locked during a gesture and the lock is
-    released on every exit path.
-  - Drag over empty map area draws a selection box (marquee); ``ctrl+drag`` box
-    adds to the current selection.
-- **Rigid + conformal rotation**: rotation is applied in projected pixel space
-  (`latLngToContainerPoint` / `containerPointToLatLng`), so shapes keep their exact
-  form and size (no rhomboid/shrink distortion); each element keeps its own
-  `scaleX/scaleY/rotation` as a separate visual transform.
-- **Editing**: side panel with room properties (name, type, capacity, etc.), delete
-  (soft-delete list kept in `removedExternalIds`), copy/paste (`Ctrl+C/V`),
-  undo/redo (`Ctrl+Z/Y`) covering create, delete, move/rotate geometry, and
-  property updates, save (`G`). Room IDs use the `MAN-*` prefix.
-- **Suggestions**: "suggest rooms automatically" generates room bands against the
-  building outline with wall contact, corner reservation, de-duplication and
-  multi-band fill; results wrap the outline corners (`roomEditorGeometry.js`).
-- **Layout copy**: copy the layout of one floor to another floor of the same building.
-- **Persistence**: `PUT/POST /api/manual-rooms` per element plus deletes, then
-  `refreshCurrentMapData()` + `syntro-rooms-changed` event.
+- **Dibujo**: polígono libre a mano, rectángulo, círculo y dibujo libre clic-a-vértice;
+  snap de vértices.
+- **La multiselección está siempre activa** (sin botón de activación). Gestos esperados:
+  - `ctrl+click` (izquierdo) = alternar selección (agregar/quitar una sala).
+  - `Ctrl+drag` = mover la selección como grupo rígido (elemento único → un solo handler).
+  - `Shift+drag` = rotar la selección alrededor del centroide del grupo
+    (elemento único → rotar alrededor de su propio centro).
+  - Drag simple = no-op; los gestos actúan solo cuando el drag comienza sobre un
+    elemento ya seleccionado. El mapa se bloquea durante un gesto y el bloqueo se
+    libera en todas las rutas de salida.
+  - Arrastrar sobre área vacía del mapa dibuja un recuadro de selección (marquee); el recuadro
+    `ctrl+drag` suma a la selección actual.
+- **Rotación rígida + conforme**: la rotación se aplica en espacio de píxeles proyectado
+  (`latLngToContainerPoint` / `containerPointToLatLng`), de modo que las formas conservan su
+  forma y tamaño exactos (sin distorsión romboide/encogimiento); cada elemento conserva su
+  propio `scaleX/scaleY/rotation` como una transformación visual separada.
+- **Edición**: panel lateral con propiedades de la sala (nombre, tipo, capacidad, etc.), eliminar
+  (lista de soft-delete en `removedExternalIds`), copiar/pegar (`Ctrl+C/V`),
+  deshacer/rehacer (`Ctrl+Z/Y`) cubriendo crear, eliminar, mover/rotar geometría y
+  actualizaciones de propiedades, guardar (`G`). Los IDs de sala usan el prefijo `MAN-*`.
+- **Sugerencias**: "sugerir salas automáticamente" genera bandas de salas contra el
+  contorno del edificio con contacto de muro, reserva de esquinas, de-duplicación y
+  relleno multi-banda; los resultados envuelven las esquinas del contorno (`roomEditorGeometry.js`).
+- **Copiar layout**: copiar el layout de un piso a otro piso del mismo edificio.
+- **Persistencia**: `PUT/POST /api/manual-rooms` por elemento más eliminaciones, luego
+  `refreshCurrentMapData()` + evento `syntro-rooms-changed`.
 
-## Rules
+## Reglas
 
-- Only one admin tool active at a time.
-- Admin tools share visual state through the unified panel.
-- Changes must reflect without requiring a manual reload.
-- Tools visibility syncs with the session state.
+- Solo una herramienta admin activa a la vez.
+- Las herramientas admin comparten estado visual a través del panel unificado.
+- Los cambios deben reflejarse sin requerir recarga manual.
+- La visibilidad de las herramientas se sincroniza con el estado de sesión.

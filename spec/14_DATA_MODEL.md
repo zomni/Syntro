@@ -1,14 +1,14 @@
-# Data Model
+# Modelo de Datos
 
-## General Rules
+## Reglas Generales
 
-- GUID primary keys.
-- UTC timestamps.
-- Soft delete supported (deleted_at).
-- Audit fields on mutable entities.
-- Optimized for SQLite via EF Core.
+- Claves primarias GUID.
+- Timestamps en UTC.
+- Soft delete soportado (deleted_at).
+- Campos de auditoría en entidades mutables.
+- Optimizado para SQLite vía EF Core.
 
-## Common Columns
+## Columnas Comunes
 
 id
 created_at
@@ -19,31 +19,31 @@ updated_by
 version
 is_active
 
-## Constraints
+## Restricciones
 
-- Campus: unique name, top-level; sites (`CampusSite`) belong to one `Organization`.
-- Building: belongs to one Campus, unique code inside Campus.
-- Floor: belongs to one Building, level unique inside Building.
-- Room: belongs to one Building.
-- Equipment: serial number is the priority identifier.
-- PointOfInterest: belongs to one Campus (and optionally one Floor).
-- WalkingRouteEdge: connects two WalkingRouteNodes.
-- ManualRoom: unique `ExternalId`, index `(BuildingExternalId, Floor)`.
-- RoomGeometryOverride: unique `RoomExternalId` (one geometry override per room).
+- Campus: nombre único, nivel superior; los sitios (`CampusSite`) pertenecen a una `Organization`.
+- Building: pertenece a un Campus, código único dentro del Campus.
+- Floor: pertenece a un Building, nivel único dentro del Building.
+- Room: pertenece a un Building.
+- Equipment: el número de serie es el identificador prioritario.
+- PointOfInterest: pertenece a un Campus (y opcionalmente a un Floor).
+- WalkingRouteEdge: conecta dos WalkingRouteNodes.
+- ManualRoom: `ExternalId` único, índice `(BuildingExternalId, Floor)`.
+- RoomGeometryOverride: `RoomExternalId` único (un override de geometría por sala).
 
-## Naming / id conventions
+## Convenciones de nombres / id
 
-- Rooms use a globally unique `ExternalId`; the editor emits
-  `MAN-*` for manual rooms. Legacy rooms synced from the source keep their source `ExternalId`.
-- `GeometryJson` stores a GeoJSON `Polygon` (`coordinates[0]` = closed ring of
-  `[lng, lat]` pairs) for both entities.
+- Las salas usan un `ExternalId` globalmente único; el editor emite
+  `MAN-*` para las salas manuales. Las salas legacy sincronizadas desde la fuente conservan su `ExternalId` de origen.
+- `GeometryJson` almacena un `Polygon` GeoJSON (`coordinates[0]` = anillo cerrado de
+  pares `[lng, lat]`) para ambas entidades.
 
 ## Soft Delete
 
-- DELETE endpoints perform soft delete only.
-- Active records use is_active=true.
+- Los endpoints DELETE solo realizan soft delete.
+- Los registros activos usan is_active=true.
 
-## Schema Initialization
+## Inicialización del Esquema
 
-- Schema is created via EF migrations plus a neutral schema initializer.
-- No demo data is inserted by default (SPEC 04).
+- El esquema se crea vía migraciones EF más un inicializador de esquema neutral.
+- No se insertan datos demo por defecto (SPEC 04).

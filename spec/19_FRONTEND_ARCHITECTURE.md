@@ -1,45 +1,45 @@
-# Frontend Architecture
+# Arquitectura del Frontend
 
 ## Stack
 
 - Vanilla JavaScript
-- Leaflet (map)
-- Leaflet.draw and custom editors (geometry)
-- Fuse + custom scoring (search)
+- Leaflet (mapa)
+- Leaflet.draw y editores personalizados (geometría)
+- Fuse + scoring personalizado (búsqueda)
 - Webpack (bundler)
-- Portable static build (`create_dist.js`)
+- Build estático portable (`create_dist.js`)
 
-## Structure
+## Estructura
 
 src/
-  assets/     Icons, favicon, building SVGs.
-  components/ UI components and map tools.
-  data/       Campus config, GeoJSON, search index, static backups.
-  lib/        Vendored dependencies (Leaflet, Leaflet.draw, Fuse, jQuery).
-  styles/     CSS for map, search, buttons and layout.
-  utils/      Data loading, navigation, cookies, static backups.
-  views/      Leaflet initialization, popups, feature rendering.
+  assets/     Iconos, favicon, SVGs de edificios.
+  components/ Componentes de UI y herramientas de mapa.
+  data/       Config de campus, GeoJSON, índice de búsqueda, respaldos estáticos.
+  lib/        Dependencias vendorizadas (Leaflet, Leaflet.draw, Fuse, jQuery).
+  styles/     CSS para mapa, búsqueda, botones y layout.
+  utils/      Carga de datos, navegación, cookies, respaldos estáticos.
+  views/      Inicialización de Leaflet, popups, renderizado de features.
 
-## Modes
+## Modos
 
-- With backend: prioritizes updated data from the API.
-- Without backend: uses local JSON and static backups so the map is not empty.
+- Con backend: prioriza datos actualizados desde la API.
+- Sin backend: usa JSON local y respaldos estáticos para que el mapa no quede vacío.
 
-## Campus Config
+## Config de Campus
 
-`src/data/campuses.js` is the canonical template configuration (SPEC 03). Data paths, search index and catalog derive from it.
+`src/data/campuses.js` es la configuración canónica de la plantilla (SPEC 03). Las rutas de datos, el índice de búsqueda y el catálogo derivan de ella.
 
-## Key Modules
+## Módulos Clave
 
-- `views/map.js` — Leaflet instance, bounds, tile layer, location tracking.
-- `views/featureDisplay.js` — building popup experience.
-- `components/autocompleteSearchBox.js` — search.
-- `components/routePlanner.js` — route between buildings.
-- `components/sessionModeBadge.js` — session state and admin visibility.
+- `views/map.js` — instancia de Leaflet, bounds, tile layer, seguimiento de ubicación.
+- `views/featureDisplay.js` — experiencia de popup de edificios.
+- `components/autocompleteSearchBox.js` — búsqueda.
+- `components/routePlanner.js` — ruta entre edificios.
+- `components/sessionModeBadge.js` — estado de sesión y visibilidad de admin.
 
-## Rules
+## Reglas
 
-- Keep backend as priority data source when available.
-- Keep local/static fallback for no-API use.
-- Do not duplicate loose controls; reuse existing panels.
-- Only one admin tool active at a time.
+- Mantener el backend como fuente de datos prioritaria cuando esté disponible.
+- Mantener el fallback local/estático para uso sin API.
+- No duplicar controles sueltos; reutilizar los paneles existentes.
+- Solo una herramienta admin activa a la vez.

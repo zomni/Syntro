@@ -8,7 +8,7 @@ const runtime =
 export const appConfig = {
   apiBaseUrl:
     runtime.apiBaseUrl ||
-    (typeof __API_BASE_URL__ !== "undefined" ? __API_BASE_URL__ : "http://localhost:5000"),
+    (typeof __API_BASE_URL__ !== "undefined" ? __API_BASE_URL__ : "http://localhost:5001"),
   prefix: runtime.prefix || "syntro",
   branding: {
     appName: runtime.appName || "Syntro",

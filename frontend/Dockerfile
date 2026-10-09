@@ -8,7 +8,7 @@ RUN npm ci
 COPY create_dist.js webpack.config.js /app/
 COPY src /app/src
 
-ARG API_BASE_URL=http://localhost:5000
+ARG API_BASE_URL=http://localhost:5001
 ENV API_BASE_URL=$API_BASE_URL
 RUN npm run build
 

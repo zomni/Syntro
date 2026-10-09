@@ -1,41 +1,41 @@
-# Campus / Site Configuration Model
+# Modelo de Configuración de Campus / Sitio
 
-## Purpose
+## Propósito
 
-Make `src/data/campuses.js` the canonical template configuration for the top-level site (campus), and remove the hardcoded campus value from the backend.
+Hacer de `src/data/campuses.js` la configuración canónica de plantilla para el sitio de nivel superior (campus), y eliminar el valor de campus hardcodeado del backend.
 
-## Current State
+## Estado Actual
 
 Frontend:
 
-- `src/data/campuses.js` defines a single campus `sotero` with `school: "cs"`, floors `-1..5`, center, zoom and bounds.
-- Data filenames derive from school + campus: `cs_sotero_*.json`.
-- `findByUrl.js`, `networkTelemetryPanel.js`, `buildingBackupStorage.js`, `networkTelemetryStorage.js` and `routePlanner.js` fall back to the campus `"sotero"`.
-- `manualBuildingEditor.js` sends a hidden `campus="sotero"` field; `walkingRouteEditor.js` and `walkingRouteLayer.js` call `loadWalkingRouteNetwork("sotero")`.
-- `featureDisplay.js:507` calls `/api/frontend-static-backup/save?campus=sotero`.
+- `src/data/campuses.js` define un único campus `sotero` con `school: "cs"`, pisos `-1..5`, centro, zoom y bounds.
+- Los nombres de archivo de datos derivan de school + campus: `cs_sotero_*.json`.
+- `findByUrl.js`, `buildingBackupStorage.js`, `networkTelemetryStorage.js` y `routePlanner.js` recurren al campus `"sotero"`.
+- `manualBuildingEditor.js` envía un campo oculto `campus="sotero"`; `walkingRouteEditor.js` y `walkingRouteLayer.js` llaman a `loadWalkingRouteNetwork("sotero")`.
+- `featureDisplay.js:507` llama a `/api/frontend-static-backup/save?campus=sotero`.
 
 Backend:
 
-- Default campus `"sotero"` in `FrontendSyncService.cs:90`, `ManualBuildingsController.cs:74`, `WalkingRoutesController.cs:77,392`, `FrontendStaticBackupController.cs:35` and `CreateManualBuildingRequest.cs:6`.
+- Campus por defecto `"sotero"` en `FrontendSyncService.cs:90`, `ManualBuildingsController.cs:74`, `WalkingRoutesController.cs:77,392`, `FrontendStaticBackupController.cs:35` y `CreateManualBuildingRequest.cs:6`.
 
-## Required Changes
+## Cambios Requeridos
 
-- Restructure `campuses.js` as the template's campus configuration (documented example, not client content).
-- Derive data file paths, search index and building catalog from the campus configuration.
-- The campus value flows from the frontend configuration in payloads and query params.
-- Remove the backend default `"sotero"`; campus becomes a required parameter or a configured value.
-- Define the template domain contract: Campus → Building → Floor → Room.
+- Reestructurar `campuses.js` como la configuración de campus de la plantilla (ejemplo documentado, no contenido del cliente).
+- Derivar las rutas de archivos de datos, el índice de búsqueda y el catálogo de edificios desde la configuración de campus.
+- El valor de campus fluye desde la configuración del frontend en payloads y query params.
+- Eliminar el default `"sotero"` del backend; el campus pasa a ser un parámetro requerido o un valor configurado.
+- Definir el contrato de dominio de la plantilla: Campus → Building → Floor → Room.
 
-## Rules
+## Reglas
 
-- A new template starts with an example campus that can be edited or removed.
-- The backend must not assume any campus name.
+- Una plantilla nueva comienza con un campus de ejemplo que puede editarse o eliminarse.
+- El backend no debe asumir ningún nombre de campus.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Renaming the campus key in `campuses.js` updates data paths, payloads and backend calls without code edits.
-- No `"sotero"` default remains in the backend.
-- The map renders an empty/example state when no campus data is present.
+- Renombrar la clave de campus en `campuses.js` actualiza rutas de datos, payloads y llamadas al backend sin editar código.
+- No queda ningún default `"sotero"` en el backend.
+- El mapa renderiza un estado vacío/de ejemplo cuando no hay datos de campus.
 
 ## Decisiones de implementación
 

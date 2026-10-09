@@ -1,33 +1,33 @@
-# Network Telemetry Generalization
+# Generalización de la Telemetría de Red
 
-## Purpose
+## Propósito
 
-Keep the network telemetry subsystem (scheduled scans, agent, panel, reports) without client defaults.
+Mantener el subsistema de telemetría de red (escaneos programados, agente, panel, reportes) sin defaults del cliente.
 
-## Current State
+## Estado Actual
 
-- Timezone and locale are configuration-driven: `NetworkTelemetrySettings:DisplayTimeZone` (default `UTC`) and `DisplayLocale` (default `es-CL`), resolved centrally via `Services/TelemetryTimeSettings.cs`.
-- `NetworkTelemetryService.cs` uses instance timezone/culture; `NetworkTelemetryLiveScanHostedService.cs` and `ExtendedSchemaInitializer.cs` resolve them from configuration.
-- Views `Admin/Index.cshtml`, `Admin/NetworkTelemetry.cshtml`, `Auth/MfaSetup.cshtml` and the frontend (`appConfig.js`, `networkTelemetryPanel.js`, `featureDisplay.js`) read the configured timezone/locale.
-- `NetworkTelemetrySettings` defaults: neutral CIDRs (empty), `IngestApiKey="CHANGE_ME"`, UTC timezone.
-- `tools/SoteroMap.NetworkCollector` documented as an optional generic tool with generic configuration.
+- La zona horaria y la locale son dirigidas por configuración: `NetworkTelemetrySettings:DisplayTimeZone` (default `UTC`) y `DisplayLocale` (default `es-CL`), resueltas centralmente vía `Services/TelemetryTimeSettings.cs`.
+- `NetworkTelemetryService.cs` usa la zona horaria/cultura de instancia; `NetworkTelemetryLiveScanHostedService.cs` y `ExtendedSchemaInitializer.cs` las resuelven desde configuración.
+- Las vistas `Admin/Index.cshtml`, `Admin/NetworkTelemetry.cshtml`, `Auth/MfaSetup.cshtml` y el frontend (`appConfig.js`, `featureDisplay.js`) leen la zona horaria/locale configuradas.
+- Defaults de `NetworkTelemetrySettings`: CIDRs neutrales (vacíos), `IngestApiKey="CHANGE_ME"`, zona horaria UTC.
+- `tools/SoteroMap.NetworkCollector` documentado como herramienta genérica opcional con configuración genérica.
 
-## Required Changes
+## Cambios Requeridos
 
-- Move timezone and locale to configuration.
-- Neutralize telemetry defaults (CIDRs, API key, crons, timezone).
-- Document the Windows collector as an optional generic tool with generic configuration.
+- Mover la zona horaria y la locale a configuración.
+- Neutralizar los defaults de telemetría (CIDRs, API key, crons, zona horaria).
+- Documentar el collector de Windows como herramienta genérica opcional con configuración genérica.
 
-## Rules
+## Reglas
 
-- Disabling the feature must not break the rest of the application.
-- Defaults must be valid for a blank installation.
+- Deshabilitar la funcionalidad no debe romper el resto de la aplicación.
+- Los defaults deben ser válidos para una instalación en blanco.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Changing the telemetry timezone and locale configuration updates all displayed timestamps.
-- A fresh install has no client CIDR or API key values.
-- The agent tool runs with generic configuration.
+- Cambiar la zona horaria y la locale configuradas de telemetría actualiza todos los timestamps mostrados.
+- Una instalación nueva no tiene valores de CIDR ni API key del cliente.
+- La herramienta agente corre con configuración genérica.
 
 ## Decisiones de implementación
 

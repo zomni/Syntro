@@ -1,19 +1,19 @@
-# Project Documentation & Onboarding
+# Documentación del Proyecto y Onboarding
 
-## Purpose
+## Propósito
 
-Keep project documentation aligned with the single-client product (Complejo
-Hospitalario Sotero del Río, campus único `sotero`) and free of stale template or
-client tokens.
+Mantener la documentación del proyecto alineada con el producto de cliente único (Complejo
+Hospitalario Sotero del Río, campus único `sotero`) y libre de tokens obsoletos de plantilla o
+del cliente.
 
-## Current State
+## Estado Actual
 
 - `README.md` describe el producto, el campus `sotero` y el stack local
   (API `:5001`, frontend `:8081`).
 - `docs/ARCHITECTURE.md` describe la arquitectura del stack.
 - `PROGRESS.md` registra el avance por fases.
 
-## Required Changes
+## Cambios Requeridos
 
 - Cualquier cambio de producto, campus o stack debe reflejarse en `README.md` y
   `docs/ARCHITECTURE.md` (docs-first).
@@ -22,14 +22,14 @@ client tokens.
 - Mantener separado el registro histórico (`PROGRESS.md`, SPECs) de la
   documentación operativa vigente.
 
-## Rules
+## Reglas
 
-- Documentation must stay synchronized with implementation (docs-first).
-- No client tokens in any document (credenciales, deep links, datos operativos).
+- La documentación debe mantenerse sincronizada con la implementación (docs-first).
+- Sin tokens del cliente en ningún documento (credenciales, deep links, datos operativos).
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Grep sobre la documentación operativa (`README.md`, `docs/`) no devuelve
+- Un grep sobre la documentación operativa (`README.md`, `docs/`) no devuelve
   términos de plantilla/white-label ni tokens del cliente.
 - Un desarrollador nuevo puede levantar el stack y entender el producto desde el README.
 

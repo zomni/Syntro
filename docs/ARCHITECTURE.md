@@ -36,7 +36,6 @@ Syntro es una aplicación de dos partes que se ejecutan como un solo stack:
     fusión con metadatos/overrides del backend; pintado por piso de salas manuales
     (`addManualRoomPolygonsForFloor`).
   - `components/routePlanner.js`, `utils/walkingRouteStorage.js` — rutas entre edificios.
-  - `components/networkTelemetryPanel.js` — panel de telemetría de red (bajo demanda).
   - `components/{manualBuildingEditor,walkingRouteEditor,buildingGeometryEditor}.js` —
     herramientas de edición de mapa (solo rol admin).
   - `components/adminMapToolsPanel.js` — panel unificado de herramientas admin y

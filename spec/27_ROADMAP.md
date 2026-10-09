@@ -1,45 +1,45 @@
 # Roadmap
 
-## Phase 1 — Foundation
+## Fase 1 — Fundación
 
-- Repository and documentation (SPEC 11).
-- Configuration, branding and campus model (SPECs 01–03).
-- Internal identifiers (SPEC 10).
+- Repositorio y documentación (SPEC 11).
+- Configuración, branding y modelo de campus (SPECs 01–03).
+- Identificadores internos (SPEC 10).
 
-## Phase 2 — Data Layer
+## Fase 2 — Capa de Datos
 
-- Core entities and data model (SPECs 13–14).
-- Schema initialization and first-run (SPEC 04).
-- Roles and authentication (SPEC 15).
+- Entidades núcleo y modelo de datos (SPECs 13–14).
+- Inicialización del esquema y primera ejecución (SPEC 04).
+- Roles y autenticación (SPEC 15).
 
-## Phase 3 — Inventory & Telemetry
+## Fase 3 — Inventario y Telemetría
 
-- Inventory, import and reconciliation (SPEC 18).
-- Configurable categories (SPEC 08).
-- Network telemetry (SPECs 07, 21).
-- Delivery form (SPECs 06, 22).
+- Inventario, importación y reconciliación (SPEC 18).
+- Categorías configurables (SPEC 08).
+- Telemetría de red (SPECs 07, 21).
+- Formulario de entrega (SPECs 06, 22).
 
-## Phase 4 — Admin & Map
+## Fase 4 — Admin y Mapa
 
-- Points of interest (SPEC 09). (DONE)
-- Administrative map editors (SPEC 20). (DONE)
-- Audit and backups (SPEC 23). (DONE)
-- Room editor: manual rooms, unified multi-selection (Ctrl+click toggle, marquee),
-  conformal pixel-space rotation, backend `ManualRoom` +
-  `/api/manual-rooms`, main-map per-floor rendering. (DONE,
+- Puntos de interés (SPEC 09). (HECHO)
+- Editores administrativos del mapa (SPEC 20). (HECHO)
+- Auditoría y respaldos (SPEC 23). (HECHO)
+- Editor de salas: salas manuales, multiselección unificada (toggle Ctrl+click, marquee),
+  rotación conforme en espacio de píxeles, backend `ManualRoom` +
+  `/api/manual-rooms`, renderizado por piso en el mapa principal. (HECHO,
   SPEC 13/14/17/20; pendiente revisión del usuario en vivo)
 
-## Phase 5 — Hardening
+## Fase 5 — Endurecimiento
 
-- Security defaults (SPEC 24). (DONE)
-- Deployment and first-run (SPEC 25). (DONE)
-- Testing coverage (SPEC 26). (DONE — backend 79, frontend 64)
+- Defaults de seguridad (SPEC 24). (HECHO)
+- Despliegue y primera ejecución (SPEC 25). (HECHO)
+- Cobertura de tests (SPEC 26). (HECHO — backend 79, frontend 64)
 
-## Phase 6 — Product
+## Fase 6 — Producto
 
-- Multi-tenant organizations + sites, `superadmin`, scoping por campus y schedules de
-  telemetría (DONE; pendientes: tests dedicados, agrupar selector por org en frontend).
-- Product decisions (SPECs 12–27).
-- Visual/branding refresh: CSS-variable theme aplicado en frontend (SPEC 02 remainder), paleta teal en admin Razor y Auth, logos neutrales recolorados. (PARCIAL, pendiente revisión de usuario)
-- Delivery form checklist neutralizada: `appsettings` vacío + default genérico vacío (SPEC 06 remainder); el usuario decidirá el contenido final.
-- Documentation and onboarding (SPEC 11).
+- Organizaciones multi-tenant + sitios, `superadmin`, scoping por campus y schedules de
+  telemetría (HECHO; pendientes: tests dedicados, agrupar selector por org en frontend).
+- Decisiones de producto (SPECs 12–27).
+- Refresh visual/branding: tema con variables CSS aplicado en frontend (SPEC 02 restante), paleta teal en admin Razor y Auth, logos neutrales recolorados. (PARCIAL, pendiente revisión de usuario)
+- Checklist del formulario de entrega neutralizado: `appsettings` vacío + default genérico vacío (SPEC 06 restante); el usuario decidirá el contenido final.
+- Documentación y onboarding (SPEC 11).

@@ -1,34 +1,34 @@
-# Roles & Authentication
+# Roles y Autenticación
 
 ## Roles
 
-- superadmin: multi-tenant management (organizations, sites, org admins); sees every organization.
-  The initial admin is bootstrapped as `superadmin`.
-- admin: full access, MFA required.
-- editor: controlled operational edits.
-- viewer: read-only.
-- auditor: audit, compliance and integrity without modifying inventory.
+- superadmin: gestión multi-tenant (organizaciones, sitios, admins de org); ve cada organización.
+  El admin inicial se bootstrapea como `superadmin`.
+- admin: acceso total, MFA requerido.
+- editor: ediciones operativas controladas.
+- viewer: solo lectura.
+- auditor: auditoría, cumplimiento e integridad sin modificar inventario.
 
-## Authentication
+## Autenticación
 
-- Local break-glass users.
-- Optional LDAP / LDAPS authentication against an external directory.
-- MFA (TOTP) for administrators.
-- Session-based cookies plus claims for the frontend API.
-- Multi-tenant scoping via `OrganizationAccessService` (DI):
+- Usuarios locales break-glass.
+- Autenticación LDAP / LDAPS opcional contra un directorio externo.
+- MFA (TOTP) para administradores.
+- Cookies basadas en sesión más claims para la API del frontend.
+- Scoping multi-tenant vía `OrganizationAccessService` (DI):
   `IsSuperAdmin`, `IsAdmin`, `OrganizationId`, `CanAccessCampusAsync`,
-  `CanAccessOrganizationAsync`, `ScopeSitesQuery`, `ScopeUsersQuery`; data controllers
-  guard with `CanAccessCampusAsync` → 403 and global controllers require
+  `CanAccessOrganizationAsync`, `ScopeSitesQuery`, `ScopeUsersQuery`; los controllers de datos
+  protegen con `CanAccessCampusAsync` → 403 y los controllers globales requieren
   `admin,superadmin`.
 
 ## Cookies
 
-- `Syntro.Auth` final session.
-- `Syntro.MfaPending` intermediate MFA flow.
+- `Syntro.Auth` sesión final.
+- `Syntro.MfaPending` flujo intermedio de MFA.
 
 ## Claims
 
-Namespaced under `syntro:`:
+En namespace bajo `syntro:`:
 
 - syntro:remember_me
 - syntro:can_manage_users
@@ -37,14 +37,14 @@ Namespaced under `syntro:`:
 - syntro:mfa_user_id
 - syntro:mfa_return_url
 
-## Session API
+## API de Sesión
 
-- GET /api/auth/session — current session, role and organization for the map.
-  Returns `isAuthenticated`, `isSuperAdmin`, `organizationId`, `organizationName` and
-  `sites[]` (each site with `campusKey`, `name`, `school`, `floors`, `defaultFloor`,
-  `center`, `zoom`, `bounds`); `superadmin` sees all sites, an org admin only theirs.
-  The frontend consumes this in `siteConfig.js`.
-- POST /api/auth/logout — end session.
+- GET /api/auth/session — sesión actual, rol y organización para el mapa.
+  Retorna `isAuthenticated`, `isSuperAdmin`, `organizationId`, `organizationName` y
+  `sites[]` (cada sitio con `campusKey`, `name`, `school`, `floors`, `defaultFloor`,
+  `center`, `zoom`, `bounds`); `superadmin` ve todos los sitios, un admin de org solo los suyos.
+  El frontend consume esto en `siteConfig.js`.
+- POST /api/auth/logout — terminar sesión.
 
 ## Decisiones de implementación
 

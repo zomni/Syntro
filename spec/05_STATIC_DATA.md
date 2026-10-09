@@ -1,36 +1,36 @@
-# Static Data Layer & Identifier Scheme
+# Capa de Datos Estáticos y Esquema de Identificadores
 
-## Purpose
+## Propósito
 
-Make the frontend static JSON files optional and independent of client content, and generalize the building identifier scheme.
+Hacer opcionales e independientes del contenido del cliente los archivos JSON estáticos del frontend, y generalizar el esquema de identificadores de edificios.
 
-## Current State
+## Estado Actual
 
-- `src/data/cs_sotero_{-1..5}.json` — per-floor GeoJSON.
-- `src/data/cs_sotero_search.json` — search index.
-- `src/data/sotero_buildings_catalog.json`, `sotero_buildings_manual_data.json` (client buildings), `sotero_buildings_backend_backup.json`.
-- `src/data/interiors/SR-BLD-*` — building interiors.
+- `src/data/cs_sotero_{-1..5}.json` — GeoJSON por piso.
+- `src/data/cs_sotero_search.json` — índice de búsqueda.
+- `src/data/sotero_buildings_catalog.json`, `sotero_buildings_manual_data.json` (edificios del cliente), `sotero_buildings_backend_backup.json`.
+- `src/data/interiors/SR-BLD-*` — interiores de edificios.
 - `src/data/walking_routes_backup.json`, `network_telemetry_backup.json`.
-- Building ID regex `/^SR-BLD-\d+$/` in `soteroSearchMetadata.js:12` and `scripts/syncSoteroFloorsFromSearch.js:20`.
-- 10 data-regeneration scripts hardcode filenames and ID patterns.
+- Regex de ID de edificio `/^SR-BLD-\d+$/` en `soteroSearchMetadata.js:12` y `scripts/syncSoteroFloorsFromSearch.js:20`.
+- 10 scripts de regeneración de datos hardcodean nombres de archivos y patrones de ID.
 
-## Required Changes
+## Cambios Requeridos
 
-- Turn static JSON files into optional template assets.
-- The fallback chain (API → localStorage → static JSON) must tolerate missing static files (empty map).
-- Remove the `SR-BLD-\d+` regex; treat building IDs as opaque strings.
-- Parameterize the data-regeneration scripts from the campus configuration (SPEC 03).
+- Convertir los archivos JSON estáticos en assets opcionales de la plantilla.
+- La cadena de fallback (API → localStorage → JSON estático) debe tolerar archivos estáticos ausentes (mapa vacío).
+- Eliminar la regex `SR-BLD-\d+`; tratar los IDs de edificio como strings opacos.
+- Parametrizar los scripts de regeneración de datos desde la configuración de campus (SPEC 03).
 
-## Rules
+## Reglas
 
-- The application must work with no static data present.
-- The backend remains the priority data source when available.
+- La aplicación debe funcionar sin datos estáticos presentes.
+- El backend sigue siendo la fuente de datos prioritaria cuando está disponible.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Deleting all static JSON files leaves a functional empty map.
-- A building with an arbitrary ID (any format) renders, searches and opens correctly.
-- Regeneration scripts produce files named from campus configuration.
+- Eliminar todos los archivos JSON estáticos deja un mapa vacío funcional.
+- Un edificio con un ID arbitrario (cualquier formato) se renderiza, busca y abre correctamente.
+- Los scripts de regeneración producen archivos con nombres derivados de la configuración de campus.
 
 ## Decisiones de implementación
 

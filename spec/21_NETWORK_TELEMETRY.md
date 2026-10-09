@@ -1,33 +1,33 @@
-# Network Telemetry
+# Telemetría de Red
 
-## Purpose
+## Propósito
 
-Scheduled network scans, a collector agent, snapshots and reports.
+Escaneos de red programados, un agente recolector, snapshots y reportes.
 
-## Entities
+## Entidades
 
-- NetworkTelemetrySnapshot: one scheduled scan result for a target.
-- NetworkTelemetryObservation: a single probe result.
-- ScheduledScanRun: run history.
+- NetworkTelemetrySnapshot: un resultado de escaneo programado para un objetivo.
+- NetworkTelemetryObservation: un único resultado de sonda.
+- ScheduledScanRun: historial de ejecuciones.
 
-## Components
+## Componentes
 
-- Scheduled live scans (hosted service).
-- Windows collector agent (optional, generic tool).
-- Scan control and heartbeat files via a shared path.
-- Telemetry panel in the map.
-- Telemetry dashboard and export.
+- Escaneos en vivo programados (hosted service).
+- Agente recolector de Windows (opcional, herramienta genérica).
+- Archivos de control de escaneo y heartbeat vía una ruta compartida.
+- Panel de telemetría en el mapa.
+- Dashboard de telemetría y exportación.
 
-## Configuration
+## Configuración
 
-- Timezone and locale (configurable, SPEC 07).
-- Target CIDRs.
-- Scan ports.
-- Scan crons.
-- Ingest API key.
+- Zona horaria y locale (configurable, SPEC 07).
+- CIDRs objetivo.
+- Puertos de escaneo.
+- Crons de escaneo.
+- API key de ingesta.
 
-## Rules
+## Reglas
 
-- Defaults must be neutral and valid for a blank installation (SPEC 07).
-- Disabling the feature must not break the rest of the application.
-- Scan control uses a shared path with request/status/heartbeat files.
+- Los defaults deben ser neutrales y válidos para una instalación en blanco (SPEC 07).
+- Deshabilitar la funcionalidad no debe romper el resto de la aplicación.
+- El control de escaneo usa una ruta compartida con archivos request/status/heartbeat.

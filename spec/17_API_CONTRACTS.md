@@ -1,10 +1,10 @@
-# API Contracts
+# Contratos de API
 
-## Purpose
+## Propósito
 
-Endpoints consumed by the map frontend and the admin dashboard.
+Endpoints consumidos por el frontend del mapa y el panel de administración.
 
-## Map Frontend Contracts
+## Contratos del Frontend del Mapa
 
 GET    /api/auth/session
 POST   /api/auth/logout
@@ -42,17 +42,17 @@ POST   /api/network-telemetry/schedule
 PUT    /api/network-telemetry/schedule/{id}
 DELETE /api/network-telemetry/schedule/{id}
 
-## Admin Contracts
+## Contratos del Admin
 
-- Inventory: list, create, edit, delete, assign, upload PDF.
-- Locations: list and edit synced buildings and rooms.
-- Activity: filtered audit log.
-- Backups: list, run, cleanup, download, upload, restore.
-- Telemetry: scan status, reports, export.
-- Delivery form: create, preview, PDF generation.
+- Inventario: listar, crear, editar, eliminar, asignar, subir PDF.
+- Ubicaciones: listar y editar buildings y rooms sincronizados.
+- Actividad: log de auditoría filtrado.
+- Respaldos: listar, ejecutar, limpiar, descargar, subir, restaurar.
+- Telemetría: estado de escaneo, reportes, exportación.
+- Formulario de entrega: crear, previsualizar, generación de PDF.
 
-## Rules
+## Reglas
 
-- All mutation endpoints require an authenticated role.
-- Deleting an inventory item or location is a soft delete.
-- When a contract changes, the frontend loader modules and static backups must be updated.
+- Todos los endpoints de mutación requieren un rol autenticado.
+- Eliminar un ítem de inventario o una ubicación es un soft delete.
+- Cuando cambia un contrato, deben actualizarse los módulos de carga del frontend y los respaldos estáticos.

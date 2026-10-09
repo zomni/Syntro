@@ -1,35 +1,35 @@
-# Security
+# Seguridad
 
-## Purpose
+## Propósito
 
-Defaults for a blank, secure instance.
+Defaults para una instancia en blanco y segura.
 
-## Passwords
+## Contraseñas
 
-- Minimal length 10.
-- Password strength validation (NIST).
-- MFA (TOTP) required for admin.
+- Longitud mínima 10.
+- Validación de fortaleza de contraseña (NIST).
+- MFA (TOTP) requerido para admin.
 
 ## Headers
 
 - CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy.
-- Nosniff and anti-sniffing behaviors.
+- Comportamientos nosniff y anti-sniffing.
 
 ## Cookies
 
 - HttpOnly, Secure, SameSite.
-- Prefixes scoped to the template instance (SPEC 10).
+- Prefijos con scope a la instancia de la plantilla (SPEC 10).
 
-## File Uploads
+## Subidas de Archivos
 
-- Validate extension, MIME and size.
-- Isolate uploads and scans.
+- Validar extensión, MIME y tamaño.
+- Aislar subidas y escaneos.
 
-## Secrets
+## Secretos
 
-- `ADMIN_EMAIL` / `ADMIN_PASSWORD` are never returned by any endpoint.
-- The ingest API key is stored outside the database.
-- Sensitive settings are not exposed in the API.
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` nunca son retornados por ningún endpoint.
+- La API key de ingesta se almacena fuera de la base de datos.
+- Los ajustes sensibles no se exponen en la API.
 
 ## Decisiones de implementación
 

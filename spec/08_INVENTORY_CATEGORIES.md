@@ -1,32 +1,32 @@
-# Configurable Inventory Categories
+# Categorías de Inventario Configurables
 
-## Purpose
+## Propósito
 
-Make the inferred inventory categories configurable and remove the client acronym dependency.
+Hacer configurables las categorías de inventario inferidas y eliminar la dependencia del acrónimo del cliente.
 
-## Current State
+## Estado Actual
 
-- `Services/InventoryCategoriesConfig.cs`: parses `InventoryCategories:Categories` and `InventoryCategories:Statuses` (Name + Label + Tokens) with generic fallbacks (`other`/`active`).
-- `ExcelInventoryImportService.cs`: `InferCategory`/`InferStatus` delegate to `InventoryCategoriesConfig` (hardcoded token lists removed).
-- `AdminController.cs`: inventory category/status option lists come from configuration.
-- `frontend/src/config/appConfig.js` + `frontend/src/views/featureDisplay.js`: category order and labels config-driven.
-- `\bHSR\b` stripping removed (verified: no matches in the codebase).
+- `Services/InventoryCategoriesConfig.cs`: parsea `InventoryCategories:Categories` e `InventoryCategories:Statuses` (Name + Label + Tokens) con fallbacks genéricos (`other`/`active`).
+- `ExcelInventoryImportService.cs`: `InferCategory`/`InferStatus` delegan en `InventoryCategoriesConfig` (listas de tokens hardcodeadas eliminadas).
+- `AdminController.cs`: las listas de opciones de categoría/estado de inventario vienen de configuración.
+- `frontend/src/config/appConfig.js` + `frontend/src/views/featureDisplay.js`: orden y etiquetas de categorías dirigidos por configuración.
+- El stripping de `\bHSR\b` fue eliminado (verificado: sin coincidencias en el código).
 
-## Required Changes
+## Cambios Requeridos
 
-- Model categories and statuses as a configurable list (configuration or admin-managed).
-- Keep `InferredCategory` and `InferredStatus` fields and alias rules generic.
-- Remove the `\bHSR\b` stripping.
+- Modelar categorías y estados como una lista configurable (configuración o gestionada por admin).
+- Mantener los campos `InferredCategory` e `InferredStatus` y las reglas de alias genéricas.
+- Eliminar el stripping de `\bHSR\b`.
 
-## Rules
+## Reglas
 
-- Categories must be addable and editable without code changes.
-- Import mapping must keep working with a generic category list.
+- Las categorías deben poder agregarse y editarse sin cambios de código.
+- El mapeo de importación debe seguir funcionando con una lista de categorías genérica.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Adding a category to configuration makes it usable in import and filtering.
-- No client acronym logic remains.
+- Agregar una categoría a la configuración la hace usable en la importación y el filtrado.
+- No queda lógica de acrónimos del cliente.
 
 ## Decisiones de implementación
 

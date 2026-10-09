@@ -21,7 +21,6 @@ module.exports = {
   resolve: {
     alias: {
       "@app/index": src("index.js"),
-      "@app/campusSelector": src("components", "campusSelector.js"),
       "@app/findByUrl": src("utils", "findByUrl.js"),
       "@app/routePlanner": src("components", "routePlanner.js"),
       "@app/featureDisplay": src("views", "featureDisplay.js"),
@@ -30,7 +29,6 @@ module.exports = {
       "@app/addData": src("utils", "addData.js"),
       "@app/autocompleteSearchBox": src("components", "autocompleteSearchBox.js"),
       "@app/walkingRouteLayer": src("components", "walkingRouteLayer.js"),
-      "@app/webPublicControls": src("components", "webPublicControls.js"),
       "@app/manualBuildingEditor": src("components", "manualBuildingEditor.js"),
       "@app/sessionModeBadge": src("components", "sessionModeBadge.js"),
 "@app/sessionExpiryOverlay": src("components", "sessionExpiryOverlay.js"),

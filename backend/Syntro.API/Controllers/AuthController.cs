@@ -577,7 +577,7 @@ public class AuthController : Controller
         if (!string.IsNullOrWhiteSpace(requestHost))
         {
             var requestScheme = string.IsNullOrWhiteSpace(Request?.Scheme) ? "http" : Request.Scheme;
-            return Redirect($"{requestScheme}://{requestHost}:8080/?welcome=1");
+            return Redirect($"{requestScheme}://{requestHost}:8081/?welcome=1");
         }
 
         return Redirect("http://localhost:8081/?welcome=1");

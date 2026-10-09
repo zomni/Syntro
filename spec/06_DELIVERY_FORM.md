@@ -1,35 +1,35 @@
-# Delivery Form Generalization
+# Generalización del Formulario de Entrega
 
-## Purpose
+## Propósito
 
-Keep the equipment delivery form and PDF generation as a product feature without institutional content.
+Mantener el formulario de entrega de equipos y la generación de PDF como una funcionalidad de producto sin contenido institucional.
 
-## Current State
+## Estado Actual
 
-- `Views/Admin/DeliveryForm.cshtml`: institutional application checklist now renders from configuration (`DeliveryForm:ApplicationChecklist:Sections`), replacing the fixed HTML.
-- `Services/DeliveryFormChecklistConfig.cs`: parses sections/items from config with generic defaults; each item maps to a checkbox bound by name to a `Validation*`/`App*`/`Admin*` bool property in `EquipmentDeliveryFormViewModel`.
-- `Services/DeliveryFormTemplateBuilder.cs`: generates a generic, parameterizable DOCX template in memory when no template file is configured.
-- `Services/EquipmentDeliveryDocumentService.cs`: resolves the template (configured `DeliveryForm:TemplatePath` → default `Templates/FormularioEntregaEquipo.docx` → generated generic template); fills the applications table from the configured checklist; converts to PDF via LibreOffice (`DeliveryForm:SofficePath`, default `soffice`).
-- Institution name read from configuration (`DeliveryForm:Institution`, `AdminController.cs`), not a constant.
-- PDF conversion via LibreOffice (`EquipmentDeliveryDocumentService.cs`); LibreOffice installed in `Dockerfile` (prod) and `Dockerfile.dev`.
+- `Views/Admin/DeliveryForm.cshtml`: el checklist de aplicaciones institucional ahora se renderiza desde configuración (`DeliveryForm:ApplicationChecklist:Sections`), reemplazando el HTML fijo.
+- `Services/DeliveryFormChecklistConfig.cs`: parsea secciones/ítems desde configuración con defaults genéricos; cada ítem mapea a un checkbox enlazado por nombre a una propiedad bool `Validation*`/`App*`/`Admin*` en `EquipmentDeliveryFormViewModel`.
+- `Services/DeliveryFormTemplateBuilder.cs`: genera una plantilla DOCX genérica y parametrizable en memoria cuando no hay una plantilla configurada.
+- `Services/EquipmentDeliveryDocumentService.cs`: resuelve la plantilla (`DeliveryForm:TemplatePath` configurado → default `Templates/FormularioEntregaEquipo.docx` → plantilla genérica generada); llena la tabla de aplicaciones desde el checklist configurado; convierte a PDF vía LibreOffice (`DeliveryForm:SofficePath`, default `soffice`).
+- El nombre de la institución se lee desde configuración (`DeliveryForm:Institution`, `AdminController.cs`), no es una constante.
+- Conversión a PDF vía LibreOffice (`EquipmentDeliveryDocumentService.cs`); LibreOffice instalado en `Dockerfile` (prod) y `Dockerfile.dev`.
 
-## Required Changes
+## Cambios Requeridos
 
-- Read the institution name from configuration or equipment data, not a constant.
-- Make the application checklist configurable.
-- Replace the client DOCX template with a generic, parameterizable template.
-- Keep LibreOffice conversion and PDF handling.
+- Leer el nombre de la institución desde configuración o datos del equipo, no una constante.
+- Hacer configurable el checklist de aplicaciones.
+- Reemplazar la plantilla DOCX del cliente por una plantilla genérica y parametrizable.
+- Conservar la conversión por LibreOffice y el manejo de PDF.
 
-## Rules
+## Reglas
 
-- PDF layout must remain user-testable after template changes.
-- No institutional name may be hardcoded.
+- El layout del PDF debe seguir siendo testeable por el usuario tras cambios de plantilla.
+- Ningún nombre institucional puede estar hardcodeado.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- Changing the configured institution reflects in the generated form and PDF.
-- The checklist renders from configuration.
-- The delivery form flow works with a generic template.
+- Cambiar la institución configurada se refleja en el formulario y el PDF generados.
+- El checklist se renderiza desde configuración.
+- El flujo del formulario de entrega funciona con una plantilla genérica.
 
 ## Decisiones de implementación
 

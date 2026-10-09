@@ -1,26 +1,26 @@
-# Initial Bootstrap & Empty Start
+# Bootstrap Inicial y Arranque Vacío
 
-## Purpose
+## Propósito
 
-A new installation starts practically empty. Only the initial administrator is created from environment configuration.
+Una instalación nueva arranca prácticamente vacía. Solo se crea el administrador inicial desde la configuración de entorno.
 
-## Current State
+## Estado Actual
 
-- `Data/SeedData.cs` keeps 6 Locations and 10 Equipment items, but runs only when `DemoData:Enabled` (env `DEMO_DATA`) is explicitly `true`.
-- `docker-compose.yml` no longer sets seeded credentials. It maps `ADMIN_EMAIL` / `ADMIN_PASSWORD` to `AuthSettings__AdminUsername` / `AuthSettings__AdminPassword` (`backend/.env.example` documents both).
-- `BackendAuthService.EnsureInitialAdminAsync` creates only the initial Administrator from env/config, and only when no active admin exists (idempotent). Missing vars fail fast with a clear `InvalidOperationException`.
-- No viewer is seeded. Legacy viewer rows (if present) are normalized to active state but never auto-created.
+- `Data/SeedData.cs` conserva 6 Locations y 10 Equipment, pero solo se ejecuta cuando `DemoData:Enabled` (env `DEMO_DATA`) es explícitamente `true`.
+- `docker-compose.yml` ya no establece credenciales sembradas. Mapea `ADMIN_EMAIL` / `ADMIN_PASSWORD` a `AuthSettings__AdminUsername` / `AuthSettings__AdminPassword` (`backend/.env.example` documenta ambos).
+- `BackendAuthService.EnsureInitialAdminAsync` crea solo el Administrator inicial desde env/config, y solo cuando no existe ningún admin activo (idempotente). Si faltan las variables, falla rápido con una `InvalidOperationException` clara.
+- No se siembra ningún viewer. Las filas legacy de viewer (si existen) se normalizan a estado activo pero nunca se auto-crean.
 
-## Rules
+## Reglas
 
-- Startup must fail if no Administrator can be created and the required env vars are missing (existing rule, keep).
-- Demo data, if kept, is clearly separated and never enabled by default.
+- El arranque debe fallar si no se puede crear un Administrator y faltan las variables de entorno requeridas (regla existente, conservar).
+- Los datos demo, si se conservan, están claramente separados y nunca se habilitan por defecto.
 
-## Acceptance Criteria
+## Criterios de Aceptación
 
-- A fresh install boots with only the initial Administrator.
-- No seed locations, buildings, equipment or campus data are created by default.
-- Missing admin-bootstrap env vars fail fast with a clear error.
+- Una instalación nueva arranca solo con el Administrator inicial.
+- No se crean locations, buildings, equipment ni datos de campus sembrados por defecto.
+- Si faltan las variables de entorno de bootstrap del admin, falla rápido con un error claro.
 
 ## Decisiones de implementación
 

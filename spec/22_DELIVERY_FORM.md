@@ -1,36 +1,36 @@
-# Delivery Form
+# Formulario de Entrega
 
-## Purpose
+## Propósito
 
-Generate an equipment delivery document with PDF output for a configurable institution.
+Generar un documento de entrega de equipos con salida en PDF para una institución configurable.
 
-## Entities
+## Entidades
 
-- Delivery form data captured per equipment.
-- Optional PDF file associated with the inventory item.
+- Datos de formulario de entrega capturados por equipo.
+- Archivo PDF opcional asociado al ítem de inventario.
 
-## Configuration
+## Configuración
 
-- Institution name (`DeliveryForm:Institution`, SPEC 06).
-- Application checklist (`DeliveryForm:ApplicationChecklist:Sections`) — sections and items rendered in the form and the generated document.
-- Generic DOCX template (`DeliveryForm:TemplatePath`, optional; generated in memory by `DeliveryFormTemplateBuilder` when absent).
-- LibreOffice executable (`DeliveryForm:SofficePath`, default `soffice`).
+- Nombre de la institución (`DeliveryForm:Institution`, SPEC 06).
+- Checklist de aplicaciones (`DeliveryForm:ApplicationChecklist:Sections`) — secciones e ítems renderizados en el formulario y el documento generado.
+- Plantilla DOCX genérica (`DeliveryForm:TemplatePath`, opcional; generada en memoria por `DeliveryFormTemplateBuilder` cuando está ausente).
+- Ejecutable de LibreOffice (`DeliveryForm:SofficePath`, default `soffice`).
 
-## Flow
+## Flujo
 
-- Fill the delivery form.
-- Generate the document from the template.
-- Convert to PDF via LibreOffice.
-- Preview.
-- Optionally create the equipment in inventory with the PDF attached.
+- Completar el formulario de entrega.
+- Generar el documento desde la plantilla.
+- Convertir a PDF vía LibreOffice.
+- Previsualizar.
+- Opcionalmente crear el equipo en inventario con el PDF adjunto.
 
-## Rules
+## Reglas
 
-- No institutional name may be hardcoded (SPEC 06).
-- PDF layout is user-testable after template changes.
-- Uploaded PDFs are validated by extension, MIME and size.
+- Ningún nombre institucional puede estar hardcodeado (SPEC 06).
+- El layout del PDF es testeable por el usuario tras cambios de plantilla.
+- Los PDFs subidos se validan por extensión, MIME y tamaño.
 
-## State
+## Estado
 
-- Institution, checklist, template resolution and soffice path are all configuration-driven.
-- Verified end-to-end (login → form → PDF preview) in the Docker stack.
+- Institución, checklist, resolución de plantilla y ruta de soffice son todos dirigidos por configuración.
+- Verificado end-to-end (login → formulario → preview de PDF) en el stack de Docker.

@@ -5,6 +5,7 @@
 # Build outputs
 **/bin/
 **/obj/
+**/TestResults/
 out/
 dist/
 
@@ -43,6 +44,9 @@ backend/Syntro.API/backups/**
 
 # Temporales de trabajo locales
 .tmp/**
+
+# Planes de trabajo locales
+/plans/
 
 # Configuracion local del collector
 tools/*/appsettings.local.json

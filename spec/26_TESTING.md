@@ -1,28 +1,28 @@
-# Testing
+# Pruebas
 
-## Layers
+## Capas
 
-- Backend: xUnit tests for services, imports and reconciliation.
-- Frontend: component and data-loading tests (jest).
-- Build: Webpack bundles and static build verification.
-- Manual: map editing tools and PDF generation smoke tests.
+- Backend: tests xUnit para services, importaciones y reconciliación.
+- Frontend: tests de componentes y carga de datos (jest).
+- Build: bundles de Webpack y verificación del build estático.
+- Manual: smoke tests de las herramientas de edición de mapa y la generación de PDF.
 
-## Coverage Priorities
+## Prioridades de Cobertura
 
-- Inventory import and reconciliation logic.
-- Delivery form generation and PDF conversion.
-- Audit and backup flows.
-- Auth, MFA and role enforcement.
-- Points of interest CRUD and editors.
-- Room layout geometry: contiguous rooms, wall sharing, no overlaps, bounds
+- Lógica de importación y reconciliación de inventario.
+- Generación del formulario de entrega y conversión a PDF.
+- Flujos de auditoría y respaldo.
+- Auth, MFA y aplicación de roles.
+- CRUD de puntos de interés y editores.
+- Geometría del layout de salas: salas contiguas, muros compartidos, sin solapamientos, bounds
   (`roomEditorGeometry.test.js`).
 
-## Rules
+## Reglas
 
-- Tests must not depend on a real database path or real LibreOffice.
-- PDF layout is user-testable after template changes.
-- Telemetry tests cover disabled configuration (SPEC 07).
-- `npm test` (jest) and `dotnet test backend/Syntro.sln` must be green before delivery.
+- Los tests no deben depender de una ruta de base de datos real ni de LibreOffice real.
+- El layout del PDF es testeable por el usuario tras cambios de plantilla.
+- Los tests de telemetría cubren la configuración deshabilitada (SPEC 07).
+- `npm test` (jest) y `dotnet test backend/Syntro.sln` deben estar en verde antes de entregar.
 
 ## Decisiones de implementación
 

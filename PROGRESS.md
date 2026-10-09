@@ -1,5 +1,9 @@
 # Progreso del proyecto — Syntro
 
+> Registro histórico de implementación. Para el estado operativo actual, usar `README.md`,
+> `docs/ARCHITECTURE.md` y las suites de tests; las referencias a fases anteriores se conservan
+> como trazabilidad.
+
 ## Estado actual
 
 Syntro es la aplicación de mapeo indoor, inventario de activos y telemetría de red del
@@ -44,7 +48,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - Smoke test completo verificado: login → form (checklist desde config) → POST → preview PDF generado por LibreOffice.
 - **Fase 4 implementada** (admin & map):
   - SPEC 09 (POIs): entidad `PointOfInterest` (GUID, type, name, description, lat/lng, campus, floor, icon, audit fields, soft delete) + `DbSet` con `HasQueryFilter` + migración `AddPointsOfInterest` + fallback raw SQL en `ExtendedSchemaInitializer`; `PointsOfInterestController` (`api/points-of-interest`, GET público con filtros campus/floor, POST/PUT/DELETE solo admin) con auditoría en todas las mutaciones (`poi-created/updated/deleted` con previous/new value).
-  - SPEC 09 frontend: `markers.js` limpiado de restos en francés; POIs cargados por campus/piso y renderizados reutilizando `createMarkers`; editor admin `poiEditor.js` (agregar POI con clic en el mapa + modal, gestionar POIs con editar/eliminar) integrado en `adminMapToolsPanel` con visibilidad por sesión.
+  - SPEC 09 frontend: `markers.js` limpiado de restos en francés; marcadores cargados por campus/piso y renderizados reutilizando `createMarkers`; editor admin `campusMarkerEditor.js` para crear, editar y eliminar marcadores integrado en `adminMapToolsPanel` con visibilidad por sesión.
   - SPEC 20: panel unificado + editores (building, geometry, routes) ya presentes, verificado contra la SPEC; se añadió el editor de POIs.
   - SPEC 23: audit + backups ya presentes; POIs y editores del mapa auditan mutaciones (verificado `api/activity-log`).
   - Smoke test completo verificado: login admin → CRUD POI (POST/GET/PUT/DELETE) → auditoría de las 3 mutaciones → render público verificado por GET anónimo.
@@ -61,12 +65,12 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - Migración `AddOrganizationsAndSites`; DbSets + query filters en `AppDbContext`.
   - Bootstrap: `EnsureInitialAdminAsync` crea/promueve al admin inicial como `superadmin`; MFA obligatorio para `admin` y `superadmin`; sesión (`GET /api/auth/session`) expone `isSuperAdmin`, `organizationId`, `organizationName` y `sites[]` (superadmin ve todos, org admin solo los suyos; cada sitio con `campusKey`, `name`, `school`, `floors`, `defaultFloor`, `center`, `zoom`, `bounds`).
   - `OrganizationAccessService` (DI): `IsSuperAdmin`, `IsAdmin`, `OrganizationId`, `CanAccessCampusAsync`, `CanAccessOrganizationAsync`, `ScopeSitesQuery`, `ScopeUsersQuery`.
-  - `OrganizationsController` (solo superadmin): CRUD organizaciones (soft delete, slug único), CRUD sitios por org (CampusKey slugificado, floors JSON, default floor), upload GeoJSON por piso (`${school}_${campusKey}_${floor}.json` a `ResolveDataRoot()`), alta de admins de org y listado de usuarios de org.
+  - `OrganizationsAdminController` (solo superadmin): CRUD organizaciones (soft delete, slug único), CRUD sitios por org (CampusKey slugificado, floors JSON, default floor), upload GeoJSON por piso (`${school}_${campusKey}_${floor}.json` a `ResolveDataRoot()`), alta de admins de org y listado de usuarios de org.
   - Scoping por campus/organización en los controllers de datos: `PointsOfInterestController`, `ManualBuildingsController`, `WalkingRoutesController`, `LocationsController`, `EquipmentsController`, `BuildingGeometryOverridesController`, `FrontendStaticBackupController` (guard `CanAccessCampusAsync` → 403). Controllers globales (import, reconciliación, alias rules, backups, frontend-sync, telemetría snapshots, resto de `AdminController`) pasan a `[Authorize(Roles = "admin,superadmin")]`.
   - Tests backend actualizados (admin inicial = `superadmin`); build y 30 tests verdes.
 - **Multi-tenant (organizaciones + sitios) — frontend**:
   - `src/config/siteConfig.js`: fuente de verdad de sitios en runtime — consume `/api/auth/session` (cached, `credentials: include`), normaliza cada sitio (floors como array, defaultFloor, center/zoom/bounds) y reemplaza el fallback estático de `campuses.js`; despacha evento `sites-loaded`.
-  - `campusConfig.js`, `map.js`, `goToCampus.js`, `campusSelector.js` y `autocompleteSearchBox.js` ya no importan `campuses.js` directamente; `map.js` inicializa desde el sitio primario y re-aplica vista/bounds en `sites-loaded`; `campusSelector` repuebla las opciones al cargar sitios; `index.js` dispara `loadSites()`.
+  - `campusConfig.js`, `map.js`, `goToCampus.js` y `autocompleteSearchBox.js` ya no importan `campuses.js` directamente; `map.js` inicializa desde el sitio primario y re-aplica vista/bounds en `sites-loaded`; `index.js` dispara `loadSites()`.
   - Bug corregido en `searchMetadata.js`: usaba `.searchIndex` inexistente en `getDataFileNames` (ahora `.search`) y la ruta del índice se calcula por campus al cargar.
   - Tests jest (7) y build webpack verdes.
 - **Multi-tenant (organizaciones + sitios) — UI Razor admin (superadmin)**:
@@ -74,7 +78,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
   - Vistas `Views/Organizations/` (`Index`, `Create`, `Edit`, `Sites`, `CreateSite`, `EditSite`, partial `_SiteForm`); números de geometría binding-seguros ante cultura (parseo invariant).
   - `_Layout.cshtml`: entrada de navegacion "Organizaciones" visible solo para superadmin y label de rol `superadmin` en el panel de sesion.
   - Acceso superadmin: se incluyo `superadmin` en todas las listas de roles restantes (`admin,auditor`, `admin,editor,viewer,auditor` de `AuditLogController`, `HealthController`, `NetworkTelemetryController`, `NetworkTelemetryOfficeController`, `AdminController.Activity/Compliance/ComplianceLegacy/suggestions`), de modo que el superadmin nunca recibe AccessDenied en el admin/dashboard.
-  - URL del mapa: `_Layout.cshtml`, `Views/Admin/Locations.cshtml`, `Views/Admin/Equipments.cshtml` y `AdminController.ResolveFrontendMapUrl()` ahora respetan `FrontendAppUrl` (8081) antes del fallback con host (8080).
+  - URL del mapa: `_Layout.cshtml`, `Views/Admin/Locations.cshtml`, `Views/Admin/Equipments.cshtml` y `AdminController.ResolveFrontendMapUrl()` ahora respetan `FrontendAppUrl` (8081) antes del fallback con host (8081).
   - Build y 30 tests backend verdes.
 - **Corrección de panel de estado del mapa**:
   - Se reforzó `frontend/src/views/featureDisplay.js` para reconstruir el panel superior izquierdo si detecta markup incompleto, mantener valores de respaldo visibles y evitar que queden espacios vacíos.
@@ -84,7 +88,7 @@ neutral reutilizable y se consolidó en un despliegue de cliente único.
 - **F1: Planificación de capturas (Red y riesgo) implementada**:
   - Backend: entidad `TelemetryScanSchedule` (Label, Cron, TimeZone, CampusKey, IsEnabled, SortOrder + audit) con migración `AddTelemetryScanSchedules`; `TelemetryScanScheduleService` (CRUD con soft-delete, validación cron vía Cronos TryParse, cálculo de próximas ocurrencias en UTC/local, resolución de timezone, preview); `TelemetryScanSchedulesController` (`GET api/network-telemetry/schedule` [admin,superadmin,auditor], `POST /preview`, `POST/PUT/{id}/DELETE/{id}` [admin,superadmin] con auditoría).
   - `NetworkTelemetryLiveScanHostedService` reescrito: lee schedules habilitados desde DB (fallback a cron de config), múltiples reglas, dedupe y estado agent.
-  - Frontend: `scheduleCronBuilder.js` (builder Diario/Semanal/Mensual + describe + validación), `telemetryScheduleStore.js` (fetch/create/update/delete/preview/history), sección "Planificación de capturas" en `networkTelemetryPanel.js` (lista, formulario con preview, historial; solo admin/superadmin editan, auditor solo lee).
+  - Frontend: `scheduleCronBuilder.js` (builder Diario/Semanal/Mensual + describe + validación) conservado como utilidad cubierta por tests; la gestión operativa de schedules queda en el backend y su API.
   - Bug corregido: Cronos 0.11.1 `GetNextOccurrence(DateTime, TimeZoneInfo)` devuelve UTC con `Kind=Utc`; `ConvertTimeToUtc` lanzaba `ArgumentException` en preview y en el scheduler. Se usa el valor UTC directamente y se normaliza el `fromUtc` de entrada.
   - Verificación runtime: login admin → CRUD completo (create/list/update/delete 204), preview con conversión tz correcta (`America/Santiago`), historial, auditoría de create/update/delete y soft-delete registrados en DB; migración auto-aplicada en `__EFMigrationsHistory`. Tests jest (22) + suite completa (41) verdes.
 
