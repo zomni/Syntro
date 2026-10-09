@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Syntro.API.Infrastructure;
 using System.IO.Compression;
 using System.Xml.Linq;
 using Syntro.API.ViewModels;
@@ -611,20 +612,8 @@ public class EquipmentDeliveryDocumentService
 
     private static string BuildFileName(EquipmentDeliveryFormViewModel model)
     {
-        var serial = SanitizeFilePart(model.SerialNumber, "sin-serie");
-        var user = SanitizeFilePart(model.ResponsibleUser, "sin-usuario");
+        var serial = FileNameSafety.ToAsciiSegment(model.SerialNumber, "sin-serie");
+        var user = FileNameSafety.ToAsciiSegment(model.ResponsibleUser, "sin-usuario");
         return $"formulario-entrega-{serial}-{user}.docx";
-    }
-
-    private static string SanitizeFilePart(string? value, string fallback)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
-        foreach (var invalidChar in Path.GetInvalidFileNameChars())
-        {
-            normalized = normalized.Replace(invalidChar, '-');
-        }
-
-        normalized = normalized.Replace(' ', '-');
-        return string.IsNullOrWhiteSpace(normalized) ? fallback : normalized;
     }
 }

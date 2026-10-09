@@ -6,6 +6,7 @@ using System.Reflection;
 using Syntro.API.Data;
 using Syntro.API.Models;
 using Syntro.API.Services;
+using Syntro.API.Infrastructure;
 
 namespace Syntro.API.Controllers;
 
@@ -163,7 +164,7 @@ public class InventoryImportController : ControllerBase
         }
 
         Directory.CreateDirectory(importRoot);
-        var safeFileName = Path.GetFileName(file.FileName);
+        var safeFileName = FileNameSafety.CreateServerFileName(ext);
         var destinationPath = Path.Combine(importRoot, safeFileName);
 
         await using var stream = new FileStream(destinationPath, FileMode.Create);

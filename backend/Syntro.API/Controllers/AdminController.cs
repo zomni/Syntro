@@ -1397,7 +1397,7 @@ public class AdminController : Controller
         }
 
         var tempRoot = Path.Combine(Path.GetTempPath(), $"syntro-data-import-{Guid.NewGuid():N}");
-        var tempZipPath = Path.Combine(tempRoot, Path.GetFileName(packageFile.FileName));
+        var tempZipPath = Path.Combine(tempRoot, FileNameSafety.CreateServerFileName(".zip"));
         var extractRoot = Path.Combine(tempRoot, "extract");
         var progressKey = User.Identity?.Name ?? "anonymous";
 
@@ -1418,7 +1418,7 @@ public class AdminController : Controller
 
             var backupDirectory = GetDatabaseBackupDirectory();
             Directory.CreateDirectory(backupDirectory);
-            var savedFileName = $"syntro-upload-{Path.GetFileNameWithoutExtension(packageFile.FileName)}-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip";
+            var savedFileName = $"syntro-upload-{Guid.NewGuid():N}.zip";
             var savedPath = Path.Combine(backupDirectory, savedFileName);
             System.IO.File.Copy(tempZipPath, savedPath, overwrite: true);
             await SetActivePackageSourceAsync(savedFileName);
@@ -1897,7 +1897,7 @@ public class AdminController : Controller
             return NotFound("La vista previa PDF ya no esta disponible.");
         }
 
-        Response.Headers["Content-Disposition"] = $"inline; filename=\"{preview.FileName}\"";
+        Response.Headers["Content-Disposition"] = BuildInlineContentDisposition(preview.FileName);
         return File(preview.Content, "application/pdf");
     }
 
@@ -1924,7 +1924,7 @@ public class AdminController : Controller
         }
 
         var downloadFileName = BuildInventoryFormPdfDownloadName(item);
-        Response.Headers["Content-Disposition"] = $"inline; filename=\"{downloadFileName}\"";
+        Response.Headers["Content-Disposition"] = BuildInlineContentDisposition(downloadFileName);
         return File(System.IO.File.ReadAllBytes(pdfPath), "application/pdf");
     }
 
@@ -1942,8 +1942,8 @@ public class AdminController : Controller
         if (!System.IO.File.Exists(filePath))
             return NotFound("El documento asociado ya no esta disponible.");
 
-        Response.Headers["Content-Disposition"] = $"inline; filename=\"{Path.GetFileName(document.OriginalFileName)}\"";
-        return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType, document.OriginalFileName);
+        Response.Headers["Content-Disposition"] = BuildInlineContentDisposition(document.OriginalFileName);
+        return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType);
     }
 
     [Authorize(Roles = $"{AppRoles.Admin}")]
@@ -1962,9 +1962,10 @@ public class AdminController : Controller
             return RedirectToAction(nameof(EditInventoryItem), new { id });
         }
 
-        if (!documentFile.FileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        var documentError = await ValidateInventoryFormPdfAsync(documentFile, cancellationToken);
+        if (documentError is not null)
         {
-            TempData["ErrorMessage"] = "Solo se permiten archivos PDF.";
+            TempData["ErrorMessage"] = documentError;
             return RedirectToAction(nameof(EditInventoryItem), new { id });
         }
 
@@ -1972,7 +1973,7 @@ public class AdminController : Controller
         var documentsDir = Path.Combine(Path.GetDirectoryName(databasePath) ?? AppContext.BaseDirectory, "inventory-documents");
         Directory.CreateDirectory(documentsDir);
 
-        var storedFileName = $"{item.Id}-{Guid.NewGuid()}-{Path.GetFileName(documentFile.FileName)}";
+        var storedFileName = $"{item.Id}-{Guid.NewGuid():N}.pdf";
         var filePath = Path.Combine(documentsDir, storedFileName);
 
         await using (var stream = new FileStream(filePath, FileMode.Create))
@@ -1985,7 +1986,7 @@ public class AdminController : Controller
             InventoryItemId = id,
             OriginalFileName = documentFile.FileName,
             StoredFileName = storedFileName,
-            ContentType = documentFile.ContentType,
+            ContentType = "application/pdf",
             SizeBytes = documentFile.Length,
             Source = "upload",
             CreatedAtUtc = DateTime.UtcNow
@@ -4298,6 +4299,27 @@ public class AdminController : Controller
             : $"formulario-{serialSegment}-{userSegment}";
 
         return $"{baseName}.pdf";
+    }
+
+    internal static string BuildInlineContentDisposition(string? fileName)
+    {
+        var normalizedFileName = Path.GetFileName(fileName ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(normalizedFileName))
+        {
+            normalizedFileName = "download";
+        }
+
+        var asciiFallback = new StringBuilder(normalizedFileName.Length);
+        foreach (var character in normalizedFileName)
+        {
+            asciiFallback.Append(character is >= '\x20' and <= '\x7E' && character != '"' && character != '\\'
+                ? character
+                : '_');
+        }
+
+        var fallbackFileName = asciiFallback.Length > 0 ? asciiFallback.ToString() : "download";
+        var encodedFileName = Uri.EscapeDataString(normalizedFileName);
+        return $"inline; filename=\"{fallbackFileName}\"; filename*=UTF-8''{encodedFileName}";
     }
 
     private string GetInventoryFormPdfDirectory()

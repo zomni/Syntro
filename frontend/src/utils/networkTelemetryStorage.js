@@ -1,6 +1,6 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "./identifiers.js";
-import { getPrimaryCampusKey } from "./campusConfig.js";
+import { getPrimaryCampusKey, toCampusFileSegment } from "./campusConfig.js";
 
 const STORAGE_PREFIX = identifiers.storage.networkTelemetry;
 const STATIC_BACKUP_URL = "data/network_telemetry_backup.json?v=20260615a";
@@ -11,7 +11,7 @@ const defaultCampus = () => getPrimaryCampusKey();
 
 const normalizeCampus = (campus) => String(campus || defaultCampus()).trim() || defaultCampus();
 
-const getStorageKey = (campus) => `${STORAGE_PREFIX}_${normalizeCampus(campus)}`;
+const getStorageKey = (campus) => `${STORAGE_PREFIX}_${toCampusFileSegment(normalizeCampus(campus))}`;
 
 const normalizeList = (items) => (Array.isArray(items) ? items : []);
 

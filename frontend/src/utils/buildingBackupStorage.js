@@ -1,6 +1,6 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "./identifiers.js";
-import { getCurrentCampusKey, getBackupFileName } from "./campusConfig.js";
+import { getCurrentCampusKey, getBackupFileName, toCampusFileSegment } from "./campusConfig.js";
 
 const STORAGE_PREFIX = identifiers.storage.buildingBackup;
 
@@ -10,7 +10,7 @@ const defaultCampus = () => getCurrentCampusKey();
 
 const normalizeCampus = (campus) => String(campus || defaultCampus()).trim() || defaultCampus();
 
-const getStorageKey = (campus) => `${STORAGE_PREFIX}_${normalizeCampus(campus)}`;
+const getStorageKey = (campus) => `${STORAGE_PREFIX}_${toCampusFileSegment(normalizeCampus(campus))}`;
 
 const normalizeBackup = (backup) => ({
   campus: backup?.campus || defaultCampus(),

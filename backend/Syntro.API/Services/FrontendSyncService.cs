@@ -89,7 +89,9 @@ public class FrontendSyncService
 
         foreach (var building in buildings)
         {
-            var detailPath = Path.Combine(dataRoot, "interiors", building.Id, "building_detail.json");
+            var detailPath = FileNameSafety.IsSafePathSegment(building.Id)
+                ? Path.Combine(dataRoot, "interiors", building.Id, "building_detail.json")
+                : string.Empty;
             var detail = File.Exists(detailPath)
                 ? await ReadJsonAsync<BuildingDetail>(detailPath, cancellationToken)
                 : null;
@@ -137,6 +139,11 @@ public class FrontendSyncService
         foreach (var building in buildings)
         {
             if (!buildingMap.TryGetValue(building.Id, out var syncedBuilding))
+            {
+                continue;
+            }
+
+            if (!FileNameSafety.IsSafePathSegment(building.Id))
             {
                 continue;
             }

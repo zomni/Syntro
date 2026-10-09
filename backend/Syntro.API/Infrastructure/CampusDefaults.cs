@@ -13,4 +13,7 @@ public static class CampusDefaults
 
         return (configuration?[ConfigKey] ?? string.Empty).Trim();
     }
+
+    public static string ToFileSegment(string? campus)
+        => FileNameSafety.ToAsciiSegment(campus, "campus");
 }
