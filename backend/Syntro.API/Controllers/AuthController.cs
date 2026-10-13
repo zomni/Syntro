@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Syntro.API.Infrastructure;
 using Syntro.API.Models;
@@ -27,19 +28,22 @@ public class AuthController : Controller
     private readonly AuditLogService _auditLogService;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
+    private readonly IPasswordHasher<AuthUser> _passwordHasher;
 
     public AuthController(
         BackendAuthService authService,
         MfaService mfaService,
         AuditLogService auditLogService,
         IConfiguration configuration,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        IPasswordHasher<AuthUser> passwordHasher)
     {
         _authService = authService;
         _mfaService = mfaService;
         _auditLogService = auditLogService;
         _configuration = configuration;
         _environment = environment;
+        _passwordHasher = passwordHasher;
     }
 
     [HttpGet]
@@ -117,7 +121,7 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: result.User.Username,
             cancellationToken: cancellationToken);
-        return RedirectToUnifiedEntry();
+        return RedirectAfterSignIn(result.User, model.ReturnUrl);
     }
 
     [Authorize]
@@ -210,7 +214,9 @@ public class AuthController : Controller
             ok = true,
             username = result.User.Username,
             role = BackendAuthService.NormalizeRole(result.User.Role),
-            isAdmin = string.Equals(result.User.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            isAdmin = string.Equals(result.User.Role, AppRoles.Admin, StringComparison.OrdinalIgnoreCase),
+            requiresPasswordChange = result.User.MustChangePassword,
+            passwordChangeUrl = result.User.MustChangePassword ? Url.Action(nameof(ChangePassword), new { returnUrl = "/" }) : null
         });
     }
 
@@ -341,7 +347,7 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: user.Username,
             cancellationToken: cancellationToken);
-        return RedirectToUnifiedEntry();
+        return RedirectAfterSignIn(user, pending.ReturnUrl);
     }
 
     [HttpGet]
@@ -464,7 +470,68 @@ public class AuthController : Controller
             severity: "info",
             changedByUsername: user.Username,
             cancellationToken: cancellationToken);
-        return RedirectToUnifiedEntry();
+        return RedirectAfterSignIn(user, pending.ReturnUrl);
+    }
+
+    [Authorize]
+    [HttpGet]
+    public async Task<IActionResult> ChangePassword(string? returnUrl = null, CancellationToken cancellationToken = default)
+    {
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return RedirectToAction(nameof(Login));
+        }
+
+        return View(new ChangePasswordViewModel
+        {
+            Username = user.Username,
+            ReturnUrl = returnUrl
+        });
+    }
+
+    [Authorize]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model, CancellationToken cancellationToken)
+    {
+        var user = await GetCurrentUserAsync(cancellationToken);
+        if (user is null)
+        {
+            return RedirectToAction(nameof(Login));
+        }
+
+        model.Username = user.Username;
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var policyError = PasswordPolicyService.Validate(model.NewPassword, user.Username, _configuration);
+        if (policyError is not null)
+        {
+            ModelState.AddModelError(nameof(model.NewPassword), policyError);
+            return View(model);
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(user, model.NewPassword);
+        user.MustChangePassword = false;
+        user.FailedLoginAttempts = 0;
+        user.LockedUntilUtc = null;
+        user.UpdatedAtUtc = DateTime.UtcNow;
+        await _authService.UpdateUserAsync(user, cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-password-change",
+            resource: "auth",
+            summary: $"Se cambio la contrasena de {user.Username}",
+            details: "Cambio obligatorio completado.",
+            result: "success",
+            severity: "info",
+            changedByUsername: user.Username,
+            cancellationToken: cancellationToken);
+
+        return RedirectToLocal(model.ReturnUrl);
     }
 
     [Authorize]
@@ -563,6 +630,27 @@ public class AuthController : Controller
         }
 
         return Redirect("/dashboard");
+    }
+
+    private async Task<AuthUser?> GetCurrentUserAsync(CancellationToken cancellationToken)
+    {
+        var username = User.FindFirstValue(ClaimTypes.Name);
+        if (string.IsNullOrWhiteSpace(username))
+        {
+            return null;
+        }
+
+        return await _authService.GetUserByUsernameAsync(username, cancellationToken);
+    }
+
+    private IActionResult RedirectAfterSignIn(AuthUser user, string? returnUrl)
+    {
+        if (user.MustChangePassword)
+        {
+            return RedirectToAction(nameof(ChangePassword), new { returnUrl });
+        }
+
+        return RedirectToUnifiedEntry();
     }
 
     private IActionResult RedirectToUnifiedEntry()

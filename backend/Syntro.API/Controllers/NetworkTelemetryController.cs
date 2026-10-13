@@ -327,7 +327,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/observations")]
     public async Task<IActionResult> Observations(
         Guid snapshotId,
@@ -380,7 +380,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/matching-summary")]
     public async Task<IActionResult> MatchingSummary(
         Guid snapshotId,
@@ -397,7 +397,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("snapshots/{snapshotId:guid}/matches")]
     public async Task<IActionResult> Matches(
         Guid snapshotId,
@@ -450,7 +450,7 @@ public class NetworkTelemetryController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("scheduled-scans")]
     public async Task<IActionResult> ScheduledScans(
         [FromQuery] string? search = null,

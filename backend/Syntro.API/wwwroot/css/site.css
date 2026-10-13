@@ -60,6 +60,12 @@ body.admin-sidebar-open { overflow: hidden; }
 /* --- Mobile helpers ------------------------------------------------------ */
 .mobile-only { display: none !important; }
 
+/* Keep backend role colors aligned with the map session badge. */
+.session-role-label.role-admin { color: #f87171; }
+.session-role-label.role-editor { color: #fbbf24; }
+.session-role-label.role-auditor { color: #c084fc; }
+.session-role-label.role-viewer { color: #cbd5e1; }
+
 @media (max-width: 767.98px) {
     .admin-topbar { display: flex; }
 

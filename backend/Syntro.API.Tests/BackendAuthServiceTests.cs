@@ -90,6 +90,18 @@ public class BackendAuthServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task AuthenticateAsync_SucceedsForLocalUserWhenLdapIsDisabled()
+    {
+        await SeedUserAsync("paolo", "PV.casr.15051");
+
+        var result = await _authService.AuthenticateAsync("paolo", "PV.casr.15051");
+
+        Assert.True(result.Succeeded);
+        Assert.NotNull(result.User);
+        Assert.Equal("paolo", result.User!.Username);
+    }
+
+    [Fact]
     public async Task AuthenticateAsync_LocksAccountAfterMaxFailedAttempts()
     {
         await SeedUserAsync("ADMIN", "Val1dClave-2026!");

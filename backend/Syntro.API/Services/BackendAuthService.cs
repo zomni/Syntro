@@ -138,18 +138,19 @@ public class BackendAuthService
                 return LoginResult.CreateSucceeded(directoryUser);
             }
 
-            if (!ldapResult.IsAvailable)
+            var localFallbackAllowed = allowLocalBreakGlass && IsBreakGlassUser(normalizedUsername);
+            if (!ldapResult.IsAvailable && !localFallbackAllowed)
             {
                 return LoginResult.CreateFailed(ldapResult.Message);
             }
 
-            if (!allowLocalBreakGlass)
+            if (ldapResult.IsAvailable && !localFallbackAllowed)
             {
                 return LoginResult.CreateFailed(ldapResult.Message);
             }
         }
 
-        if (!allowLocalBreakGlass || !IsBreakGlassUser(normalizedUsername))
+        if (useLdap && (!allowLocalBreakGlass || !IsBreakGlassUser(normalizedUsername)))
         {
             return LoginResult.CreateFailed("Credenciales invalidas.");
         }
@@ -302,6 +303,14 @@ public class BackendAuthService
     public async Task<AuthUser?> GetUserByIdAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         return await _context.AuthUsers.SingleOrDefaultAsync(user => user.Id == userId, cancellationToken);
+    }
+
+    public Task<AuthUser?> GetUserByUsernameAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var normalizedUsername = Normalize(username);
+        return _context.AuthUsers.FirstOrDefaultAsync(
+            user => user.NormalizedUsername == normalizedUsername,
+            cancellationToken);
     }
 
     public async Task UpdateUserAsync(AuthUser user, CancellationToken cancellationToken = default)

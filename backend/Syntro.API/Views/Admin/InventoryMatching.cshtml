@@ -148,9 +148,12 @@
         <select id="matching-snapshot-select" class="form-select form-select-sm w-mobile-100" style="min-width: 320px;">
             <option value="">Cargando snapshots...</option>
         </select>
-        <button type="button" id="matching-rematch-btn" class="btn btn-sm btn-primary">
-            <i class="bi bi-arrow-repeat me-1"></i>Recalcular coincidencias
-        </button>
+        @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin))
+        {
+            <button type="button" id="matching-rematch-btn" class="btn btn-sm btn-primary">
+                <i class="bi bi-arrow-repeat me-1"></i>Recalcular coincidencias
+            </button>
+        }
     </div>
 </div>
 
@@ -647,8 +650,10 @@ window.addEventListener("DOMContentLoaded", () => {
                 SyntroUI.alert("No se pudo recalcular las coincidencias.");
             })
             .finally(() => {
-                rematchBtn.disabled = false;
-                rematchBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Recalcular coincidencias';
+                if (rematchBtn) {
+                    rematchBtn.disabled = false;
+                    rematchBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Recalcular coincidencias';
+                }
             });
     };
 
@@ -660,7 +665,9 @@ window.addEventListener("DOMContentLoaded", () => {
     stateSelect.addEventListener("change", () => loadMatches(1));
     riskSelect.addEventListener("change", () => loadMatches(1));
     snapshotSelect.addEventListener("change", onSnapshotChange);
-    rematchBtn.addEventListener("click", runRematch);
+    if (rematchBtn) {
+        rematchBtn.addEventListener("click", runRematch);
+    }
 
     snapshotSelect.disabled = false;
     if (rematchBtn) {

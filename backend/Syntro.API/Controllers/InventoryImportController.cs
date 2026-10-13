@@ -126,7 +126,7 @@ public class InventoryImportController : ControllerBase
         });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("run")]
     public async Task<IActionResult> Run(
         [FromQuery] string? fileName,
@@ -138,7 +138,7 @@ public class InventoryImportController : ControllerBase
         return Ok(result);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("upload")]
     public async Task<IActionResult> Upload(
         IFormFile file,

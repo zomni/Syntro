@@ -147,8 +147,8 @@
 @if (compliance.CurrentUserCanManageUsers)
 {
     <div class="mb-4">
-        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#adminManagementModal">
-            <i class="bi bi-person-gear me-1"></i>Administrar usuarios y permisos
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#adminManagementModal" title="Administrar usuarios y permisos" aria-label="Administrar usuarios y permisos">
+            <i class="bi bi-person-gear"></i>
         </button>
     </div>
 }
@@ -328,8 +328,8 @@
                 </div>
                 <div id="adminUsersContent" style="display:none">
                     <div class="d-flex justify-content-between align-items-center mb-3">
-                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#createUserPanel" aria-expanded="false" aria-controls="createUserPanel">
-                            <i class="bi bi-person-plus me-1"></i>Nuevo usuario
+                        <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#createUserPanel" aria-expanded="false" aria-controls="createUserPanel" title="Nuevo usuario" aria-label="Nuevo usuario">
+                            <i class="bi bi-person-plus"></i>
                         </button>
                         <span id="adminUsersCount" class="text-muted small"></span>
                     </div>
@@ -360,9 +360,9 @@
                             </div>
                             <div class="col-md-7 d-flex align-items-center justify-content-end gap-2 flex-wrap">
                                 <div id="createUserError" class="alert alert-danger py-2 px-3 mb-0" style="display:none"></div>
-                                <button id="createUserCancel" type="button" class="btn btn-outline-secondary btn-sm">Cancelar</button>
-                                <button id="createUserSubmit" type="button" class="btn btn-success btn-sm">
-                                    <i class="bi bi-person-plus me-1"></i>Crear usuario
+                                <button id="createUserCancel" type="button" class="btn btn-outline-secondary btn-sm" title="Cancelar" aria-label="Cancelar"><i class="bi bi-x-lg"></i></button>
+                                <button id="createUserSubmit" type="button" class="btn btn-success btn-sm" title="Crear usuario" aria-label="Crear usuario">
+                                    <i class="bi bi-person-plus"></i>
                                 </button>
                             </div>
                         </div>
@@ -386,7 +386,7 @@
                 <div id="adminUsersError" class="alert alert-danger" style="display:none"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" title="Cerrar" aria-label="Cerrar"><i class="bi bi-x-lg"></i></button>
             </div>
         </div>
     </div>
@@ -401,8 +401,8 @@
             </div>
             <div class="modal-body" id="confirmRoleBody"></div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="confirmRoleBtn">Guardar cambios</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" title="Cancelar" aria-label="Cancelar"><i class="bi bi-x-lg"></i></button>
+                <button type="button" class="btn btn-primary" id="confirmRoleBtn" title="Guardar cambios" aria-label="Guardar cambios"><i class="bi bi-check-lg"></i></button>
             </div>
         </div>
     </div>
@@ -555,7 +555,7 @@ if (adminModal) {
                 })
                 .finally(() => {
                     createSubmit.disabled = false;
-                    createSubmit.innerHTML = '<i class="bi bi-person-plus me-1"></i>Crear usuario';
+                    createSubmit.innerHTML = '<i class="bi bi-person-plus"></i>';
                 });
         });
     }
@@ -584,8 +584,8 @@ if (adminModal) {
                     const [mfaBg, mfaIcon, mfaTitle] = mfaMap[mfaState] || mfaMap.disabled;
                     const mfaHtml = `<span class="badge ${mfaBg} mfa-toggle" role="button" title="${mfaTitle}"><i class="bi ${mfaIcon}"></i></span>`;
                     const statusBadge = user.isActive
-                        ? '<span class="badge bg-success">Activo</span>'
-                        : '<span class="badge bg-danger">Inactivo</span>';
+                        ? `<button type="button" class="badge bg-success border-0 user-status-btn" data-user-id="${user.id}" data-username="${user.username}" data-active="true" title="Dar de baja" aria-label="Dar de baja">Activo</button>${user.mustChangePassword ? ' <span class="badge bg-warning text-dark" title="Debera cambiar la contrasena al iniciar sesion">Cambio de contrasena pendiente</span>' : ''}`
+                        : `<button type="button" class="badge bg-danger border-0 user-status-btn" data-user-id="${user.id}" data-username="${user.username}" data-active="false" title="Dar de alta" aria-label="Dar de alta">Inactivo</button>`;
 
                     return `<tr class="${user.isActive ? "" : "opacity-50"}">
                         <td><span class="fw-semibold">${user.username}</span></td>
@@ -603,11 +603,14 @@ if (adminModal) {
                         <td>${statusBadge}</td>
                         <td>
                             <div class="d-flex flex-column gap-1 align-items-start">
-                                <button class="btn btn-sm btn-outline-primary save-user-btn" data-user-id="${user.id}" data-username="${user.username}" disabled>
-                                    <i class="bi bi-floppy"></i> Guardar
+                                <button class="btn btn-sm btn-outline-primary save-user-btn" data-user-id="${user.id}" data-username="${user.username}" disabled title="Guardar permisos" aria-label="Guardar permisos">
+                                    <i class="bi bi-floppy"></i>
                                 </button>
-                                <button class="btn btn-sm ${user.isActive ? "btn-outline-danger" : "btn-outline-success"} toggle-active-btn" data-user-id="${user.id}" data-username="${user.username}" data-active="${user.isActive}">
-                                    <i class="bi ${user.isActive ? "bi-person-x" : "bi-person-check"}"></i> ${user.isActive ? "Dar de baja" : "Dar de alta"}
+                                <button class="btn btn-sm btn-outline-warning reset-password-btn" data-user-id="${user.id}" data-username="${user.username}" title="Reiniciar contrasena" aria-label="Reiniciar contrasena">
+                                    <i class="bi bi-key"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-user-btn" data-user-id="${user.id}" data-username="${user.username}" title="Eliminar permanentemente" aria-label="Eliminar permanentemente">
+                                    <i class="bi bi-trash3"></i>
                                 </button>
                             </div>
                         </td>
@@ -636,7 +639,7 @@ if (adminModal) {
                     });
                 });
 
-                tbody.querySelectorAll(".toggle-active-btn").forEach((btn) => {
+                tbody.querySelectorAll(".user-status-btn").forEach((btn) => {
                     btn.addEventListener("click", async () => {
                         const userId = btn.getAttribute("data-user-id");
                         const username = btn.getAttribute("data-username");
@@ -659,6 +662,72 @@ if (adminModal) {
                             })
                             .catch((err) => {
                                 SyntroUI.alert("Error: " + err.message);
+                                btn.disabled = false;
+                            });
+                    });
+                });
+
+                tbody.querySelectorAll(".delete-user-btn").forEach((btn) => {
+                    btn.addEventListener("click", async () => {
+                        const userId = btn.getAttribute("data-user-id");
+                        const username = btn.getAttribute("data-username");
+                        if (!(await SyntroUI.confirm(`¿Eliminar permanentemente al usuario ${username}? Esta accion no se puede deshacer.`))) return;
+
+                        btn.disabled = true;
+                        fetch(`/api/admin/users/${userId}`, {
+                            method: "DELETE",
+                            credentials: "same-origin"
+                        })
+                            .then(async (res) => {
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                                return data;
+                            })
+                            .then((data) => {
+                                SyntroUI.alert(data.message || "Usuario eliminado permanentemente.");
+                                loadUsers();
+                            })
+                            .catch((err) => {
+                                SyntroUI.alert("Error al eliminar el usuario: " + err.message);
+                                btn.disabled = false;
+                            });
+                    });
+                });
+
+                tbody.querySelectorAll(".reset-password-btn").forEach((btn) => {
+                    btn.addEventListener("click", async () => {
+                        const userId = btn.getAttribute("data-user-id");
+                        const username = btn.getAttribute("data-username");
+                        const newPassword = await SyntroUI.passwordPrompt(
+                            `Nueva contrasena temporal para ${username}:`
+                        );
+                        if (newPassword === null) return;
+
+                        const confirmation = await SyntroUI.passwordPrompt("Repita la nueva contrasena temporal:");
+                        if (confirmation === null) return;
+                        if (newPassword !== confirmation) {
+                            SyntroUI.alert("Las contrasenas no coinciden.");
+                            return;
+                        }
+
+                        btn.disabled = true;
+                        fetch(`/api/admin/users/${userId}/reset-password`, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ newPassword })
+                        })
+                            .then(async (res) => {
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+                                return data;
+                            })
+                            .then((data) => {
+                                SyntroUI.alert(data.message || "Contrasena reiniciada. El usuario debera cambiarla al iniciar sesion.");
+                                loadUsers();
+                            })
+                            .catch((err) => {
+                                SyntroUI.alert("Error al reiniciar la contrasena: " + err.message);
                                 btn.disabled = false;
                             });
                     });
@@ -768,7 +837,7 @@ if (adminModal) {
                                 })
                                 .finally(() => {
                                     newConfirmBtn.disabled = false;
-                                    newConfirmBtn.innerHTML = "Guardar cambios";
+                                    newConfirmBtn.innerHTML = '<i class="bi bi-check-lg"></i>';
                                 });
                         });
                     });

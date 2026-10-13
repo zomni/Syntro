@@ -397,6 +397,7 @@ public class AdminController : Controller
                 u.Role,
                 u.IsActive,
                 u.CanManageUsers,
+                u.MustChangePassword,
                 u.MfaEnabled,
                 MfaState = u.MfaEnabled && !string.IsNullOrEmpty(u.MfaSecretProtected) ? "enabled" : u.MfaEnabled ? "pending" : "disabled",
                 u.LastLoginAtUtc,
@@ -470,6 +471,7 @@ public class AdminController : Controller
             NormalizedUsername = normalizedUsername,
             Role = role,
             CanManageUsers = request.CanManageUsers && role == AppRoles.Admin,
+            MustChangePassword = true,
             IsActive = true,
             CreatedBy = currentUser.Username,
             UpdatedBy = currentUser.Username,
@@ -573,6 +575,9 @@ public class AdminController : Controller
         var passwordHasher = HttpContext.RequestServices.GetRequiredService<IPasswordHasher<AuthUser>>();
         var newHash = passwordHasher.HashPassword(targetUser, request.NewPassword);
         targetUser.PasswordHash = newHash;
+        targetUser.MustChangePassword = true;
+        targetUser.FailedLoginAttempts = 0;
+        targetUser.LockedUntilUtc = null;
         targetUser.UpdatedAtUtc = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -691,7 +696,54 @@ public class AdminController : Controller
         return Ok(new { message = $"Usuario {targetUser.Username} {(request.Active ? "activado" : "desactivado")}.", isActive = targetUser.IsActive });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [HttpDelete("/api/admin/users/{id:guid}")]
+    public async Task<IActionResult> DeleteUser(Guid id, CancellationToken cancellationToken)
+    {
+        var currentUser = await _context.AuthUsers.FirstOrDefaultAsync(
+            user => user.NormalizedUsername == User.Identity!.Name!.ToUpper(),
+            cancellationToken);
+        if (currentUser is null || !currentUser.CanManageUsers)
+        {
+            return Forbid();
+        }
+
+        var targetUser = await _context.AuthUsers.FirstOrDefaultAsync(user => user.Id == id, cancellationToken);
+        if (targetUser is null)
+        {
+            return NotFound(new { message = "Usuario no encontrado." });
+        }
+
+        if (targetUser.Id == currentUser.Id)
+        {
+            return BadRequest(new { message = "No puedes eliminar tu propia cuenta." });
+        }
+
+        if (targetUser.Role == AppRoles.Admin && await _context.AuthUsers.CountAsync(
+                user => user.IsActive && user.Role == AppRoles.Admin,
+                cancellationToken) <= 1)
+        {
+            return BadRequest(new { message = "No puedes eliminar al ultimo administrador activo." });
+        }
+
+        var deletedUsername = targetUser.Username;
+        _context.AuthUsers.Remove(targetUser);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.LogSecurityEventAsync(
+            actionType: "user-delete",
+            resource: "auth",
+            summary: $"Se elimino permanentemente el usuario {deletedUsername}",
+            details: "El registro fue eliminado de forma permanente por un administrador.",
+            result: "success",
+            severity: "critical",
+            changedByUsername: currentUser.Username,
+            cancellationToken: cancellationToken);
+
+        return Ok(new { message = $"Usuario {deletedUsername} eliminado permanentemente." });
+    }
+
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("/dashboard/network-telemetry")]
     public async Task<IActionResult> NetworkTelemetry(
         [FromQuery] Guid? snapshotId,
@@ -715,7 +767,7 @@ public class AdminController : Controller
         return View("NetworkTelemetry", model);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Auditor}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Auditor}")]
     [HttpGet("/dashboard/network-telemetry/matching")]
     public async Task<IActionResult> InventoryMatching(
         [FromQuery] Guid? snapshotId,
@@ -1946,7 +1998,7 @@ public class AdminController : Controller
         return File(await System.IO.File.ReadAllBytesAsync(filePath), document.ContentType);
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("/admin/inventory/{id:guid}/documents")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -1999,7 +2051,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("/admin/documents/{documentId:guid}/delete")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventoryDocument(Guid documentId, CancellationToken cancellationToken)
@@ -2513,6 +2565,7 @@ public class AdminController : Controller
 
     private const string InventoryFromMapCookieName = "syntro-inventory-from-map";
 
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
     public async Task<IActionResult> Inventory(
         string? search,
         string? category,
@@ -2712,6 +2765,7 @@ public class AdminController : Controller
         return View("Equipments", model);
     }
 
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor},{AppRoles.Viewer},{AppRoles.Auditor}")]
     [HttpGet("/admin/inventory/inconsistency/{id:guid}")]
     public async Task<IActionResult> InventoryInconsistency(Guid id, string? returnUrl = null)
     {
@@ -2806,7 +2860,7 @@ public class AdminController : Controller
         TempData["SuccessMessage"] = $"Fusion completada. Se integraron {mergePlan.Count} registro(s) en el equipo #{primary.Id}.";
         return RedirectToAction(nameof(InventoryInconsistency), new { id = primary.Id, returnUrl = normalizedReturnUrl });
     }
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpGet("/admin/inventory/create")]
     public async Task<IActionResult> CreateInventoryItem()
     {
@@ -2819,7 +2873,7 @@ public class AdminController : Controller
         return View(await BuildCreateInventoryItemViewModelAsync(form));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("/admin/inventory/create")]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -2996,6 +3050,7 @@ public class AdminController : Controller
         }
     }
 
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     public async Task<IActionResult> EditInventoryItem(Guid id)
     {
         var item = await _context.ImportedInventoryItems.FindAsync(id);
@@ -3006,7 +3061,7 @@ public class AdminController : Controller
         return View(await BuildEditInventoryItemViewModelAsync(item));
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     [RequestSizeLimit(25_000_000)]
@@ -3131,7 +3186,7 @@ public class AdminController : Controller
         }
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost("/admin/removeinventoryformpdf/{id:guid}")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveInventoryFormPdf(Guid id)
@@ -3155,7 +3210,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ClearInventoryAssignment(Guid id)
@@ -3189,7 +3244,7 @@ public class AdminController : Controller
         return RedirectToAction(nameof(EditInventoryItem), new { id });
     }
 
-    [Authorize(Roles = $"{AppRoles.Admin}")]
+    [Authorize(Roles = $"{AppRoles.Admin},{AppRoles.Editor}")]
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> DeleteInventoryItem(Guid id)

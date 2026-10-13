@@ -167,7 +167,7 @@
                         <button class="btn session-dropdown-toggle w-100 text-start text-white d-flex align-items-center" type="button" aria-expanded="false">
                             <span class="d-flex flex-column gap-1">
                                 <span class="fw-semibold text-truncate">@(User.Identity?.Name ?? "Sin sesion")</span>
-                                <span class="small text-info">Rol: @roleLabel</span>
+                                <span class="small session-role-label role-@roleLabel">Rol: @roleLabel</span>
                             </span>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end session-dropdown-menu">
@@ -386,6 +386,7 @@
             msgEl.classList.toggle("d-none", !opts.message);
             inputWrap.classList.toggle("d-none", !opts.input);
             if (opts.input) {
+                inputEl.type = opts.inputType || "text";
                 inputEl.value = opts.defaultValue || "";
             }
             footerEl.classList.toggle("d-none", opts.hideFooter || false);
@@ -426,6 +427,9 @@
             },
             prompt(message, defaultValue, title) {
                 return showModal({ title: title || "Entrada", message, input: true, defaultValue: defaultValue || "", okLabel: "Aceptar" });
+            },
+            passwordPrompt(message, title) {
+                return showModal({ title: title || "Entrada", message, input: true, inputType: "password", okLabel: "Aceptar" });
             },
             confirmForm(event, message) {
                 event.preventDefault();

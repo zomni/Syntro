@@ -11,6 +11,7 @@ public class AuthUser : AuditableEntity
     public DateTime? MfaEnrolledAtUtc { get; set; }
     public DateTime? MfaLastVerifiedAtUtc { get; set; }
     public bool CanManageUsers { get; set; } = true;
+    public bool MustChangePassword { get; set; }
     public int FailedLoginAttempts { get; set; }
     public DateTime? LockedUntilUtc { get; set; }
     public DateTime? LastLoginAtUtc { get; set; }
