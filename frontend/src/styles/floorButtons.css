@@ -77,41 +77,57 @@
     border-color: var(--pi-primary);
     background-color: var(--pi-primary);
     color: white;
+    overflow: visible;
 }
 
 .location-button-icon {
     position: relative;
-    display: block;
-    width: 15px;
-    height: 15px;
-    box-sizing: border-box;
-    border: 2px solid currentColor;
-    border-radius: 50%;
-}
-
-.location-button-icon::before,
-.location-button-icon::after {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    background: currentColor;
-    content: "";
-    transform: translate(-50%, -50%);
-}
-
-.location-button-icon::before {
-    width: 25px;
-    height: 2px;
-}
-
-.location-button-icon::after {
-    width: 2px;
-    height: 25px;
-}
-
-#bLoc .location-button-icon {
     z-index: 1;
-    background: var(--pi-primary);
+    display: block;
+    width: 21px;
+    height: 21px;
+    overflow: visible;
+    transition: transform 0.35s ease, filter 0.35s ease;
+}
+
+#bLoc .location-icon-bracket,
+#bLoc .location-icon-crosshair {
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.8;
+}
+
+#bLoc .location-icon-ring {
+    fill: rgba(255, 255, 255, 0.08);
+    stroke: currentColor;
+    stroke-width: 1.8;
+}
+
+#bLoc .location-icon-core {
+    fill: currentColor;
+    stroke: var(--pi-primary-bright);
+    stroke-width: 1.2;
+}
+
+#bLoc::before {
+    position: absolute;
+    inset: 2px;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    content: "";
+    opacity: 0;
+    pointer-events: none;
+}
+
+#bLoc.locationTrackingActive::before {
+    animation: location-button-ripple 1.8s ease-out infinite;
+}
+
+#bLoc.locationTrackingActive .location-button-icon {
+    animation: location-button-focus 1.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.55));
 }
 
 #bLoc.locationTrackingError {
@@ -159,6 +175,37 @@
     100% {
         opacity: 0;
         transform: translate(-50%, -50%) scale(1.35);
+    }
+}
+
+@keyframes location-button-ripple {
+    0% {
+        opacity: 0.75;
+        transform: scale(0.88);
+    }
+
+    70%,
+    100% {
+        opacity: 0;
+        transform: scale(1.6);
+    }
+}
+
+@keyframes location-button-focus {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.08) rotate(4deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #bLoc.locationTrackingActive::before,
+    #bLoc.locationTrackingActive .location-button-icon {
+        animation: none;
     }
 }
 
