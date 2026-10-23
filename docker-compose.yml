@@ -17,8 +17,8 @@ services:
       - FrontendDataPath=/app/frontend-data
       - ExcelImportRoot=/app/import
       - SQLITE_DATA_ROOT=/app/dbdata
-      - AuthSettings__AdminUsername=${ADMIN_EMAIL:-}
-      - AuthSettings__AdminPassword=${ADMIN_PASSWORD:-}
+      - AuthSettings__AdminUsername=${ADMIN_EMAIL:-admin@syntro.local}
+      - AuthSettings__AdminPassword=${ADMIN_PASSWORD:-Admin123456!}
       - AuthSettings__UseLdapAuthentication=${AUTH_USE_LDAP:-false}
       - AuthSettings__AllowLocalBreakGlass=${ALLOW_LOCAL_BREAK_GLASS:-true}
       - AuthSettings__BreakGlassUsernames=${BREAK_GLASS_USERNAMES:-ADMIN}
