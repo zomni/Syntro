@@ -89,10 +89,11 @@
             <label class="route-planner-field" for="route-origin-search">
               <span>Estoy en</span>
               <div class="route-building-combobox">
-                <input id="route-origin-search" class="route-planner-search" type="search" placeholder="Buscar y seleccionar edificio..." autocomplete="off" role="combobox" aria-expanded="false" aria-controls="route-origin-options" />
+                <input id="route-origin-search" class="route-planner-search" type="search" placeholder="Buscar y seleccionar edificio..." autocomplete="off" role="combobox" aria-expanded="false" aria-controls="route-origin-options" aria-describedby="route-origin-hint" />
                 <input id="route-origin-select" type="hidden" value="" />
                 <div id="route-origin-options" class="route-building-options" role="listbox" hidden></div>
               </div>
+              <small id="route-origin-hint" class="route-origin-hint">Selecciona el edificio de origen</small>
             </label>
             <label class="route-planner-field" for="route-destination-search">
               <span>Quiero ir a</span>

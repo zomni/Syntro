@@ -120,6 +120,20 @@ describe("cinta transportadora de la ruta", () => {
   });
 });
 
+describe("flujo desde el panel de edificio", () => {
+  it("expone una accion para abrir el planificador con destino precargado", () => {
+    expect(source).toContain("export const openRoutePlannerWithDestination = async (buildingId) =>");
+    expect(source).toContain("window.openRoutePlannerWithDestination = openRoutePlannerWithDestination;");
+    expect(source).toContain("activeRoute = { originId: \"\", destinationId: destination.id };");
+  });
+
+  it("indica visualmente que el origen es obligatorio", () => {
+    expect(source).toContain("route-origin-required");
+    expect(css).toContain("@keyframes route-origin-breathe");
+    expect(css).toContain(".route-origin-hint.is-visible");
+  });
+});
+
 describe("cuando no hay un camino real", () => {
   it("solo dibuja las cuentas cuando hay red caminable y camino", () => {
     expect(source).toMatch(/const routeIsReal = hasWalkingNetwork && !routeUnavailable;/);

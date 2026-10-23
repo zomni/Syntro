@@ -57,7 +57,7 @@ describe("burbujas de sectores", () => {
 describe("subtitulo de sala seleccionada", () => {
   it("solo renderiza el subtitulo cuando hay sala seleccionada", () => {
     expect(source).toContain(
-      'const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "")'
+      'const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "", featureId = "")'
     );
     expect(source).toContain(
       '${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}'
@@ -69,6 +69,22 @@ describe("subtitulo de sala seleccionada", () => {
       "const selectedRoomHeaderId = popupSectorFilterState[featureId] || selectedRoomId;"
     );
     expect(source).toContain("selectedRoomName,");
+  });
+});
+
+describe("acciones del panel de edificio", () => {
+  it("convierte PC e impresora en filtros internos del popup", () => {
+    expect(source).toContain("const buildDevicesSummaryHtml = (devices, featureId, activeType = \"\")");
+    expect(source).toContain("window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')");
+    expect(source).toContain("popupDeviceTypeFilterState[featureId] === nextType ? \"\" : nextType");
+    expect(source).toContain("window.clearDevicePanelFilters");
+  });
+
+  it("ofrece la navegación al edificio desde el encabezado lateral", () => {
+    expect(source).toContain("window.openRoutePlannerWithDestination");
+    expect(source).toContain('title="Ir al edificio"');
+    expect(source).toContain("const ROUTE_ICON_SVG");
+    expect(source).not.toContain("<span>Ir al edificio</span>");
   });
 });
 

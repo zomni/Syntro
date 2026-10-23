@@ -2015,6 +2015,13 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
     gap: 2px;
 }
 
+.building-panel-route-button {
+    flex: 0 0 auto;
+    gap: 5px;
+    padding-inline: 9px !important;
+    font-size: 11px !important;
+}
+
 .building-panel-title {
     min-width: 0;
     overflow: hidden;
@@ -2700,6 +2707,33 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
     outline: 2px solid rgba(var(--pi-focus-red-rgb), 0.14);
     border-color: rgba(var(--pi-focus-red-rgb), 0.42);
     background: var(--pi-surface);
+}
+
+.route-origin-hint {
+    display: none;
+    margin-top: -2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--pi-primary-deep);
+}
+
+.route-origin-required {
+    animation: route-origin-breathe 2.2s ease-in-out infinite;
+    border-color: rgba(var(--pi-primary-rgb), 0.58);
+    box-shadow: 0 0 0 3px rgba(var(--pi-primary-rgb), 0.1);
+}
+
+.route-origin-hint.is-visible {
+    display: block;
+}
+
+@keyframes route-origin-breathe {
+    0%, 100% {
+        box-shadow: 0 0 0 3px rgba(var(--pi-primary-rgb), 0.08);
+    }
+    50% {
+        box-shadow: 0 0 0 5px rgba(var(--pi-primary-rgb), 0.18);
+    }
 }
 
 .route-building-combobox {

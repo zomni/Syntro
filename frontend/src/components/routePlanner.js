@@ -431,6 +431,9 @@ const selectComboboxBuilding = (hiddenInput, searchInput, optionsElement, buildi
 
   hiddenInput.value = building.id;
   searchInput.value = getBuildingOptionLabel(building);
+  if (searchInput === document.getElementById("route-origin-search")) {
+    setOriginAttention(false);
+  }
   setComboboxOpen(searchInput, optionsElement, false);
   updateSubmitState();
 };
@@ -538,6 +541,9 @@ const bindComboboxEvents = (hiddenInput, searchInput, optionsElement) => {
 
   searchInput.addEventListener("input", () => {
     hiddenInput.value = "";
+    if (searchInput === document.getElementById("route-origin-search")) {
+      setOriginAttention(false);
+    }
     scheduleComboboxRefresh(hiddenInput, searchInput, optionsElement);
   });
 
@@ -601,6 +607,39 @@ const togglePanel = async (forceOpen) => {
   } else {
     closeComboboxes();
   }
+};
+
+const setOriginAttention = (isAttentionRequired) => {
+  const ui = getPlannerElements();
+  if (!ui) return;
+
+  ui.originSearch.classList.toggle("route-origin-required", isAttentionRequired);
+  document.getElementById("route-origin-hint")?.classList.toggle("is-visible", isAttentionRequired);
+  ui.originSearch.setAttribute("aria-describedby", isAttentionRequired ? "route-origin-hint" : "");
+};
+
+export const openRoutePlannerWithDestination = async (buildingId) => {
+  const ui = getPlannerElements();
+  if (!ui || !buildingId) return false;
+
+  closeCurrentPopup();
+  await togglePanel(true);
+
+  const buildings = await loadBuildingsCatalog();
+  const destination = getBuildingById(buildings, String(buildingId));
+  if (!destination) return false;
+
+  activeRouteRequestId += 1;
+  routeRequestInFlight = false;
+  activeRoute = { originId: "", destinationId: destination.id };
+  ui.originSelect.value = "";
+  ui.originSearch.value = "";
+  selectComboboxBuilding(ui.destinationSelect, ui.destinationSearch, ui.destinationOptions, destination);
+  setOriginAttention(true);
+  ui.originSearch.focus();
+  updateSubmitState();
+  setStatus("Selecciona el edificio de origen para continuar.", "neutral");
+  return false;
 };
 
 const getFeatureLayerById = (featureId) => {
@@ -1037,6 +1076,7 @@ const handleClear = () => {
   ui.destinationSearch.value = "";
   ui.originSelect.value = "";
   ui.destinationSelect.value = "";
+  setOriginAttention(false);
   void populateBuildingSelectors(false);
   clearRouteOverlay();
   clearRouteHighlight();
@@ -1097,6 +1137,8 @@ const initializeRoutePlanner = async () => {
     setStatus("Selecciona origen y destino.", "neutral");
   });
 };
+
+window.openRoutePlannerWithDestination = openRoutePlannerWithDestination;
 
 if (document.readyState === "loading") {
   window.addEventListener("DOMContentLoaded", () => {

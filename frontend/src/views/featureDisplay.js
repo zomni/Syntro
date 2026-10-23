@@ -1266,7 +1266,8 @@ const buildDeviceControlsHtml = (
   extraActions = "",
   sectorOptions = [],
   sectorFilter = "",
-  filtersOpen = false
+  filtersOpen = false,
+  typeFilter = ""
 ) => {
   const sizeOptions = [5, 10, 20, 50];
   const resolvedSize = Math.max(5, Number(pageSize) || 5);
@@ -1292,32 +1293,36 @@ const buildDeviceControlsHtml = (
 
   const hasSectorFilters = sectorOptions.length > 0;
   const activeSector = hasSectorFilters ? sectorOptions.find((s) => s.roomId === sectorFilter) : null;
+  const activeType = normalizeDeviceType(typeFilter || "all");
+  const hasTypeFilter = activeType && activeType !== "all";
 
   let filtersButtonHtml = "";
   let activeFilterBannerHtml = "";
   let filtersPanelHtml = "";
 
-  if (hasSectorFilters) {
+  if (hasSectorFilters || hasTypeFilter) {
     filtersButtonHtml = `
       <button
-        class="floorButton equipment-panel-chip-button${Boolean(activeSector) || filtersOpen ? " is-active" : ""}"
-        style="${getChipButtonStyle(Boolean(activeSector) || filtersOpen, false)}"
+        class="floorButton equipment-panel-chip-button${Boolean(activeSector) || hasTypeFilter || filtersOpen ? " is-active" : ""}"
+        style="${getChipButtonStyle(Boolean(activeSector) || hasTypeFilter || filtersOpen, false)}"
         onclick="window.toggleSectorFilters && window.toggleSectorFilters('${escapeHtml(featureId)}')"
       >
         ${resizeIcon(PACKAGE_ICON_SVG)} Filtros
       </button>`;
 
-    if (activeSector) {
+    if (activeSector || hasTypeFilter) {
       activeFilterBannerHtml = `
         <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <span style="${CHIP_BASE_STYLE}; background:#0ea5e91f; color:#0284c7;">
-            ${resizeIcon(ROOM_ICON_SVG)}
-            ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
-          </span>
+          ${activeSector ? `<span style="${CHIP_BASE_STYLE}; background:#0ea5e91f; color:#0284c7;">
+            ${resizeIcon(ROOM_ICON_SVG)} ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
+          </span>` : ""}
+          ${hasTypeFilter ? `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
+            ${getDeviceTypeIconHtml(activeType)} ${escapeHtml(getDeviceTypeLabel(activeType))}
+          </span>` : ""}
           <button
             class="floorButton equipment-panel-action-button"
             style="${getActionButtonStyle()}"
-            onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+            onclick="window.clearDevicePanelFilters && window.clearDevicePanelFilters('${escapeHtml(featureId)}')"
           >
             Quitar filtro
           </button>
@@ -1325,6 +1330,16 @@ const buildDeviceControlsHtml = (
     }
 
     if (filtersOpen) {
+      const typeChips = ["all", "pc", "printer"]
+        .map((type) => `
+          <button
+            class="floorButton equipment-panel-chip-button${activeType === type ? " is-active" : ""}"
+            style="${getChipButtonStyle(activeType === type, true)}"
+            onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
+          >
+            ${type === "all" ? "Todos los tipos" : `${getDeviceTypeIconHtml(type)} ${escapeHtml(getDeviceTypeLabel(type))}`}
+          </button>`)
+        .join("");
       const allChips = `
         <button
           class="floorButton equipment-panel-chip-button${activeSector ? "" : " is-active"}"
@@ -1347,7 +1362,9 @@ const buildDeviceControlsHtml = (
         .join("");
       filtersPanelHtml = `
         <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <div style="font-size:12px; color:#475569;">Filtrar por sector</div>
+          <div style="width:100%; font-size:12px; color:#475569;">Filtrar por tipo</div>
+          ${typeChips}
+          <div style="width:100%; font-size:12px; color:#475569; margin-top:4px;">Filtrar por sector</div>
           ${allChips}
           ${sectorChips}
         </div>`;
@@ -1374,6 +1391,15 @@ const buildDeviceControlsHtml = (
       ${sizeButtons}
     </div>
   `;
+};
+
+window.clearDevicePanelFilters = (featureId) => {
+  if (!featureId) return;
+  popupDeviceTypeFilterState[featureId] = "";
+  popupSectorFilterState[featureId] = "";
+  popupSectorFilterOpenState[featureId] = false;
+  popupViewState[featureId] = "devices";
+  refreshCurrentPopup();
 };
 
 
@@ -1821,7 +1847,7 @@ const popupShellStyle = `
   padding-right: 2px;
 `;
 
-const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "") => `
+const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "", featureId = "") => `
   <div class="building-panel-heading">
     <div class="building-panel-heading-copy">
       <b class="building-panel-title">
@@ -1829,6 +1855,18 @@ const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "") => `
       </b>
       ${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}
     </div>
+    ${featureId ? `
+      <button
+        type="button"
+        class="floorButton equipment-panel-action-button building-panel-route-button"
+        style="${getActionButtonStyle()}"
+        onclick="return window.openRoutePlannerWithDestination && window.openRoutePlannerWithDestination('${escapeHtml(featureId)}')"
+        title="Ir al edificio"
+        aria-label="Ir al edificio"
+      >
+        ${resizeIcon(ROUTE_ICON_SVG, 15)}
+      </button>
+    ` : ""}
     <button
       type="button"
       class="building-panel-close"
@@ -1987,6 +2025,8 @@ const FLOOR_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" heigh
 
 const ROOM_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>`;
 
+const ROUTE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M8.5 17.5 15.5 6.5"/><path d="m13 7 2.5-.5-.5 2.5"/></svg>`;
+
 const NETWORK_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
 
 const PACKAGE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
@@ -2127,7 +2167,7 @@ const buildChipsRowHtml = (...chips) => `
   </div>
 `;
 
-const buildDevicesSummaryHtml = (devices) => {
+const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
   const counts = countDevicesByType(devices);
   const presentTypes = INVENTORY_CATEGORY_ORDER.filter((type) => counts[type]);
   const extraTypes = Object.keys(counts).filter(
@@ -2146,12 +2186,22 @@ const buildDevicesSummaryHtml = (devices) => {
 
   return buildChipsRowHtml(
     ...allTypes.map(
-      (type) => `
-        <span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">
-          ${getDeviceTypeIconHtml(type)}
-          <span style="font-weight:700;">${counts[type]}</span>
-        </span>
-      `
+      (type) => {
+        const isClickable = ["pc", "printer"].includes(type);
+        const content = `${getDeviceTypeIconHtml(type)} <span style="font-weight:700;">${counts[type]}</span>`;
+        if (!isClickable) {
+          return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;
+        }
+        return `<button
+          type="button"
+          class="floorButton equipment-panel-chip-button${normalizeDeviceType(activeType || "all") === type ? " is-active" : ""}"
+          style="${CHIP_BASE_STYLE} ${getChipButtonStyle(normalizeDeviceType(activeType || "all") === type, true)} background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};"
+          onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
+          title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"
+          aria-label="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}: ${counts[type]}"
+          aria-pressed="${String(normalizeDeviceType(activeType || "all") === type)}"
+        >${content}</button>`;
+      }
     )
   );
 };
@@ -2403,7 +2453,8 @@ window.setDevicePageSize = (featureId, size) => {
 
 window.setDeviceTypeFilter = (featureId, type) => {
   if (!featureId) return;
-  popupDeviceTypeFilterState[featureId] = type && type !== "all" ? type : "";
+  const nextType = type && type !== "all" ? type : "";
+  popupDeviceTypeFilterState[featureId] = popupDeviceTypeFilterState[featureId] === nextType ? "" : nextType;
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
 };
@@ -2580,9 +2631,9 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const buildBuildingPanelPopupHtml = ({ featureName, selectedRoomName = "", building, currentFloor, hasView, contentHtml }) => `
+const buildBuildingPanelPopupHtml = ({ featureName, selectedRoomName = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
   <div style="${popupShellStyle}">
-    ${buildBuildingPanelHeaderHtml(featureName, selectedRoomName)}
+    ${buildBuildingPanelHeaderHtml(featureName, selectedRoomName, featureId || building?.id)}
     ${buildFloorSelectorHtml(building, currentFloor)}
     <div style="margin-top:8px;">
       <div style="${hasView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
@@ -2647,7 +2698,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     popupViewState[featureId] = "summary";
     return `
       <div style="${popupShellStyle}">
-        ${buildBuildingPanelHeaderHtml(featureName)}
+        ${buildBuildingPanelHeaderHtml(featureName, "", featureId)}
         ${buildFloorSelectorHtml(building, currentFloor)}
       </div>
     `;
@@ -2659,6 +2710,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     onShellReady(
       buildBuildingPanelPopupHtml({
         featureName,
+        featureId,
         building,
         currentFloor,
         hasView: true,
@@ -2761,7 +2813,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
         : `piso ${floorLabel}`;
     contentHtml = `
       <div style="${sectionBoxStyle}">
-        ${buildDevicesSummaryHtml(devicesForView)}
+        ${buildDevicesSummaryHtml(devicesForView, featureId, deviceTypeFilter)}
         ${
           canManageEquipment
             ? `<div style="margin-top:6px; font-size:11px; color:#475569;">
@@ -2770,7 +2822,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
             : ""
         }
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen)}
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter)}
         </div>
         <div style="margin-top:4px;">
           ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
@@ -2789,6 +2841,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   return buildBuildingPanelPopupHtml({
     featureName,
     selectedRoomName,
+    featureId,
     building,
     currentFloor,
     hasView: Boolean(currentView),
