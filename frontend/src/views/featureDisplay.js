@@ -2194,7 +2194,7 @@ const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
         }
         return `<button
           type="button"
-          class="floorButton equipment-panel-chip-button${normalizeDeviceType(activeType || "all") === type ? " is-active" : ""}"
+          class="floorButton equipment-panel-chip-button equipment-panel-counter-button${normalizeDeviceType(activeType || "all") === type ? " is-active" : ""}"
           style="${CHIP_BASE_STYLE} ${getChipButtonStyle(normalizeDeviceType(activeType || "all") === type, true)} background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};"
           onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
           title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"
@@ -2204,6 +2204,23 @@ const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
       }
     )
   );
+};
+
+const buildDeviceScopeSummaryHtml = (floorLabel, devices, sectorOptions = [], activeSector = null) => {
+  const sectorLabel = activeSector
+    ? `Sector ${activeSector.name}`
+    : `${sectorOptions.length} sector(es)`;
+
+  return `
+    <div class="building-panel-scope-summary" aria-live="polite">
+      <span class="building-panel-scope-summary-label">Vista actual</span>
+      <strong>Piso ${escapeHtml(floorLabel)}</strong>
+      <span aria-hidden="true">·</span>
+      <span>${escapeHtml(sectorLabel)}</span>
+      <span aria-hidden="true">·</span>
+      <span>${devices.length} equipo(s)</span>
+    </div>
+  `;
 };
 
 const UNASSIGNED_SECTOR_KEY = "__unassigned__";
@@ -2281,10 +2298,10 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
       : "margin-bottom:8px; padding:8px 10px; border:1px solid #ddd; border-radius:8px; background:#fafafa;";
 
     html += `
-      <div style="${cardStyle}"${draggableAttrs}>
+      <div class="equipment-panel-device-card${isHighlighted ? " is-highlighted" : ""}" style="${cardStyle}"${draggableAttrs}>
         ${
           isHighlighted
-            ? `<div style="font-size:11px; font-weight:700; color:#1f2937; margin-bottom:4px;">Equipo buscado</div>`
+            ? `<div class="equipment-panel-found-label">Equipo encontrado · ${escapeHtml(title)}</div>`
             : ""
         }
         <div style="font-weight:600;">${escapeHtml(title)}</div>
@@ -2813,6 +2830,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
         : `piso ${floorLabel}`;
     contentHtml = `
       <div style="${sectionBoxStyle}">
+        ${buildDeviceScopeSummaryHtml(floorLabel, devicesForView, sectorOptions, activeSectorOption)}
         ${buildDevicesSummaryHtml(devicesForView, featureId, deviceTypeFilter)}
         ${
           canManageEquipment
@@ -2824,7 +2842,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
         <div style="margin-top:8px;">
           ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter)}
         </div>
-        <div style="margin-top:4px;">
+        <div class="building-panel-device-results" style="margin-top:4px;">
           ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
         </div>
       </div>

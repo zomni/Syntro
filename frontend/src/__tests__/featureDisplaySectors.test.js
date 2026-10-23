@@ -86,6 +86,14 @@ describe("acciones del panel de edificio", () => {
     expect(source).toContain("const ROUTE_ICON_SVG");
     expect(source).not.toContain("<span>Ir al edificio</span>");
   });
+
+  it("muestra el alcance actual y anima el equipo encontrado", () => {
+    expect(source).toContain("const buildDeviceScopeSummaryHtml");
+    expect(source).toContain("building-panel-device-results");
+    expect(source).toContain("equipment-panel-found-label");
+    expect(css).toContain("@keyframes equipment-found-pulse");
+    expect(css).toContain("@keyframes equipment-counter-pop");
+  });
 });
 
 describe("visibilidad de los sectores", () => {

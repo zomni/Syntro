@@ -1138,6 +1138,63 @@ body.session-warning-open .leaflet-container {
     color: #333;
 }
 
+.equipment-panel-counter-button {
+    animation: equipment-counter-pop 0.45s ease-out;
+}
+
+.building-panel-scope-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 24px;
+    margin: 0 0 4px;
+    color: #475569;
+    font-size: 11px;
+}
+
+.building-panel-scope-summary-label {
+    color: #64748b;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.building-panel-device-results {
+    min-height: 190px;
+}
+
+.equipment-panel-device-card.is-highlighted {
+    animation: equipment-found-pulse 2.4s ease-in-out 2;
+}
+
+.equipment-panel-found-label {
+    margin-bottom: 4px;
+    color: #1d4ed8;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+@keyframes equipment-counter-pop {
+    from {
+        opacity: 0.5;
+        transform: scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes equipment-found-pulse {
+    0%, 100% {
+        box-shadow: 0 0 0 0 rgba(47, 126, 168, 0.04);
+    }
+    50% {
+        box-shadow: 0 0 0 5px rgba(47, 126, 168, 0.16);
+    }
+}
+
 /* Ghost del arrastre de equipos: badge "+" con el icono del tipo al lado.
    Vive fuera de pantalla para que el navegador lo capture con setDragImage. */
 .equipment-drag-ghost {
@@ -2864,7 +2921,9 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .route-conveyor-beads {
+    .route-conveyor-beads,
+    .equipment-panel-counter-button,
+    .equipment-panel-device-card.is-highlighted {
         animation: none;
     }
 }
