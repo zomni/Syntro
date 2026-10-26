@@ -324,6 +324,7 @@
         let footerEl = null;
         let bsModal = null;
         let currentResolve = null;
+        let currentResult = null;
         let defaultTitle = "";
 
         const ensureModal = () => {
@@ -372,8 +373,10 @@
             });
             modalEl.addEventListener("hidden.bs.modal", () => {
                 const resolve = currentResolve;
+                const result = currentResult;
                 currentResolve = null;
-                if (resolve) resolve(null);
+                currentResult = null;
+                if (resolve) resolve(result);
             });
             bsModal = new bootstrap.Modal(modalEl);
             defaultTitle = titleEl.textContent;
@@ -400,15 +403,12 @@
             return new Promise((resolve) => {
                 currentResolve = resolve;
                 okBtn.onclick = () => {
-                    const val = opts.input ? inputEl.value : true;
-                    currentResolve = null;
+                    currentResult = opts.input ? inputEl.value : true;
                     bsModal.hide();
-                    resolve(val);
                 };
                 cancelBtn.onclick = () => {
-                    currentResolve = null;
+                    currentResult = opts.input ? null : false;
                     bsModal.hide();
-                    resolve(opts.input ? null : false);
                 };
                 bsModal.show();
                 setTimeout(() => {

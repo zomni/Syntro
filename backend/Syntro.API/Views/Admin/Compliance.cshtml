@@ -702,6 +702,10 @@ if (adminModal) {
                             `Nueva contrasena temporal para ${username}:`
                         );
                         if (newPassword === null) return;
+                        if (newPassword.length < 10) {
+                            await SyntroUI.alert("La contrasena debe tener al menos 10 caracteres.");
+                            return;
+                        }
 
                         const confirmation = await SyntroUI.passwordPrompt("Repita la nueva contrasena temporal:");
                         if (confirmation === null) return;
@@ -711,6 +715,8 @@ if (adminModal) {
                         }
 
                         btn.disabled = true;
+                        const originalButtonHtml = btn.innerHTML;
+                        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-label="Reiniciando"></span>';
                         fetch(`/api/admin/users/${userId}/reset-password`, {
                             method: "POST",
                             credentials: "same-origin",
@@ -728,6 +734,9 @@ if (adminModal) {
                             })
                             .catch((err) => {
                                 SyntroUI.alert("Error al reiniciar la contrasena: " + err.message);
+                            })
+                            .finally(() => {
+                                btn.innerHTML = originalButtonHtml;
                                 btn.disabled = false;
                             });
                     });
