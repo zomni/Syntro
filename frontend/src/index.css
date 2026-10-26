@@ -2012,7 +2012,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
     flex: 1 1 auto;
     min-width: 0;
     flex-direction: column;
-    gap: 2px;
+    gap: 6px;
 }
 
 .building-panel-route-button {
@@ -2026,17 +2026,24 @@ html[data-admin-map-tool-mode="geometry-move"] .building-sector-contour {
     min-width: 0;
     overflow: hidden;
     color: #0f172a;
-    font-size: 16px;
-    line-height: 1.2;
+    font-size: 21px;
+    font-weight: 800;
+    line-height: 1.18;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .building-panel-subtitle {
     overflow: hidden;
-    color: #64748b;
-    font-size: 12px;
-    font-weight: 600;
+    width: fit-content;
+    max-width: 100%;
+    padding: 4px 9px;
+    border: 1px solid #7dd3fc;
+    border-radius: 999px;
+    background: #e0f2fe;
+    color: #075985;
+    font-size: 13px;
+    font-weight: 750;
     line-height: 1.25;
     text-overflow: ellipsis;
     white-space: nowrap;

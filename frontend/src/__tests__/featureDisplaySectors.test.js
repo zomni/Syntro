@@ -45,12 +45,11 @@ describe("burbujas de sectores", () => {
     expect(css).toMatch(/\.building-equipment-bubble button \{[\s\S]*?box-sizing: border-box;[\s\S]*?display: flex;[\s\S]*?align-items: center;[\s\S]*?justify-content: center;[\s\S]*?padding: 0;/);
   });
 
-  it("un sector unico no lleva contador propio; solo el total del piso", () => {
-    expect(source).toContain("const showSectorCounters = sectors.length >= 2;");
+  it("muestra el contador del sector aunque sea el unico del piso y filtra los contadores", () => {
+    expect(source).toContain("const showSectorCounters = sectors.length >= 1;");
     expect(source).toContain("if (!canViewEquipment || !showSectorCounters) continue;");
-    expect(source).toContain(
-      "placeFloorTotalBubble(overlay, floorRing, devicesInFloor.length, floor, featureId);"
-    );
+    expect(source).toContain("placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);");
+    expect(source).toContain("const popupTypeFilter = popupDeviceTypeFilterState[featureId] || globalEquipmentTypeFilter;");
   });
 });
 
@@ -73,11 +72,26 @@ describe("subtitulo de sala seleccionada", () => {
 });
 
 describe("acciones del panel de edificio", () => {
-  it("convierte PC e impresora en filtros internos del popup", () => {
+  it("mantiene filtros internos de tipo y muestra los contadores como indicadores no interactivos", () => {
     expect(source).toContain("const buildDevicesSummaryHtml = (devices, featureId, activeType = \"\")");
-    expect(source).toContain("window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')");
+    expect(source).toContain('const typeChips = ["all", "pc", "printer"]');
+    expect(source).toContain('return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;');
+    expect(source).not.toContain('title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"');
     expect(source).toContain("popupDeviceTypeFilterState[featureId] === nextType ? \"\" : nextType");
     expect(source).toContain("window.clearDevicePanelFilters");
+  });
+
+  it("reemplaza el estado de actividad por coincidencia con la última captura", () => {
+    expect(source).toContain("foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot)");
+    expect(source).toContain('const label = found ? "Conectado a red" : "Sin conexión a red";');
+    expect(source).toContain("buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)");
+    expect(source).not.toContain("... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas");
+  });
+
+  it("incluye la opción para mostrar todos los equipos", () => {
+    expect(source).toContain('const sizeOptions = [5, 10, 20, 50, "all"];');
+    expect(source).toContain('${size === "all" ? "Todos" : size}');
+    expect(source).toContain('const resolvedPageSize = pageSize === "all" ? filteredDevices.length');
   });
 
   it("ofrece la navegación al edificio desde el encabezado lateral", () => {

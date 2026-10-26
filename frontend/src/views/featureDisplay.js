@@ -1102,7 +1102,7 @@ const normalizeImportedInventoryItems = (items) => {
     deviceId: item?.id ? `inventory-${item.id}` : `inventory-row-${item?.rowNumber || "na"}`,
     name: item?.serialNumber || item?.description || item?.itemNumber || "Equipo",
     type: item?.inferredCategory || "other",
-    status: item?.inferredStatus || "active",
+    foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot),
     ip: item?.ipAddress || "",
     roomId: item?.assignedRoomExternalId || "",
     assignedFloor:
@@ -1269,8 +1269,8 @@ const buildDeviceControlsHtml = (
   filtersOpen = false,
   typeFilter = ""
 ) => {
-  const sizeOptions = [5, 10, 20, 50];
-  const resolvedSize = Math.max(5, Number(pageSize) || 5);
+  const sizeOptions = [5, 10, 20, 50, "all"];
+  const resolvedSize = pageSize === "all" ? "all" : Math.max(5, Number(pageSize) || 5);
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
   const inputHtml = isOpen
     ? `<input type="text" value="${escapeHtml(query || "")}" placeholder="Buscar equipo..."`
@@ -1280,14 +1280,14 @@ const buildDeviceControlsHtml = (
 
   let sizeButtons = "";
   for (const size of sizeOptions) {
-    const isActive = resolvedSize === size;
+    const isActive = String(resolvedSize) === String(size);
     sizeButtons += `
       <button
         class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
         style="${getChipButtonStyle(isActive, true)}"
-        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', ${size})"
+        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', '${size}')"
       >
-        ${size}
+        ${size === "all" ? "Todos" : size}
       </button>`;
   }
 
@@ -2102,6 +2102,17 @@ const getStatusMeta = (status) => {
   return { color: "#94a3b8", label: status || "Sin estado" };
 };
 
+const buildInventoryMatchBadgeHtml = (found) => {
+  const color = found ? "#16a34a" : "#dc2626";
+  const label = found ? "Conectado a red" : "Sin conexión a red";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:${color}1f; color:${color};">
+      <span style="width:8px; height:8px; border-radius:50%; background:${color}; display:inline-block;"></span>
+      ${label}
+    </span>
+  `;
+};
+
 const buildStatusBadgeHtml = (status) => {
   const meta = getStatusMeta(status);
   return `
@@ -2187,20 +2198,8 @@ const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
   return buildChipsRowHtml(
     ...allTypes.map(
       (type) => {
-        const isClickable = ["pc", "printer"].includes(type);
         const content = `${getDeviceTypeIconHtml(type)} <span style="font-weight:700;">${counts[type]}</span>`;
-        if (!isClickable) {
-          return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;
-        }
-        return `<button
-          type="button"
-          class="floorButton equipment-panel-chip-button${normalizeDeviceType(activeType || "all") === type ? " is-active" : ""}"
-          style="${CHIP_BASE_STYLE} ${getChipButtonStyle(normalizeDeviceType(activeType || "all") === type, true)} background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};"
-          onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
-          title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"
-          aria-label="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}: ${counts[type]}"
-          aria-pressed="${String(normalizeDeviceType(activeType || "all") === type)}"
-        >${content}</button>`;
+        return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;
       }
     )
   );
@@ -2240,7 +2239,7 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
     return `No hay equipos del tipo ${escapeHtml(getDeviceTypeLabel(activeType))}.`;
   }
 
-  const resolvedPageSize = Math.max(5, Number(pageSize) || 5);
+  const resolvedPageSize = pageSize === "all" ? filteredDevices.length : Math.max(5, Number(pageSize) || 5);
   let displayDevices = filteredDevices.slice(0, resolvedPageSize);
   const highlightDevice = highlightKey
     ? filteredDevices.find((device) => matchesDeviceKey(device, highlightKey))
@@ -2296,7 +2295,7 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
           buildFloorBadgeHtml(deviceFloor),
           buildRoomChipHtml(roomName),
           buildIpLabelHtml(device.ip),
-          buildStatusBadgeHtml(device.status)
+          buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)
         )}
         <div style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
@@ -2304,10 +2303,6 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
         </div>
       </div>
     `;
-  }
-
-  if (filteredDevices.length > resolvedPageSize) {
-    html += `... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas<br/>`;
   }
 
   return html;
@@ -2446,7 +2441,7 @@ window.setDeviceSearch = (featureId, value) => {
 
 window.setDevicePageSize = (featureId, size) => {
   if (!featureId) return;
-  const resolved = Math.max(5, Number(size) || 5);
+  const resolved = size === "all" ? "all" : Math.max(5, Number(size) || 5);
   popupDevicePageSizeState[featureId] = resolved;
   refreshCurrentPopup();
 };
@@ -2456,6 +2451,10 @@ window.setDeviceTypeFilter = (featureId, type) => {
   const nextType = type && type !== "all" ? type : "";
   popupDeviceTypeFilterState[featureId] = popupDeviceTypeFilterState[featureId] === nextType ? "" : nextType;
   popupViewState[featureId] = "devices";
+  const feature = currentOpenLayer?.feature;
+  if (feature && currentOpenFeatureId === featureId) {
+    void renderFloorSectors(feature);
+  }
   refreshCurrentPopup();
 };
 
@@ -2779,7 +2778,10 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     for (const room of roomsInFloor) {
       if (room.type === "sector") sectorCounts.set(room.roomId, 0);
     }
-    for (const device of devicesInFloor) {
+    const countedForType = deviceTypeFilter
+      ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === deviceTypeFilter)
+      : devicesInFloor;
+    for (const device of countedForType) {
       if (device.roomId && sectorCounts.has(device.roomId)) {
         sectorCounts.set(device.roomId, sectorCounts.get(device.roomId) + 1);
       }
@@ -3337,16 +3339,19 @@ const renderFloorSectors = async (feature) => {
   const sectors = filterRoomsByFloor(allRooms, floor).filter(
     (room) => room.type === "sector" && room.geometryJson
   );
-  // Un sector unico no necesita contador propio: el total del piso ya lo
-  // resume. Solo se pintan contadores de sector si el piso tiene 2 o mas.
-  const showSectorCounters = sectors.length >= 2;
+  // Mostrar también el contador del único sector que tenga geometría en el piso.
+  const showSectorCounters = sectors.length >= 1;
   const devicesInFloor = filterDevicesByFloor(allDevices, sectors, allRooms, floor);
+  const popupTypeFilter = popupDeviceTypeFilterState[featureId] || globalEquipmentTypeFilter;
+  const countedDevicesInFloor = popupTypeFilter
+    ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === popupTypeFilter)
+    : devicesInFloor;
 
   const sectorCountByRoom = new Map();
   for (const sector of sectors) {
     sectorCountByRoom.set(sector.roomId, 0);
   }
-  for (const device of devicesInFloor) {
+  for (const device of countedDevicesInFloor) {
     if (device.roomId && sectorCountByRoom.has(device.roomId)) {
       sectorCountByRoom.set(device.roomId, sectorCountByRoom.get(device.roomId) + 1);
     }
@@ -3413,7 +3418,7 @@ const renderFloorSectors = async (feature) => {
 
     if (!canViewEquipment || !showSectorCounters) continue;
 
-    const count = sectorCountByRoom.get(sector.roomId) || 0;
+    const count = countedDevicesInFloor.filter((device) => device.roomId === sector.roomId).length;
     const centroid = ringCentroidLatLng(latLngs);
     const bubblePoint = resolveBubbleLatLng({
       preferred: centroid ? L.latLng(centroid[0], centroid[1]) : null,
@@ -3458,7 +3463,7 @@ const renderFloorSectors = async (feature) => {
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
-  placeFloorTotalBubble(overlay, floorRing, devicesInFloor.length, floor, featureId);
+  placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
 };
 
 const createBuildingViewMap = (layer) => {
