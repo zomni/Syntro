@@ -53,21 +53,33 @@ describe("burbujas de sectores", () => {
   });
 });
 
-describe("subtitulo de sala seleccionada", () => {
-  it("solo renderiza el subtitulo cuando hay sala seleccionada", () => {
+describe("jerarquia visual de edificio y sector", () => {
+  it("identifica el edificio como titulo principal y conserva los pisos en su bloque", () => {
     expect(source).toContain(
-      'const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "", featureId = "")'
+      'const buildBuildingPanelHeaderHtml = (featureName, featureId = "")'
     );
-    expect(source).toContain(
-      '${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}'
-    );
+    expect(source).toContain("building-panel-building-label");
+    expect(source).toContain("building-panel-building-context");
+    expect(source).toContain("building-panel-floor-context");
+    expect(css).toContain(".building-panel-building-context {");
   });
 
-  it("resuelve el nombre desde el filtro de sector o la sala seleccionada", () => {
-    expect(source).toContain(
-      "const selectedRoomHeaderId = popupSectorFilterState[featureId] || selectedRoomId;"
-    );
-    expect(source).toContain("selectedRoomName,");
+  it("agrupa el sector seleccionado, su contador y quitar filtro con el color del poligono", () => {
+    expect(source).toContain("const buildSelectedSectorContextHtml = (name, count, featureId) =>");
+    expect(source).toContain("building-panel-sector-context");
+    expect(source).toContain("window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')");
+    expect(source).toContain('aria-label="Quitar filtro de sector"');
+    expect(source).toContain('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"');
+    expect(source).not.toContain(">Quitar filtro</button>");
+    expect(source).toContain("building-panel-sector-count");
+    expect(css).toContain("border-left: 5px solid #6d28d9;");
+    expect(css).toContain("color: #6d28d9;");
+  });
+
+  it("omite repetir el nombre del sector en cada equipo cuando ya esta filtrado", () => {
+    expect(source).toContain("const roomChip = activeSectorFilter && device.roomId === activeSectorFilter");
+    expect(source).toContain("          roomChip,");
+    expect(source).not.toContain('class="building-panel-subtitle"');
   });
 });
 

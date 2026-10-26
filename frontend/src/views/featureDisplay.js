@@ -1310,22 +1310,12 @@ const buildDeviceControlsHtml = (
         ${resizeIcon(PACKAGE_ICON_SVG)} Filtros
       </button>`;
 
-    if (activeSector || hasTypeFilter) {
+    if (hasTypeFilter) {
       activeFilterBannerHtml = `
         <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          ${activeSector ? `<span style="${CHIP_BASE_STYLE}; background:#0ea5e91f; color:#0284c7;">
-            ${resizeIcon(ROOM_ICON_SVG)} ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
-          </span>` : ""}
-          ${hasTypeFilter ? `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
+          <span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
             ${getDeviceTypeIconHtml(activeType)} ${escapeHtml(getDeviceTypeLabel(activeType))}
-          </span>` : ""}
-          <button
-            class="floorButton equipment-panel-action-button"
-            style="${getActionButtonStyle()}"
-            onclick="window.clearDevicePanelFilters && window.clearDevicePanelFilters('${escapeHtml(featureId)}')"
-          >
-            Quitar filtro
-          </button>
+          </span>
         </div>`;
     }
 
@@ -1847,13 +1837,15 @@ const popupShellStyle = `
   padding-right: 2px;
 `;
 
-const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "", featureId = "") => `
+const BUILDING_CONTEXT_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M8 10h.01M8 14h.01M16 10h.01M16 14h.01"/></svg>`;
+
+const buildBuildingPanelHeaderHtml = (featureName, featureId = "") => `
   <div class="building-panel-heading">
     <div class="building-panel-heading-copy">
-      <b class="building-panel-title">
-        ${escapeHtml(featureName)}
-      </b>
-      ${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}
+      <span class="building-panel-entity-label building-panel-building-label">
+        ${resizeIcon(BUILDING_CONTEXT_ICON_SVG, 17)} Edificio
+      </span>
+      <b class="building-panel-title">${escapeHtml(featureName)}</b>
     </div>
     ${featureId ? `
       <button
@@ -2258,6 +2250,9 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
   for (const device of displayDevices) {
     const room = roomsMap.get(device.roomId);
     const roomName = room?.name || room?.shortName || "Sin sector";
+    const roomChip = activeSectorFilter && device.roomId === activeSectorFilter
+      ? ""
+      : buildRoomChipHtml(roomName);
     const title = device.serialNumber || device.name || device.deviceId || "Sin S/N";
     const description = device.description || device.name || "Sin descripcion";
     const isHighlighted = highlightDevice === device;
@@ -2293,7 +2288,7 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
         ${buildChipsRowHtml(
           buildDeviceTypeChipHtml(device.type),
           buildFloorBadgeHtml(deviceFloor),
-          buildRoomChipHtml(roomName),
+          roomChip,
           buildIpLabelHtml(device.ip),
           buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)
         )}
@@ -2340,8 +2335,8 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   if (!floors.length) return "";
 
   let html = `
-    <div style="margin-top:10px;">
-      <div style="font-weight:600; margin-bottom:4px;">Pisos del edificio</div>
+    <div class="building-panel-floor-context">
+      <div class="building-panel-floor-heading">Pisos del edificio</div>
       <div style="${chipRowStyle}">
   `;
 
@@ -2362,6 +2357,32 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
 
   html += `</div></div>`;
   return html;
+};
+
+const buildSelectedSectorContextHtml = (name, count, featureId) => {
+  if (!name) return "";
+  return `
+    <section class="building-panel-sector-context" aria-label="Sector seleccionado">
+      <div class="building-panel-sector-heading">
+        <span class="building-panel-entity-label building-panel-sector-label">
+          ${resizeIcon(ROOM_ICON_SVG, 17)} Sector
+        </span>
+        <strong class="building-panel-sector-name">${escapeHtml(name)}</strong>
+      </div>
+      <div class="building-panel-sector-actions">
+        <span class="building-panel-sector-count">${escapeHtml(String(count))} equipo(s)</span>
+        <button
+          type="button"
+          class="floorButton building-panel-clear-sector"
+          aria-label="Quitar filtro de sector"
+          title="Quitar filtro de sector"
+          onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </section>
+  `;
 };
 
 const POPUP_SKELETON_DELAY_MS = 120;
@@ -2630,10 +2651,13 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const buildBuildingPanelPopupHtml = ({ featureName, selectedRoomName = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
+const buildBuildingPanelPopupHtml = ({ featureName, selectedSectorContextHtml = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
   <div style="${popupShellStyle}">
-    ${buildBuildingPanelHeaderHtml(featureName, selectedRoomName, featureId || building?.id)}
-    ${buildFloorSelectorHtml(building, currentFloor)}
+    <section class="building-panel-building-context">
+      ${buildBuildingPanelHeaderHtml(featureName, featureId || building?.id)}
+      ${buildFloorSelectorHtml(building, currentFloor)}
+    </section>
+    ${selectedSectorContextHtml}
     <div style="margin-top:8px;">
       <div style="${hasView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
         ${contentHtml}
@@ -2697,8 +2721,10 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     popupViewState[featureId] = "summary";
     return `
       <div style="${popupShellStyle}">
-        ${buildBuildingPanelHeaderHtml(featureName, "", featureId)}
-        ${buildFloorSelectorHtml(building, currentFloor)}
+        <section class="building-panel-building-context">
+          ${buildBuildingPanelHeaderHtml(featureName, featureId)}
+          ${buildFloorSelectorHtml(building, currentFloor)}
+        </section>
       </div>
     `;
   }
@@ -2732,12 +2758,6 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
   const roomsInFloor = filterRoomsByFloor(allRooms, currentFloor);
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
-  const selectedRoomHeaderId = popupSectorFilterState[featureId] || selectedRoomId;
-  const selectedRoomHeader = selectedRoomHeaderId
-    ? roomsInFloor.find((room) => room.roomId === selectedRoomHeaderId && room.type === "sector")
-    : null;
-  const selectedRoomName = selectedRoomHeader?.name || "";
-
   const searchPopupContent = building?.searchPopupContent || "";
   const canManageEquipment = canManageEquipmentAssignments(backendSession);
   const isBackendAdmin = Boolean(backendSession?.isAdmin);
@@ -2746,6 +2766,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     : "";
 
   let contentHtml = "";
+  let selectedSectorContextHtml = "";
   if (currentView === "summary") {
     contentHtml = `
       <div style="${sectionBoxStyle}">
@@ -2808,6 +2829,13 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     const activeSectorOption = activeSectorFilter
       ? sectorOptionsForFilter.find((s) => s.roomId === activeSectorFilter)
       : null;
+    if (activeSectorOption && activeSectorFilter !== UNASSIGNED_SECTOR_KEY) {
+      selectedSectorContextHtml = buildSelectedSectorContextHtml(
+        activeSectorOption.name,
+        activeSectorOption.count,
+        featureId
+      );
+    }
     const devicesScopeLabel = activeSectorOption
       ? `sector ${activeSectorOption.name}`
       : deviceScope === "building"
@@ -2842,7 +2870,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
 
   return buildBuildingPanelPopupHtml({
     featureName,
-    selectedRoomName,
+    selectedSectorContextHtml,
     featureId,
     building,
     currentFloor,
