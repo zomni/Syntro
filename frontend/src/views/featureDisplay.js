@@ -2939,16 +2939,13 @@ const showBuildingFloorLoading = (floor) => {
     buildingFloorLoadingElement.setAttribute("role", "status");
     buildingFloorLoadingElement.setAttribute("aria-live", "polite");
     buildingFloorLoadingElement.innerHTML = `
-      <span class="building-floor-loading-spinner" aria-hidden="true"></span>
-      <span class="building-floor-loading-text"></span>
+      <span class="building-floor-loading-spinner" aria-label="Cargando piso"></span>
     `;
     buildingViewContainer.appendChild(buildingFloorLoadingElement);
   }
 
   buildingFloorLoadingToken += 1;
   buildingFloorLoadingStartedAt = performance.now();
-  const text = buildingFloorLoadingElement.querySelector(".building-floor-loading-text");
-  if (text) text.textContent = `Cargando piso ${floor}...`;
   buildingFloorLoadingElement.classList.add("is-visible");
   buildingFloorLoadingElement.setAttribute("aria-hidden", "false");
   return buildingFloorLoadingToken;
