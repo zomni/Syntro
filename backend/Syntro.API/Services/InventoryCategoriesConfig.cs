@@ -12,7 +12,7 @@ public static class InventoryCategoriesConfig
         => GetNames(configuration, "InventoryCategories:Statuses", "Name");
 
     public static string GetFallbackCategory(IConfiguration configuration)
-        => configuration?["InventoryCategories:FallbackCategory"] ?? "other";
+        => configuration?["InventoryCategories:FallbackCategory"] ?? string.Empty;
 
     public static string GetFallbackStatus(IConfiguration configuration)
         => configuration?["InventoryCategories:FallbackStatus"] ?? "active";

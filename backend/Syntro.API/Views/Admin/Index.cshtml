@@ -10,7 +10,17 @@
     var suggestedPercent = Math.Round(Model.SuggestedItems * 100.0 / totalItems, 1);
     var assignedAngle = Math.Clamp(Model.AssignedItems * 360.0 / totalItems, 0, 360);
     var suggestedAngle = Math.Clamp((Model.AssignedItems + Model.SuggestedItems) * 360.0 / totalItems, 0, 360);
-    var maxCategoryCount = Math.Max(Model.CategoryBreakdown.Any() ? Model.CategoryBreakdown.Max(category => category.Count) : 0, 1);
+    var pcCount = Model.CategoryBreakdown
+        .Where(category => string.Equals(category.Category, "pc", StringComparison.OrdinalIgnoreCase))
+        .Sum(category => category.Count);
+    var printerCount = Model.CategoryBreakdown
+        .Where(category => string.Equals(category.Category, "printer", StringComparison.OrdinalIgnoreCase))
+        .Sum(category => category.Count);
+    var reviewCount = Model.CategoryBreakdown
+        .Where(category => !string.Equals(category.Category, "pc", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(category.Category, "printer", StringComparison.OrdinalIgnoreCase))
+        .Sum(category => category.Count);
+    var maxEquipmentCount = Math.Max(Math.Max(pcCount, printerCount), 1);
     var displayTimeZone = Syntro.API.Services.TelemetryTimeSettings.ResolveTimeZone(Config);
 
     string FormatChileDateTime(DateTime? value, string format = "dd/MM/yyyy HH:mm")
@@ -27,23 +37,17 @@
         return TimeZoneInfo.ConvertTimeFromUtc(utcValue, displayTimeZone).ToString(format);
     }
 
-    string TranslateCategory(string? category)
+    string TranslateStatus(string? status)
     {
-        var raw = (category ?? string.Empty).Trim();
-        var translated = raw.ToLowerInvariant() switch
+        return (status ?? string.Empty).Trim().ToLowerInvariant() switch
         {
-            "pc" => "Pc",
-            "printer" => "Impresora",
-            "other" => "Otro",
-            _ => raw
+            "active" => "Activo",
+            "maintenance" => "Mantenimiento",
+            "inactive" => "Inactivo",
+            "stolen" => "Robado",
+            "gap" => "Brecha",
+            _ => string.IsNullOrWhiteSpace(status) ? "Sin estado" : status.Trim()
         };
-
-        if (string.IsNullOrWhiteSpace(translated))
-        {
-            return translated;
-        }
-
-        return char.ToUpperInvariant(translated[0]) + translated.Substring(1);
     }
 }
 
@@ -132,6 +136,12 @@
     .chart-legend-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
     .category-bar-track { height: 10px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
     .category-bar-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2d79a0, #38bdf8); }
+    .equipment-type-bar { height: 12px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .equipment-type-fill { height: 100%; border-radius: inherit; }
+    .database-action-group { border-radius: 14px; padding: 1rem; height: 100%; }
+    .database-action-group.safe { background: #f8fafc; border: 1px solid #e2e8f0; }
+    .database-action-group.danger { background: #fff7ed; border: 1px solid #fed7aa; }
+    .review-callout { border: 1px dashed #f59e0b; background: #fffbeb; border-radius: 12px; }
     .activity-dot { width: 11px; height: 11px; border-radius: 999px; background: #2d79a0; box-shadow: 0 0 0 4px rgba(45, 121, 160, 0.12); }
 
     .risk-gauge {
@@ -234,40 +244,20 @@
             <div class="col-lg-5 fade-in-up fade-in-up-d1">
                 <div class="bg-white bg-opacity-10 rounded-4 p-4 transition-hover">
                     <div class="d-flex align-items-center justify-content-between mb-2">
-                        <span class="text-white-50 small fw-semibold">Progreso de asignacion</span>
+                         <span class="text-white-50 small fw-semibold">Progreso de asignación</span>
                         <span class="badge bg-info bg-opacity-75 fs-6 fw-bold px-3 py-1">@assignedPercent.ToString("F1")%</span>
                     </div>
                     <div class="progress bg-white bg-opacity-25" style="height: 14px;">
                         <div class="progress-bar bg-info" style="width: @assignedPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div>
                     </div>
-                    <div class="row g-3 mt-3">
-                        <div class="col-4">
-                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
-                                <div class="fs-4 fw-bold text-white">@Model.TotalImportedItems</div>
-                                <div class="small text-white-50">Total</div>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
-                                <div class="fs-4 fw-bold text-white">@Model.AssignedItems</div>
-                                <div class="small text-white-50">Asignados</div>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="rounded-3 bg-white bg-opacity-10 p-2 text-center">
-                                <div class="fs-4 fw-bold text-warning">@Model.PendingAssignmentItems</div>
-                                <div class="small text-white-50">Pendientes</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                 </div>
             </div>
         </div>
     </div>
 </div>
 
 <div class="row g-4 mb-4">
-    <div class="col-md-3 fade-in-up fade-in-up-d1">
+    <div class="col-md-4 fade-in-up fade-in-up-d1">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -282,22 +272,22 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d2">
-        <div class="card dashboard-card">
+    <div class="col-md-4 fade-in-up fade-in-up-d2">
+         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
                     <div class="dashboard-kpi-icon bg-success bg-opacity-10">
                         <i class="bi bi-pc-display text-success fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small">Equipos importados</div>
-                        <div class="fs-3 fw-bold">@Model.TotalImportedItems</div>
+                         <div class="text-muted small">Salas sincronizadas</div>
+                         <div class="fs-3 fw-bold">@Model.SyncedRooms</div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d3">
+    <div class="col-md-4 fade-in-up fade-in-up-d3">
         <div class="card dashboard-card">
             <div class="card-body">
                 <div class="d-flex align-items-center gap-3">
@@ -305,23 +295,8 @@
                         <i class="bi bi-check2-circle text-info fs-4"></i>
                     </div>
                     <div>
-                        <div class="text-muted small">Asignados manualmente</div>
-                        <div class="fs-3 fw-bold">@Model.AssignedItems</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3 fade-in-up fade-in-up-d4">
-        <div class="card dashboard-card">
-            <div class="card-body">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="dashboard-kpi-icon bg-warning bg-opacity-10">
-                        <i class="bi bi-hourglass-split text-warning fs-4"></i>
-                    </div>
-                    <div>
-                        <div class="text-muted small">Pendientes</div>
-                        <div class="fs-3 fw-bold">@Model.PendingAssignmentItems</div>
+                         <div class="text-muted small">Equipos robados</div>
+                         <div class="fs-3 fw-bold text-danger">@Model.StolenItems</div>
                     </div>
                 </div>
             </div>
@@ -332,7 +307,7 @@
 <div class="row g-4 mb-4">
     <div class="col-lg-5 fade-in-up fade-in-up-d1">
         <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Asignacion de equipos</div>
+             <div class="card-header bg-white fw-semibold">Asignación de equipos</div>
             <div class="card-body">
                 <div class="assignment-donut mb-3"></div>
                 <div class="d-grid gap-2">
@@ -354,28 +329,29 @@
     </div>
     <div class="col-lg-4 fade-in-up fade-in-up-d2">
         <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Categorias principales</div>
-            <div class="card-body">
-                @if (Model.CategoryBreakdown.Count == 0)
-                {
-                    <div class="text-muted">Todavia no hay equipos importados.</div>
-                }
-                else
-                {
-                    @foreach (var category in Model.CategoryBreakdown)
-                    {
-                        var width = Math.Round(category.Count * 100.0 / maxCategoryCount, 1);
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between small mb-1">
-                                <span class="fw-semibold">@TranslateCategory(category.Category)</span>
-                                <span class="text-muted">@category.Count</span>
-                            </div>
-                            <div class="category-bar-track">
-                                <div class="category-bar-fill" style="width: @width.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div>
-                            </div>
-                        </div>
-                    }
-                }
+             <div class="card-header bg-white fw-semibold">Tipos de equipo</div>
+             <div class="card-body">
+                 @if (pcCount == 0 && printerCount == 0)
+                 {
+                     <div class="text-muted">Todavía no hay equipos clasificados.</div>
+                 }
+                 else
+                 {
+                     var pcWidth = Math.Round(pcCount * 100.0 / maxEquipmentCount, 1);
+                     var printerWidth = Math.Round(printerCount * 100.0 / maxEquipmentCount, 1);
+                     <div class="mb-4">
+                         <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">PC</span><strong>@pcCount</strong></div>
+                         <div class="equipment-type-bar"><div class="equipment-type-fill bg-primary" style="width: @pcWidth.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                     </div>
+                     <div class="mb-3">
+                         <div class="d-flex justify-content-between small mb-1"><span class="fw-semibold">Impresora</span><strong>@printerCount</strong></div>
+                         <div class="equipment-type-bar"><div class="equipment-type-fill bg-info" style="width: @printerWidth.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                     </div>
+                     @if (reviewCount > 0)
+                     {
+                         <div class="review-callout p-2 small text-warning-emphasis"><i class="bi bi-exclamation-circle me-1"></i><strong>@reviewCount</strong> por revisar: no se asignan a un tipo hasta validar su descripción.</div>
+                     }
+                 }
             </div>
         </div>
     </div>
@@ -383,21 +359,13 @@
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold">Pulso operativo</div>
             <div class="card-body d-grid gap-3">
-                <div class="d-flex justify-content-between border-bottom pb-2">
-                    <span class="text-muted">Salas</span>
-                    <strong>@Model.SyncedRooms</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom pb-2">
-                    <span class="text-muted">Categorias</span>
-                    <strong>@Model.DistinctImportedCategories</strong>
-                </div>
-                <div class="d-flex justify-content-between border-bottom pb-2">
-                    <span class="text-muted">Robados</span>
-                    <strong>@Model.StolenItems</strong>
-                </div>
-                <div>
-                    <div class="small text-muted mb-1">BDD actualizada</div>
-                    <div class="fw-semibold">@FormatChileDateTime(Model.DatabaseLastWriteUtc)</div>
+                 <div class="d-flex justify-content-between border-bottom pb-2">
+                     <span class="text-muted">Registros por revisar</span>
+                     <strong class="@(reviewCount > 0 ? "text-warning" : "text-success")">@reviewCount</strong>
+                 </div>
+                 <div>
+                     <div class="small text-muted mb-1">Base de datos actualizada</div>
+                     <div class="fw-semibold">@FormatChileDateTime(Model.DatabaseLastWriteUtc)</div>
                 </div>
             </div>
         </div>
@@ -424,9 +392,9 @@
                         "low" => "success",
                         _ => "secondary"
                     };
-                    var riskLabel = Model.LatestNetworkRiskLevel switch
+                     var riskLabel = Model.LatestNetworkRiskLevel switch
                     {
-                        "critical" => "Critico",
+                         "critical" => "Crítico",
                         "high" => "Alto",
                         "medium" => "Medio",
                         "low" => "Bajo",
@@ -434,36 +402,49 @@
                     };
                     var gaugeFill = Math.Clamp(Model.LatestNetworkRiskScore, 0, 100);
                     <div class="row g-4 align-items-center">
-                        <div class="col-lg-3 col-md-6">
+                        <div class="col-lg-4 col-md-6">
                             <div class="d-flex align-items-center gap-3 mb-2">
                                 <div class="risk-pulse bg-@riskTone"></div>
                                 <div>
-                                    <div class="text-muted small">Nivel de riesgo</div>
-                                    <div class="fs-4 fw-bold text-@riskTone">@riskLabel</div>
+                                     <div class="text-muted small">Nivel de riesgo general</div>
+                                     <div class="fs-4 fw-bold text-@riskTone">@riskLabel</div>
                                 </div>
                             </div>
                             <div class="mt-3">
                                 <div class="d-flex justify-content-between small mb-1">
-                                    <span class="text-muted">Puntaje de riesgo</span>
-                                    <span class="fw-semibold">@Model.LatestNetworkRiskScore/100</span>
+                                     <span class="text-muted">Puntaje general</span>
+                                     <span class="fw-semibold">@Model.LatestNetworkRiskScore/100</span>
                                 </div>
-                                <div class="risk-gauge">
-                                    <div class="risk-gauge-fill" style="width: @gaugeFill%"></div>
-                                </div>
-                            </div>
+                             <div class="risk-gauge">
+                                 <div class="risk-gauge-fill" style="width: @gaugeFill%"></div>
+                              </div>
+                             <div class="small text-muted mt-2">El nivel general se calcula sobre el promedio de los riesgos observados; no es el porcentaje de dispositivos de alto riesgo.</div>
+                             <div class="small text-muted mt-2">Escala aplicada: bajo &lt;20, medio 20–39, alto 40–69, crítico ≥70. Por eso 20 es medio: el umbral es inclusivo.</div>
+                         </div>
                         </div>
-                        <div class="col-lg-3 col-md-6">
+                        <div class="col-lg-2 col-md-6">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="dashboard-kpi-icon bg-danger bg-opacity-10">
                                     <i class="bi bi-shield-exclamation text-danger fs-4"></i>
                                 </div>
                                 <div>
-                                    <div class="text-muted small">Dispositivos de alto riesgo</div>
-                                    <div class="fs-4 fw-bold">@Model.LatestNetworkHighRiskCount</div>
+                                     <div class="text-muted small">Dispositivos de alto riesgo</div>
+                                     <div class="fs-4 fw-bold">@Model.LatestNetworkHighRiskCount</div>
                                 </div>
                             </div>
-                        </div>
-                        <div class="col-lg-3 col-md-6">
+                         </div>
+                         <div class="col-lg-2 col-md-6">
+                             <div class="d-flex align-items-center gap-3">
+                                 <div class="dashboard-kpi-icon bg-warning bg-opacity-10">
+                                     <i class="bi bi-shield-check text-warning fs-4"></i>
+                                 </div>
+                                 <div>
+                                     <div class="text-muted small">Riesgo medio / bajo</div>
+                                     <div class="fs-6 fw-bold">@Model.LatestNetworkMediumRiskCount medio · @Model.LatestNetworkLowRiskCount bajo</div>
+                                 </div>
+                             </div>
+                         </div>
+                         <div class="col-lg-2 col-md-6">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="dashboard-kpi-icon bg-info bg-opacity-10">
                                     <i class="bi bi-laptop text-info fs-4"></i>
@@ -474,13 +455,13 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-lg-3 col-md-6">
+                        <div class="col-lg-2 col-md-6">
                             <div class="d-flex align-items-center gap-3">
                                 <div class="dashboard-kpi-icon bg-secondary bg-opacity-10">
                                     <i class="bi bi-clock text-secondary fs-4"></i>
                                 </div>
                                 <div>
-                                    <div class="text-muted small">Ultimo escaneo</div>
+                                     <div class="text-muted small">Último escaneo</div>
                                     <div class="fw-semibold small">@FormatChileDateTime(Model.LatestNetworkScanUtc, "dd/MM/yyyy HH:mm")</div>
                                 </div>
                             </div>
@@ -497,7 +478,7 @@
                                 </div>
                                 <div>
                                     <div class="fw-semibold">Monitoreo de red y riesgo</div>
-                                    <div class="text-muted small mt-1">Escanea tu red para detectar dispositivos conectados, evaluar su nivel de riesgo y mantener un historial de telemetria. Programa escaneos periodicos para mantenerte al dia.</div>
+                             <div class="text-muted small mt-1">Escanea tu red para detectar dispositivos conectados, evaluar su nivel de riesgo y mantener un historial de telemetría. Programa escaneos periódicos para mantenerte al día.</div>
                                 </div>
                             </div>
                         </div>
@@ -520,41 +501,48 @@
             <div class="card dashboard-card" id="database-card">
                 <div class="card-header bg-white fw-semibold">Base de datos</div>
                 <div class="card-body">
-                    <div class="row g-4 align-items-start mb-4">
+                    <div class="row g-4 align-items-stretch mb-4">
                         <div class="col-lg-4">
-                            <div class="fw-semibold mb-1">Descargar paquete completo</div>
-                            <div class="form-text mb-3">Descarga el paquete con todos los datos.</div>
-                            <div class="d-grid gap-2">
+                            <div class="database-action-group safe">
+                                <div class="fw-semibold mb-1"><i class="bi bi-download me-1"></i> Acciones seguras</div>
+                                <div class="form-text mb-3">Descarga una copia sin modificar los datos actuales.</div>
                                 <a href="/dashboard/project-package/download" class="btn btn-outline-dark" id="projectPackageDownloadButton">
                                     <i class="bi bi-box-seam me-1"></i> Descargar paquete completo
                                 </a>
+                                <div class="form-text mt-2">Incluye base de datos, formularios PDF, documentos, claves y respaldos del frontend.</div>
                             </div>
-                            <div class="form-text mt-2">Incluye DB, formularios PDF, documentos, claves y respaldos del frontend.</div>
                         </div>
-                        <div class="col-lg-4">
-                            <div class="fw-semibold mb-1">Subir paquete existente</div>
-                            <div class="form-text mb-3">Restaura un paquete completo (.zip) desde tu PC.</div>
-                            <form id="projectPackageUploadForm" method="post" action="/dashboard/project-package/upload" enctype="multipart/form-data" class="row g-3">
-                                @Html.AntiForgeryToken()
-                                <div class="col-md-8">
-                                    <input id="projectPackageFileInput" type="file" name="packageFile" class="form-control" accept=".zip" required />
+                        <div class="col-lg-8">
+                            <div class="database-action-group danger">
+                                <div class="fw-semibold text-danger-emphasis mb-1"><i class="bi bi-exclamation-triangle me-1"></i> Acciones que reemplazan datos</div>
+                                <div class="form-text mb-3">Estas acciones pueden cambiar o eliminar la información actual.</div>
+                                <div class="row g-3">
+                                    <div class="col-lg-7">
+                                        <form id="projectPackageUploadForm" method="post" action="/dashboard/project-package/upload" enctype="multipart/form-data" class="row g-3">
+                                            @Html.AntiForgeryToken()
+                                            <div class="col-md-8">
+                                                <label for="projectPackageFileInput" class="form-label small fw-semibold">Subir paquete existente</label>
+                                                <input id="projectPackageFileInput" type="file" name="packageFile" class="form-control" accept=".zip" required />
+                                            </div>
+                                            <div class="col-md-4 d-flex align-items-end">
+                                                <button id="projectPackageUploadButton" type="submit" class="btn btn-secondary w-100" disabled>
+                                                    <i class="bi bi-box-arrow-in-up me-1"></i> Subir paquete
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                    <div class="col-lg-5">
+                                        <div class="small fw-semibold">Crear nuevo en blanco</div>
+                                        <div class="form-text mb-2">Guarda un respaldo y vacía los datos activos.</div>
+                                        <form method="post" action="/admin/database/new" onsubmit="return SyntroUI.confirmForm(event, 'Se guardará un respaldo del paquete actual y se creará uno nuevo vacío. \u00bfContinuar?');">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-danger">
+                                                <i class="bi bi-plus-circle me-1"></i> Crear nuevo en blanco
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
-                                <div class="col-md-4 d-grid">
-                                    <button id="projectPackageUploadButton" type="submit" class="btn btn-secondary" disabled>
-                                        <i class="bi bi-box-arrow-in-up me-1"></i> Subir
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="col-lg-4">
-                            <div class="fw-semibold mb-1">Nuevo paquete</div>
-                            <div class="form-text mb-3">Guarda un respaldo y crea uno nuevo vacio.</div>
-                            <form method="post" action="/admin/database/new" onsubmit="return SyntroUI.confirmForm(event, 'Se guardara un respaldo del paquete actual y se creara uno nuevo vacio. \u00bfContinuar?');">
-                                @Html.AntiForgeryToken()
-                                <button type="submit" class="btn btn-outline-dark">
-                                    <i class="bi bi-plus-circle me-1"></i> Crear nuevo en blanco
-                                </button>
-                            </form>
+                            </div>
                         </div>
                     </div>
 
@@ -593,7 +581,7 @@
                                             <tr>
                                                 <th>Paquete</th>
                                                 <th>Fecha</th>
-                                                <th>Tamano</th>
+                                                 <th>Tamaño</th>
                                                 <th></th>
                                             </tr>
                                         </thead>
@@ -619,7 +607,7 @@
                                                                 <a href="/dashboard/project-package/download" class="btn btn-sm btn-outline-secondary">
                                                                     Descargar
                                                                 </a>
-                                                                <form method="post" action="/admin/database/clear" onsubmit="return SyntroUI.confirmForm(event, 'Se guardara un respaldo del paquete actual y se vaciaran todos los datos. \u00bfContinuar?');">
+                                                                     <form method="post" action="/admin/database/clear" onsubmit="return SyntroUI.confirmForm(event, 'Se guardará un respaldo del paquete actual y se vaciarán todos los datos. \u00bfContinuar?');">
                                                                     @Html.AntiForgeryToken()
                                                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                                                         Eliminar
@@ -678,7 +666,7 @@
     <div class="col-lg-6">
         <div class="card dashboard-card h-100">
             <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
-                <span>Ultimos cambios registrados</span>
+                 <span>Últimos cambios registrados</span>
                 <a href="/dashboard/activity" class="btn btn-sm btn-outline-secondary">Ver completo</a>
             </div>
             <div class="card-body p-0">
@@ -687,7 +675,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Fecha</th>
-                                <th>Usuario</th>
+                                 <th>Usuario</th>
                                 <th>Edificio</th>
                                 <th>Resumen</th>
                                 <th>Detalle</th>
@@ -697,7 +685,7 @@
                             @if (Model.RecentActivity.Count == 0)
                             {
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted py-4">Todavia no hay cambios auditados.</td>
+                                    <td colspan="5" class="text-center text-muted py-4">Todavía no hay cambios auditados.</td>
                                 </tr>
                             }
                             else
@@ -705,11 +693,11 @@
                                 @foreach (var entry in Model.RecentActivity)
                                 {
                                     <tr>
-                                        <td class="small text-nowrap">@entry.CreatedAtUtc.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
-                                        <td class="small">@entry.ChangedByUsername</td>
-                                        <td class="small">@entry.BuildingExternalId</td>
-                                        <td>@entry.Summary</td>
-                                        <td class="small text-muted">@entry.Details</td>
+                                         <td class="small text-nowrap">@FormatChileDateTime(entry.CreatedAtUtc)</td>
+                                         <td class="small">@entry.ChangedByUsername</td>
+                                         <td class="small"><span class="badge text-bg-light">@(string.IsNullOrWhiteSpace(entry.BuildingExternalId) ? "General" : entry.BuildingExternalId)</span></td>
+                                         <td>@entry.Summary</td>
+                                         <td class="small text-muted text-truncate" style="max-width:260px;" title="@entry.Details">@entry.Details</td>
                                     </tr>
                                 }
                             }
@@ -722,7 +710,7 @@
 
     <div class="col-lg-6">
         <div class="card dashboard-card h-100">
-            <div class="card-header bg-white fw-semibold">Ultimos registros importados</div>
+         <div class="card-header bg-white fw-semibold">Últimos registros importados</div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
@@ -730,22 +718,30 @@
                             <th>Equipo</th>
                             <th>Responsable</th>
                             <th>Unidad</th>
-                            <th>Asignacion</th>
+                            <th>Asignación</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var item in Model.RecentItems)
                         {
-                            <tr>
-                                <td>
-                                    <div class="fw-semibold">@item.Description</div>
-                                    <div class="small text-muted">@item.InferredStatus</div>
-                                </td>
+                             <tr>
+                                 <td>
+                                     <div class="fw-semibold">@item.Description</div>
+                                     <span class="badge @(item.InferredStatus == "stolen" ? "text-bg-danger" : "text-bg-light")">@TranslateStatus(item.InferredStatus)</span>
+                                 </td>
                                 <td class="small">@item.ResponsibleUser</td>
                                 <td class="small">@item.UnitOrDepartment</td>
-                                <td class="small">
-                                    @(string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId) ? "Pendiente" : item.AssignedBuildingExternalId)
+                                 <td class="small">
+                                     @if (string.IsNullOrWhiteSpace(item.AssignedBuildingExternalId))
+                                     {
+                                         <span class="badge text-bg-warning">Pendiente</span>
+                                     }
+                                     else
+                                     {
+                                         <span class="fw-semibold">@item.AssignedBuildingExternalId</span>
+                                         <div class="text-muted">Edificio asignado</div>
+                                     }
                                 </td>
                                 <td class="text-end">
                                     <a href="/dashboard/editinventoryitem/@item.Id" class="btn btn-sm btn-outline-primary">

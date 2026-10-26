@@ -25,6 +25,8 @@ public class AdminDashboardViewModel
     public int LatestNetworkRiskScore { get; set; }
     public int LatestNetworkDeviceCount { get; set; }
     public int LatestNetworkHighRiskCount { get; set; }
+    public int LatestNetworkMediumRiskCount { get; set; }
+    public int LatestNetworkLowRiskCount { get; set; }
     public DateTime? LatestNetworkScanUtc { get; set; }
 }
 
