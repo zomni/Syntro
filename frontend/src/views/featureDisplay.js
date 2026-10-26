@@ -2921,10 +2921,52 @@ let buildingPanelMapFrozen = false;
 let buildingViewMap = null;
 let buildingViewContainer = null;
 let buildingViewOverlay = null;
+let buildingFloorLoadingElement = null;
+let buildingFloorLoadingToken = 0;
+let buildingFloorLoadingStartedAt = 0;
 let buildingViewAnimateNext = false;
 let buildingViewFlyToken = 0;
 const MAX_BUILDING_VIEW_ZOOM = 22;
 const BUILDING_VIEW_OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const BUILDING_FLOOR_LOADING_MIN_MS = 220;
+
+const showBuildingFloorLoading = (floor) => {
+  if (!buildingViewContainer) return 0;
+
+  if (!buildingFloorLoadingElement) {
+    buildingFloorLoadingElement = document.createElement("div");
+    buildingFloorLoadingElement.className = "building-floor-loading";
+    buildingFloorLoadingElement.setAttribute("role", "status");
+    buildingFloorLoadingElement.setAttribute("aria-live", "polite");
+    buildingFloorLoadingElement.innerHTML = `
+      <span class="building-floor-loading-spinner" aria-hidden="true"></span>
+      <span class="building-floor-loading-text"></span>
+    `;
+    buildingViewContainer.appendChild(buildingFloorLoadingElement);
+  }
+
+  buildingFloorLoadingToken += 1;
+  buildingFloorLoadingStartedAt = performance.now();
+  const text = buildingFloorLoadingElement.querySelector(".building-floor-loading-text");
+  if (text) text.textContent = `Cargando piso ${floor}...`;
+  buildingFloorLoadingElement.classList.add("is-visible");
+  buildingFloorLoadingElement.setAttribute("aria-hidden", "false");
+  return buildingFloorLoadingToken;
+};
+
+const hideBuildingFloorLoading = async (token = buildingFloorLoadingToken) => {
+  if (!buildingFloorLoadingElement || token !== buildingFloorLoadingToken) return;
+
+  const elapsed = performance.now() - buildingFloorLoadingStartedAt;
+  const remaining = Math.max(0, BUILDING_FLOOR_LOADING_MIN_MS - elapsed);
+  if (remaining > 0) {
+    await new Promise((resolve) => window.setTimeout(resolve, remaining));
+  }
+
+  if (token !== buildingFloorLoadingToken || !buildingFloorLoadingElement) return;
+  buildingFloorLoadingElement.classList.remove("is-visible");
+  buildingFloorLoadingElement.setAttribute("aria-hidden", "true");
+};
 
 const freezeMapForBuildingPanel = () => {
   if (buildingPanelMapFrozen) return;
@@ -2971,6 +3013,8 @@ const destroyBuildingViewMap = () => {
     buildingViewContainer.remove();
     buildingViewContainer = null;
   }
+  buildingFloorLoadingElement = null;
+  buildingFloorLoadingToken += 1;
 };
 
 const parseRoomGeometryCoords = (geometryJson) => {
@@ -3341,6 +3385,7 @@ const renderFloorSectors = async (feature) => {
   const isStale = () => token !== floorSectorsRenderToken;
 
   const floor = popupFloorState[featureId] ?? (feature?.properties?.floor ?? 0);
+  const loadingToken = showBuildingFloorLoading(floor);
   const backendSession = await loadBackendSession();
   if (isStale()) return;
   const canViewEquipment = Boolean(backendSession?.isAuthenticated) && !isWayfindingMode();
@@ -3376,6 +3421,7 @@ const renderFloorSectors = async (feature) => {
   if (isStale() || !buildingViewMap) {
     overlay.clearLayers();
     overlay.remove();
+    await hideBuildingFloorLoading(loadingToken);
     return;
   }
 
@@ -3517,11 +3563,15 @@ const renderFloorSectors = async (feature) => {
     bindEquipmentDropTargets();
   }
 
-  if (!canViewEquipment) return;
+  if (!canViewEquipment) {
+    await hideBuildingFloorLoading(loadingToken);
+    return;
+  }
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
   placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
+  await hideBuildingFloorLoading(loadingToken);
 };
 
 const createBuildingViewMap = (layer) => {
@@ -3534,6 +3584,7 @@ const createBuildingViewMap = (layer) => {
     buildingViewContainer = document.createElement("div");
     buildingViewContainer.className = "building-view-map";
     document.body.appendChild(buildingViewContainer);
+    showBuildingFloorLoading(layer?.feature?.properties?.floor ?? 0);
 
     buildingViewMap = L.map(buildingViewContainer, {
       zoomControl: false,

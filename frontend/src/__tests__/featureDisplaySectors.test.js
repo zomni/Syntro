@@ -133,3 +133,20 @@ describe("visibilidad de los sectores", () => {
     expect(source).toContain("polygon.bringToFront();");
   });
 });
+
+describe("loading al cambiar de piso", () => {
+  it("muestra un estado breve sobre el mapa interno mientras carga el piso", () => {
+    expect(source).toContain("const showBuildingFloorLoading = (floor) =>");
+    expect(source).toContain("Cargando piso ${floor}...");
+    expect(source).toContain("const BUILDING_FLOOR_LOADING_MIN_MS = 220;");
+    expect(source).toContain("const loadingToken = showBuildingFloorLoading(floor);");
+    expect(source).toContain("await hideBuildingFloorLoading(loadingToken);");
+  });
+
+  it("mantiene el loading accesible y respeta la reduccion de movimiento", () => {
+    expect(source).toContain('buildingFloorLoadingElement.setAttribute("role", "status")');
+    expect(css).toContain(".building-floor-loading.is-visible");
+    expect(css).toContain("@keyframes building-floor-loading-spin");
+    expect(css).toContain(".building-floor-loading-spinner {\n        animation: none;");
+  });
+});
