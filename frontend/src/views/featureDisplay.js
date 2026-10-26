@@ -1102,7 +1102,7 @@ const normalizeImportedInventoryItems = (items) => {
     deviceId: item?.id ? `inventory-${item.id}` : `inventory-row-${item?.rowNumber || "na"}`,
     name: item?.serialNumber || item?.description || item?.itemNumber || "Equipo",
     type: item?.inferredCategory || "other",
-    status: item?.inferredStatus || "active",
+    foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot),
     ip: item?.ipAddress || "",
     roomId: item?.assignedRoomExternalId || "",
     assignedFloor:
@@ -1269,8 +1269,8 @@ const buildDeviceControlsHtml = (
   filtersOpen = false,
   typeFilter = ""
 ) => {
-  const sizeOptions = [5, 10, 20, 50];
-  const resolvedSize = Math.max(5, Number(pageSize) || 5);
+  const sizeOptions = [5, 10, 20, 50, "all"];
+  const resolvedSize = pageSize === "all" ? "all" : Math.max(5, Number(pageSize) || 5);
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
   const inputHtml = isOpen
     ? `<input type="text" value="${escapeHtml(query || "")}" placeholder="Buscar equipo..."`
@@ -1280,14 +1280,14 @@ const buildDeviceControlsHtml = (
 
   let sizeButtons = "";
   for (const size of sizeOptions) {
-    const isActive = resolvedSize === size;
+    const isActive = String(resolvedSize) === String(size);
     sizeButtons += `
       <button
         class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
         style="${getChipButtonStyle(isActive, true)}"
-        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', ${size})"
+        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', '${size}')"
       >
-        ${size}
+        ${size === "all" ? "Todos" : size}
       </button>`;
   }
 
@@ -1310,22 +1310,12 @@ const buildDeviceControlsHtml = (
         ${resizeIcon(PACKAGE_ICON_SVG)} Filtros
       </button>`;
 
-    if (activeSector || hasTypeFilter) {
+    if (hasTypeFilter) {
       activeFilterBannerHtml = `
         <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          ${activeSector ? `<span style="${CHIP_BASE_STYLE}; background:#0ea5e91f; color:#0284c7;">
-            ${resizeIcon(ROOM_ICON_SVG)} ${escapeHtml(activeSector.name)} · ${activeSector.count} equipo(s)
-          </span>` : ""}
-          ${hasTypeFilter ? `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
+          <span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
             ${getDeviceTypeIconHtml(activeType)} ${escapeHtml(getDeviceTypeLabel(activeType))}
-          </span>` : ""}
-          <button
-            class="floorButton equipment-panel-action-button"
-            style="${getActionButtonStyle()}"
-            onclick="window.clearDevicePanelFilters && window.clearDevicePanelFilters('${escapeHtml(featureId)}')"
-          >
-            Quitar filtro
-          </button>
+          </span>
         </div>`;
     }
 
@@ -1847,13 +1837,15 @@ const popupShellStyle = `
   padding-right: 2px;
 `;
 
-const buildBuildingPanelHeaderHtml = (featureName, selectedRoomName = "", featureId = "") => `
+const BUILDING_CONTEXT_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M8 10h.01M8 14h.01M16 10h.01M16 14h.01"/></svg>`;
+
+const buildBuildingPanelHeaderHtml = (featureName, featureId = "") => `
   <div class="building-panel-heading">
     <div class="building-panel-heading-copy">
-      <b class="building-panel-title">
-        ${escapeHtml(featureName)}
-      </b>
-      ${selectedRoomName ? `<span class="building-panel-subtitle">${escapeHtml(selectedRoomName)}</span>` : ""}
+      <span class="building-panel-entity-label building-panel-building-label">
+        ${resizeIcon(BUILDING_CONTEXT_ICON_SVG, 17)} Edificio
+      </span>
+      <b class="building-panel-title">${escapeHtml(featureName)}</b>
     </div>
     ${featureId ? `
       <button
@@ -2102,6 +2094,17 @@ const getStatusMeta = (status) => {
   return { color: "#94a3b8", label: status || "Sin estado" };
 };
 
+const buildInventoryMatchBadgeHtml = (found) => {
+  const color = found ? "#16a34a" : "#dc2626";
+  const label = found ? "Conectado a red" : "Sin conexión a red";
+  return `
+    <span style="${CHIP_BASE_STYLE}; background:${color}1f; color:${color};">
+      <span style="width:8px; height:8px; border-radius:50%; background:${color}; display:inline-block;"></span>
+      ${label}
+    </span>
+  `;
+};
+
 const buildStatusBadgeHtml = (status) => {
   const meta = getStatusMeta(status);
   return `
@@ -2257,7 +2260,7 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
     return `No hay equipos del tipo ${escapeHtml(getDeviceTypeLabel(activeType))}.`;
   }
 
-  const resolvedPageSize = Math.max(5, Number(pageSize) || 5);
+  const resolvedPageSize = pageSize === "all" ? filteredDevices.length : Math.max(5, Number(pageSize) || 5);
   let displayDevices = filteredDevices.slice(0, resolvedPageSize);
   const highlightDevice = highlightKey
     ? filteredDevices.find((device) => matchesDeviceKey(device, highlightKey))
@@ -2276,6 +2279,9 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
   for (const device of displayDevices) {
     const room = roomsMap.get(device.roomId);
     const roomName = room?.name || room?.shortName || "Sin sector";
+    const roomChip = activeSectorFilter && device.roomId === activeSectorFilter
+      ? ""
+      : buildRoomChipHtml(roomName);
     const title = device.serialNumber || device.name || device.deviceId || "Sin S/N";
     const description = device.description || device.name || "Sin descripcion";
     const isHighlighted = highlightDevice === device;
@@ -2311,9 +2317,9 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
         ${buildChipsRowHtml(
           buildDeviceTypeChipHtml(device.type),
           buildFloorBadgeHtml(deviceFloor),
-          buildRoomChipHtml(roomName),
+          roomChip,
           buildIpLabelHtml(device.ip),
-          buildStatusBadgeHtml(device.status)
+          buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)
         )}
         <div style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
@@ -2321,10 +2327,6 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
         </div>
       </div>
     `;
-  }
-
-  if (filteredDevices.length > resolvedPageSize) {
-    html += `... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas<br/>`;
   }
 
   return html;
@@ -2362,8 +2364,8 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
   if (!floors.length) return "";
 
   let html = `
-    <div style="margin-top:10px;">
-      <div style="font-weight:600; margin-bottom:4px;">Pisos del edificio</div>
+    <div class="building-panel-floor-context">
+      <div class="building-panel-floor-heading">Pisos del edificio</div>
       <div style="${chipRowStyle}">
   `;
 
@@ -2384,6 +2386,32 @@ const buildFloorSelectorHtml = (building, currentFloor) => {
 
   html += `</div></div>`;
   return html;
+};
+
+const buildSelectedSectorContextHtml = (name, count, featureId) => {
+  if (!name) return "";
+  return `
+    <section class="building-panel-sector-context" aria-label="Sector seleccionado">
+      <div class="building-panel-sector-heading">
+        <span class="building-panel-entity-label building-panel-sector-label">
+          ${resizeIcon(ROOM_ICON_SVG, 17)} Sector
+        </span>
+        <strong class="building-panel-sector-name">${escapeHtml(name)}</strong>
+      </div>
+      <div class="building-panel-sector-actions">
+        <span class="building-panel-sector-count">${escapeHtml(String(count))} equipo(s)</span>
+        <button
+          type="button"
+          class="floorButton building-panel-clear-sector"
+          aria-label="Quitar filtro de sector"
+          title="Quitar filtro de sector"
+          onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m18 6-12 12M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </section>
+  `;
 };
 
 const POPUP_SKELETON_DELAY_MS = 120;
@@ -2463,7 +2491,7 @@ window.setDeviceSearch = (featureId, value) => {
 
 window.setDevicePageSize = (featureId, size) => {
   if (!featureId) return;
-  const resolved = Math.max(5, Number(size) || 5);
+  const resolved = size === "all" ? "all" : Math.max(5, Number(size) || 5);
   popupDevicePageSizeState[featureId] = resolved;
   refreshCurrentPopup();
 };
@@ -2473,6 +2501,10 @@ window.setDeviceTypeFilter = (featureId, type) => {
   const nextType = type && type !== "all" ? type : "";
   popupDeviceTypeFilterState[featureId] = popupDeviceTypeFilterState[featureId] === nextType ? "" : nextType;
   popupViewState[featureId] = "devices";
+  const feature = currentOpenLayer?.feature;
+  if (feature && currentOpenFeatureId === featureId) {
+    void renderFloorSectors(feature);
+  }
   refreshCurrentPopup();
 };
 
@@ -2648,10 +2680,13 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const buildBuildingPanelPopupHtml = ({ featureName, selectedRoomName = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
+const buildBuildingPanelPopupHtml = ({ featureName, selectedSectorContextHtml = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
   <div style="${popupShellStyle}">
-    ${buildBuildingPanelHeaderHtml(featureName, selectedRoomName, featureId || building?.id)}
-    ${buildFloorSelectorHtml(building, currentFloor)}
+    <section class="building-panel-building-context">
+      ${buildBuildingPanelHeaderHtml(featureName, featureId || building?.id)}
+      ${buildFloorSelectorHtml(building, currentFloor)}
+    </section>
+    ${selectedSectorContextHtml}
     <div style="margin-top:8px;">
       <div style="${hasView ? "margin-top:8px;" : "display:none; margin-top:8px;"}">
         ${contentHtml}
@@ -2715,8 +2750,10 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     popupViewState[featureId] = "summary";
     return `
       <div style="${popupShellStyle}">
-        ${buildBuildingPanelHeaderHtml(featureName, "", featureId)}
-        ${buildFloorSelectorHtml(building, currentFloor)}
+        <section class="building-panel-building-context">
+          ${buildBuildingPanelHeaderHtml(featureName, featureId)}
+          ${buildFloorSelectorHtml(building, currentFloor)}
+        </section>
       </div>
     `;
   }
@@ -2750,12 +2787,6 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   const allDevices = normalizeImportedInventoryItems(backendInventoryItems);
   const roomsInFloor = filterRoomsByFloor(allRooms, currentFloor);
   const devicesInFloor = filterDevicesByFloor(allDevices, roomsInFloor, allRooms, currentFloor);
-  const selectedRoomHeaderId = popupSectorFilterState[featureId] || selectedRoomId;
-  const selectedRoomHeader = selectedRoomHeaderId
-    ? roomsInFloor.find((room) => room.roomId === selectedRoomHeaderId && room.type === "sector")
-    : null;
-  const selectedRoomName = selectedRoomHeader?.name || "";
-
   const searchPopupContent = building?.searchPopupContent || "";
   const canManageEquipment = canManageEquipmentAssignments(backendSession);
   const isBackendAdmin = Boolean(backendSession?.isAdmin);
@@ -2764,6 +2795,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     : "";
 
   let contentHtml = "";
+  let selectedSectorContextHtml = "";
   if (currentView === "summary") {
     contentHtml = `
       <div style="${sectionBoxStyle}">
@@ -2796,7 +2828,10 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     for (const room of roomsInFloor) {
       if (room.type === "sector") sectorCounts.set(room.roomId, 0);
     }
-    for (const device of devicesInFloor) {
+    const countedForType = deviceTypeFilter
+      ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === deviceTypeFilter)
+      : devicesInFloor;
+    for (const device of countedForType) {
       if (device.roomId && sectorCounts.has(device.roomId)) {
         sectorCounts.set(device.roomId, sectorCounts.get(device.roomId) + 1);
       }
@@ -2823,6 +2858,13 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     const activeSectorOption = activeSectorFilter
       ? sectorOptionsForFilter.find((s) => s.roomId === activeSectorFilter)
       : null;
+    if (activeSectorOption && activeSectorFilter !== UNASSIGNED_SECTOR_KEY) {
+      selectedSectorContextHtml = buildSelectedSectorContextHtml(
+        activeSectorOption.name,
+        activeSectorOption.count,
+        featureId
+      );
+    }
     const devicesScopeLabel = activeSectorOption
       ? `sector ${activeSectorOption.name}`
       : deviceScope === "building"
@@ -2858,7 +2900,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
 
   return buildBuildingPanelPopupHtml({
     featureName,
-    selectedRoomName,
+    selectedSectorContextHtml,
     featureId,
     building,
     currentFloor,
@@ -3355,16 +3397,19 @@ const renderFloorSectors = async (feature) => {
   const sectors = filterRoomsByFloor(allRooms, floor).filter(
     (room) => room.type === "sector" && room.geometryJson
   );
-  // Un sector unico no necesita contador propio: el total del piso ya lo
-  // resume. Solo se pintan contadores de sector si el piso tiene 2 o mas.
-  const showSectorCounters = sectors.length >= 2;
+  // Mostrar también el contador del único sector que tenga geometría en el piso.
+  const showSectorCounters = sectors.length >= 1;
   const devicesInFloor = filterDevicesByFloor(allDevices, sectors, allRooms, floor);
+  const popupTypeFilter = popupDeviceTypeFilterState[featureId] || globalEquipmentTypeFilter;
+  const countedDevicesInFloor = popupTypeFilter
+    ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === popupTypeFilter)
+    : devicesInFloor;
 
   const sectorCountByRoom = new Map();
   for (const sector of sectors) {
     sectorCountByRoom.set(sector.roomId, 0);
   }
-  for (const device of devicesInFloor) {
+  for (const device of countedDevicesInFloor) {
     if (device.roomId && sectorCountByRoom.has(device.roomId)) {
       sectorCountByRoom.set(device.roomId, sectorCountByRoom.get(device.roomId) + 1);
     }
@@ -3431,7 +3476,7 @@ const renderFloorSectors = async (feature) => {
 
     if (!canViewEquipment || !showSectorCounters) continue;
 
-    const count = sectorCountByRoom.get(sector.roomId) || 0;
+    const count = countedDevicesInFloor.filter((device) => device.roomId === sector.roomId).length;
     const centroid = ringCentroidLatLng(latLngs);
     const bubblePoint = resolveBubbleLatLng({
       preferred: centroid ? L.latLng(centroid[0], centroid[1]) : null,
@@ -3476,7 +3521,7 @@ const renderFloorSectors = async (feature) => {
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
-  placeFloorTotalBubble(overlay, floorRing, devicesInFloor.length, floor, featureId);
+  placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
 };
 
 const createBuildingViewMap = (layer) => {

@@ -221,6 +221,23 @@ public class InventoryImportController : ControllerBase
         if (!string.IsNullOrWhiteSpace(matchedRoomExternalId))
             query = query.Where(i => i.MatchedRoomExternalId == matchedRoomExternalId);
 
+        var latestSnapshotId = await _context.NetworkTelemetrySnapshots
+            .AsNoTracking()
+            .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
+            .ThenByDescending(snapshot => snapshot.Id)
+            .Select(snapshot => (Guid?)snapshot.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        var matchedInventoryIds = latestSnapshotId.HasValue
+            ? await _context.NetworkTelemetryObservations
+                .AsNoTracking()
+                .Where(observation => observation.NetworkTelemetrySnapshotId == latestSnapshotId.Value &&
+                    observation.ObservationType == "device" && observation.ImportedInventoryItemId != null)
+                .Select(observation => observation.ImportedInventoryItemId!.Value)
+                .Distinct()
+                .ToListAsync(cancellationToken)
+            : [];
+        var matchedInventoryIdSet = matchedInventoryIds.ToHashSet();
+
         var items = await query
             .OrderBy(i => i.RowNumber)
             .Select(i => new
@@ -259,7 +276,41 @@ public class InventoryImportController : ControllerBase
             })
             .ToListAsync(cancellationToken);
 
-        return Ok(items);
+        return Ok(items.Select(item => new
+        {
+            item.Id,
+            item.RowNumber,
+            item.ItemNumber,
+            item.SerialNumber,
+            item.Description,
+            item.Lot,
+            item.InstallDate,
+            item.UnitOrDepartment,
+            item.OrganizationalUnit,
+            item.ResponsibleUser,
+            item.Email,
+            item.JobTitle,
+            item.IpAddress,
+            item.MacAddress,
+            item.TicketMda,
+            item.Observation,
+            item.InferredCategory,
+            item.InferredStatus,
+            item.CategorySource,
+            item.ClassificationConfidence,
+            item.ClassificationDetail,
+            item.InventoryDate,
+            item.MatchedBuildingExternalId,
+            item.MatchedRoomExternalId,
+            item.MatchConfidence,
+            item.MatchNotes,
+            item.AssignedBuildingExternalId,
+            item.AssignedRoomExternalId,
+            item.AssignedFloor,
+            item.AssignmentNotes,
+            item.AssignmentUpdatedAtUtc,
+            matchedInLatestSnapshot = matchedInventoryIdSet.Contains(item.Id)
+        }));
     }
 
     [HttpGet("building-summary")]
