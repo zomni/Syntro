@@ -16,6 +16,7 @@ let buildingMatchActive = false;
 
 const updateMinimalMapMode = () => {
   document.body.classList.toggle("map-ui-minimal", minimalMapMode);
+  window.dispatchEvent(new CustomEvent("syntro-map-ui-visibility-changed"));
   const button = document.querySelector(".session-mode-visibility");
   if (!button) return;
   button.setAttribute("aria-pressed", String(minimalMapMode));

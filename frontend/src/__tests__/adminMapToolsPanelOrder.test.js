@@ -35,4 +35,11 @@ describe("orden fijo de secciones del panel de herramientas admin", () => {
     expect(reorderIndex).toBeGreaterThan(creationIndex);
     expect(returnIndex).toBeGreaterThan(reorderIndex);
   });
+
+  it("recalcula su posicion cuando vuelven a mostrarse los controles del mapa", () => {
+    expect(source).toContain('window.addEventListener("syntro-map-ui-visibility-changed", scheduleAdminMapToolsPanelPosition);');
+    expect(source).toContain("const anchors = [");
+    expect(source).toContain('candidate.hidden || window.getComputedStyle(candidate).display === "none"');
+    expect(source).toContain("rect.width > 0 && rect.height > 0");
+  });
 });
