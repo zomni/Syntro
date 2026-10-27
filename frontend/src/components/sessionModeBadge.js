@@ -10,8 +10,8 @@ const inventoryLinkId = "session-inventory-link";
 const sessionPollMs = 10000;
 let lastSessionKey = "";
 let pollHandle = null;
-let minimalMapMode = false;
-let satelliteActive = false;
+let minimalMapMode = true;
+let satelliteActive = true;
 let buildingMatchActive = false;
 
 const updateMinimalMapMode = () => {

@@ -356,9 +356,9 @@ const EQUIPMENT_SYNC_POLL_MS = 30000;
 const EQUIPMENT_SYNC_RETRY_MS = 5000;
 const BACKEND_SESSION_CACHE_MS = 15000;
 const BUILDING_LABELS_STORAGE_KEY = "syntro_building_labels_visible";
-let buildingLabelsVisible = window.sessionStorage?.getItem(BUILDING_LABELS_STORAGE_KEY) === "true";
+let buildingLabelsVisible = false;
 const EQUIPMENT_BUBBLES_STORAGE_KEY = "syntro_equipment_bubbles_visible";
-let equipmentBubblesVisible = window.sessionStorage?.getItem(EQUIPMENT_BUBBLES_STORAGE_KEY) !== "false";
+let equipmentBubblesVisible = false;
 
 const setBuildingLabelsVisible = (isVisible) => {
   buildingLabelsVisible = Boolean(isVisible);

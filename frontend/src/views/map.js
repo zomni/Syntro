@@ -35,7 +35,7 @@ export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/
   keepBuffer: 8,
   updateWhenIdle: false,
   updateWhenZooming: true,
-}).addTo(map);
+});
 
 export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
   maxZoom: 23,
@@ -43,7 +43,7 @@ export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGI
   updateWhenIdle: false,
   updateWhenZooming: true,
   attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGPSW, and the GIS User Community",
-});
+}).addTo(map);
 
 let locationTrackingActive = false;
 let userLocationMarker = null;
