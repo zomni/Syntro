@@ -8,8 +8,7 @@ const ROUTE_VISIBILITY_STORAGE_KEY = identifiers.storage.walkingRoutesVisible;
 let routesLayer = null;
 let routesCache = null;
 let routesCampus = null;
-const storedVisibility = window.sessionStorage&& window.sessionStorage.getItem(ROUTE_VISIBILITY_STORAGE_KEY);
-let routesVisible = storedVisibility !== null ? storedVisibility === "true" : true;
+let routesVisible = false;
 
 const ensureRoutesLayer = () => {
   if (!routesLayer) {

@@ -150,7 +150,7 @@ describe("walkingRouteLayer", () => {
     expect(sessionStorage.getItem(identifiers.storage.walkingRoutesVisible)).toBe("true");
   });
 
-  it("limpia la capa al pasar de visible a oculto", async () => {
+  it("permite mostrar y luego limpiar la capa aunque haya una preferencia guardada", async () => {
     const sessionStorage = createSessionStorage({
       [identifiers.storage.walkingRoutesVisible]: "true",
     });
@@ -160,6 +160,12 @@ describe("walkingRouteLayer", () => {
     const { layerModule } = loadModule();
     layerModule.initWalkingRouteLayer();
     layerModule.bindWalkingRouteToggleButton(button);
+    await flush();
+
+    expect(polylines).toHaveLength(0);
+    expect(button.title).toBe("Mostrar rutas");
+
+    button.click();
     await flush();
 
     expect(polylines).toHaveLength(1);
@@ -175,7 +181,7 @@ describe("walkingRouteLayer", () => {
     expect(sessionStorage.getItem(identifiers.storage.walkingRoutesVisible)).toBe("false");
   });
 
-  it("dibuja al cargar cuando no hay visibilidad guardada", async () => {
+  it("no dibuja al cargar aunque no haya visibilidad guardada", async () => {
     const sessionStorage = createSessionStorage();
     const button = createButton();
     const { polylines } = setupGlobals({ sessionStorage, button });
@@ -184,8 +190,8 @@ describe("walkingRouteLayer", () => {
     layerModule.initWalkingRouteLayer();
     await flush();
 
-    expect(polylines).toHaveLength(1);
-    expect(button.title).toBe("Ocultar rutas");
+    expect(polylines).toHaveLength(0);
+    expect(button.title).toBe("Mostrar rutas");
   });
 
   it("no dibuja nada cuando no hay red", async () => {

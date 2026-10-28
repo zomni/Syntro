@@ -5,9 +5,9 @@ const source = fs.readFileSync(path.join(__dirname, "..", "views", "featureDispl
 const css = fs.readFileSync(path.join(__dirname, "..", "index.css"), "utf8");
 
 describe("boton para ocultar el contador de equipos", () => {
-  it("persiste el estado en sessionStorage y arranca visible salvo eleccion previa", () => {
+  it("persiste el estado en sessionStorage y arranca oculto en cada carga", () => {
     expect(source).toContain('const EQUIPMENT_BUBBLES_STORAGE_KEY = "syntro_equipment_bubbles_visible";');
-    expect(source).toContain('window.sessionStorage?.getItem(EQUIPMENT_BUBBLES_STORAGE_KEY) !== "false"');
+    expect(source).toContain("let equipmentBubblesVisible = false;");
     expect(source).toContain("window.sessionStorage?.setItem(EQUIPMENT_BUBBLES_STORAGE_KEY, String(equipmentBubblesVisible));");
   });
 

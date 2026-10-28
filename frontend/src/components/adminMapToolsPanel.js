@@ -64,6 +64,7 @@ export const ensureAdminMapToolsPanel = () => {
   bindSessionRecheck();
   scheduleAdminMapToolsPanelPosition();
   window.addEventListener("resize", positionAdminMapToolsPanel);
+  window.addEventListener("syntro-map-ui-visibility-changed", scheduleAdminMapToolsPanelPosition);
   window.addEventListener(identifiers.events.sessionChanged, (event) => {
     const detail = event.detail || {};
     if (detail?.isAuthenticated === false) {
@@ -149,9 +150,16 @@ const positionAdminMapToolsPanel = () => {
   const panel = document.getElementById(panelId);
   if (!panel) return;
 
-  const inventoryLink = document.getElementById("session-inventory-link");
-  const sessionBadge = document.getElementById("session-mode-badge");
-  const anchor = inventoryLink || sessionBadge || document.getElementById("map-status-panel");
+  const anchors = [
+    document.getElementById("session-inventory-link"),
+    document.getElementById("session-mode-badge"),
+    document.getElementById("map-status-panel"),
+  ];
+  const anchor = anchors.find((candidate) => {
+    if (!candidate || candidate.hidden || window.getComputedStyle(candidate).display === "none") return false;
+    const rect = candidate.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
 
   if (!anchor) return;
 

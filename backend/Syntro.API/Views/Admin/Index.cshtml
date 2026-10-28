@@ -22,6 +22,14 @@
         .Sum(category => category.Count);
     var maxEquipmentCount = Math.Max(Math.Max(pcCount, printerCount), 1);
     var displayTimeZone = Syntro.API.Services.TelemetryTimeSettings.ResolveTimeZone(Config);
+    var telemetryFreshnessMinutes = int.TryParse(
+        Config["NetworkTelemetrySettings:FreshnessMinutes"],
+        out var configuredTelemetryFreshnessMinutes)
+        ? configuredTelemetryFreshnessMinutes
+        : 30;
+    var networkFreshnessText = Model.LatestNetworkScanUtc is null
+        ? "Sin captura disponible para evaluar la frescura."
+        : $"Última captura hace {Math.Max(0, (int)Math.Floor((DateTime.UtcNow - Model.LatestNetworkScanUtc.Value).TotalMinutes))} min; límite configurado: {telemetryFreshnessMinutes} min.";
 
     string FormatChileDateTime(DateTime? value, string format = "dd/MM/yyyy HH:mm")
     {
@@ -158,6 +166,15 @@
         background: linear-gradient(90deg, #22c55e, #f59e0b, #ef4444);
         transition: width .6s ease;
     }
+    .dashboard-risk-scale { position: relative; padding-top: 20px; }
+    .dashboard-risk-track { display: grid; grid-template-columns: 20fr 20fr 30fr 30fr; height: 10px; border-radius: 999px; overflow: visible; }
+    .dashboard-risk-track span:nth-child(1) { background: #22c55e; }
+    .dashboard-risk-track span:nth-child(2) { background: #facc15; }
+    .dashboard-risk-track span:nth-child(3) { background: #f97316; }
+    .dashboard-risk-track span:nth-child(4) { background: #ef4444; }
+    .dashboard-risk-marker { position: absolute; top: 14px; left: 20%; width: 2px; height: 20px; background: #0f172a; transform: translateX(-1px); }
+    .dashboard-risk-labels { display: grid; grid-template-columns: 20fr 20fr 30fr 30fr; margin-top: 5px; font-size: .68rem; color: #64748b; }
+    .dashboard-risk-labels span:not(:first-child) { text-align: center; }
     .risk-pulse {
         width: 10px;
         height: 10px;
@@ -418,8 +435,13 @@
                              <div class="risk-gauge">
                                  <div class="risk-gauge-fill" style="width: @gaugeFill%"></div>
                               </div>
-                             <div class="small text-muted mt-2">El nivel general se calcula sobre el promedio de los riesgos observados; no es el porcentaje de dispositivos de alto riesgo.</div>
-                             <div class="small text-muted mt-2">Escala aplicada: bajo &lt;20, medio 20–39, alto 40–69, crítico ≥70. Por eso 20 es medio: el umbral es inclusivo.</div>
+                              <div class="dashboard-risk-scale mt-3" aria-label="Escala real del puntaje de riesgo">
+                                  <span class="dashboard-risk-marker" title="Inicio del nivel medio: 20 puntos"></span>
+                                  <div class="dashboard-risk-track"><span></span><span></span><span></span><span></span></div>
+                                  <div class="dashboard-risk-labels"><span>Bajo &lt;20</span><span>Medio 20–39</span><span>Alto 40–69</span><span>Crítico ≥70</span></div>
+                              </div>
+                              <div class="small text-muted mt-2">El cálculo combina el promedio de dispositivos y el promedio de identidades observadas.</div>
+                              <div class="small text-muted mt-2">@networkFreshnessText</div>
                          </div>
                         </div>
                         <div class="col-lg-2 col-md-6">
@@ -442,6 +464,15 @@
                                      <div class="text-muted small">Riesgo medio / bajo</div>
                                      <div class="fs-6 fw-bold">@Model.LatestNetworkMediumRiskCount medio · @Model.LatestNetworkLowRiskCount bajo</div>
                                  </div>
+                             </div>
+                         </div>
+                         <div class="col-12">
+                             <div class="small text-muted border-top pt-3">
+                                 Snapshot activo: @FormatChileDateTime(Model.LatestNetworkScanUtc) · ID @Model.LatestNetworkSnapshotId.ToString()[..8]
+                                 @if (Model.LatestNetworkSnapshotRunNumber.HasValue)
+                                 {
+                                     <span> · Captura #@Model.LatestNetworkSnapshotRunNumber.Value</span>
+                                 }
                              </div>
                          </div>
                          <div class="col-lg-2 col-md-6">
