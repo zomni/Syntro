@@ -207,6 +207,8 @@ public class AdminController : Controller
                 model.LatestNetworkMediumRiskCount = latestSnapshot.MediumRiskDeviceCount;
                 model.LatestNetworkLowRiskCount = latestSnapshot.LowRiskDeviceCount;
                 model.LatestNetworkScanUtc = latestSnapshot.ObservedAtUtc;
+                model.LatestNetworkSnapshotId = latestSnapshot.Id;
+                model.LatestNetworkSnapshotRunNumber = latestSnapshot.RunNumber;
             }
         }
 

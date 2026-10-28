@@ -28,6 +28,8 @@ public class AdminDashboardViewModel
     public int LatestNetworkMediumRiskCount { get; set; }
     public int LatestNetworkLowRiskCount { get; set; }
     public DateTime? LatestNetworkScanUtc { get; set; }
+    public Guid LatestNetworkSnapshotId { get; set; }
+    public int? LatestNetworkSnapshotRunNumber { get; set; }
 }
 
 public class DatabaseBackupViewModel
