@@ -697,6 +697,7 @@ const formatSyncTimestamp = (value) => {
   return date.toLocaleString(DISPLAY_LOCALE, {
     dateStyle: "short",
     timeStyle: "short",
+    hour12: false,
     timeZone: DISPLAY_TIME_ZONE,
   });
 };
@@ -2265,9 +2266,9 @@ const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false)
         title="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
         aria-label="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
         aria-pressed="${String(matchActive)}"
-      >${matchActive ? "Ocultar coincidencias" : "Coincidencias de inventario"}</button>
+      ><span class="session-mode-match-icon" aria-hidden="true"></span>${matchActive ? "Ocultar coincidencias" : "Coincidencias de inventario"}</button>
       <div class="building-panel-inventory-match-summary" aria-label="Resumen de coincidencias de inventario">
-        <span>${counts.seen} vistos · ${counts.notSeen} no vistos · ${counts.noIdentifier} sin identificador · ${total} equipos</span>
+        <span>${counts.seen} conectados a red · ${counts.notSeen} sin conexión a red · ${counts.noIdentifier} sin identificador · ${total} equipos</span>
         <span>Última captura: ${escapeHtml(snapshotLabel)}</span>
       </div>
     </div>`;

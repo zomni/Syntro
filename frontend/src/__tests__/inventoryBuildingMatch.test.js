@@ -19,12 +19,14 @@ describe("estado de coincidencias de inventario del panel", () => {
   it("mantiene la suma de estados igual al total del alcance", () => {
     expect(source).toContain("const total = counts.seen + counts.notSeen + counts.noIdentifier;");
     expect(source).toContain("${total} equipos");
+    expect(source).toContain("${counts.seen} conectados a red · ${counts.notSeen} sin conexión a red");
     expect(source).toContain("const matchFilteredDevices = matchFilter === \"not_seen\"");
   });
 
   it("conserva la fecha única con el formateador del sistema", () => {
     expect(source).toContain("const snapshotLabel = formatSyncTimestamp(snapshotDate);");
     expect(source).toContain("Última captura: ${escapeHtml(snapshotLabel)}");
+    expect(source).toContain("hour12: false");
     expect(source).toContain("timeZone: DISPLAY_TIME_ZONE");
   });
 
@@ -37,5 +39,9 @@ describe("estado de coincidencias de inventario del panel", () => {
     expect(source).toContain("const [backendRooms, manualRooms] = await Promise.all([");
     expect(source).not.toContain("data/interiors/${building.id}/floor_");
     expect(source).not.toContain("data/interiors/${building.id}/building_detail.json");
+  });
+
+  it("usa el icono de coincidencias de la vista general en el boton del edificio", () => {
+    expect(source).toContain('<span class="session-mode-match-icon" aria-hidden="true"></span>');
   });
 });
