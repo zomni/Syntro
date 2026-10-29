@@ -1240,7 +1240,8 @@ const buildDeviceControlsHtml = (
   sectorOptions = [],
   sectorFilter = "",
   filtersOpen = false,
-  typeFilter = ""
+  typeFilter = "",
+  matchFilter = ""
 ) => {
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
   const inputHtml = isOpen
@@ -1253,7 +1254,7 @@ const buildDeviceControlsHtml = (
   const activeSector = hasSectorFilters ? sectorOptions.find((s) => s.roomId === sectorFilter) : null;
   const activeType = normalizeDeviceType(typeFilter || "all");
   const hasTypeFilter = activeType && activeType !== "all";
-  const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || "").trim())]
+  const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || "").trim()), Boolean(matchFilter)]
     .filter(Boolean).length;
 
   let filtersButtonHtml = "";
@@ -2946,7 +2947,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
             : ""
         }
         <div style="margin-top:8px;">
-          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter)}
+          ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter, deviceMatchFilter)}
         </div>
         <div class="building-panel-device-results" style="margin-top:4px;">
           ${buildDevicesListHtml(featureId, scopeDevices, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment, deviceMatchFilter)}
@@ -3434,6 +3435,37 @@ const placeFloorTotalBubble = (overlay, floorRing, floorTotal, floor, featureId)
   });
 };
 
+const getInventoryMatchRateForDevices = (devices) => {
+  if (!devices.some((device) => device.latestSnapshotAvailable) || !devices.length) return null;
+  const seen = devices.filter((device) => getInventoryObservationState(device) === "seen").length;
+  const rate = (seen / devices.length) * 100;
+  return {
+    seen,
+    total: devices.length,
+    rate,
+    color: buildingMatchColor(rate),
+    label: buildingMatchPercentLabel(rate),
+  };
+};
+
+const placeMatchRateBubble = (overlay, floorRing, matchSummary) => {
+  if (!overlay || floorRing.length < 3 || !matchSummary?.label || !matchSummary.color) return;
+  const centroid = ringCentroidLatLng(floorRing);
+  if (!centroid) return;
+
+  const label = `${matchSummary.seen} de ${matchSummary.total} inventarios vistos (${matchSummary.label})`;
+  L.marker([centroid[0], centroid[1]], {
+    interactive: false,
+    keyboard: false,
+    icon: L.divIcon({
+      className: "building-match-bubble",
+      html: `<button type="button" style="background-color:${matchSummary.color};" aria-label="${escapeHtml(label)}">${matchSummary.label}</button>`,
+      iconSize: [46, 28],
+      iconAnchor: [23, 14],
+    }),
+  }).addTo(overlay);
+};
+
 const renderFloorSectors = async (feature) => {
   if (!buildingViewMap || !feature) return;
 
@@ -3513,17 +3545,6 @@ const renderFloorSectors = async (feature) => {
     ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === popupTypeFilter)
     : devicesInFloor;
   const buildingMatchActive = Boolean(popupBuildingMatchState[featureId]);
-  let buildingMatchColorForView = null;
-  let buildingMatchLabelForView = null;
-  let buildingMatchSummaryForView = null;
-  if (buildingMatchActive) {
-    const matchData = await loadBuildingMatchData();
-    buildingMatchSummaryForView = getBuildingMatchSummaryForType(matchData.get(featureId));
-    if (buildingMatchSummaryForView?.matchRate !== null && buildingMatchSummaryForView?.inventoryCount > 0) {
-      buildingMatchColorForView = buildingMatchColor(buildingMatchSummaryForView.matchRate);
-      buildingMatchLabelForView = buildingMatchPercentLabel(buildingMatchSummaryForView.matchRate);
-    }
-  }
 
   const sectorCountByRoom = new Map();
   for (const sector of sectors) {
@@ -3540,22 +3561,24 @@ const renderFloorSectors = async (feature) => {
   const dropTargets = [];
   const canDropEquipment = canManageEquipmentAssignments(backendSession);
   const sectorEntries = [];
+  let hoveredSectorBaseStyle = baseSectorStyle;
   hoveredSectorRoomId = "";
   hoveredSectorPolygon = null;
 
   const clearHoveredSector = () => {
     if (!hoveredSectorPolygon) return;
-    hoveredSectorPolygon.setStyle(baseSectorStyle);
+    hoveredSectorPolygon.setStyle(hoveredSectorBaseStyle);
     hoveredSectorPolygon.getElement()?.classList?.remove("is-hover");
     hoveredSectorPolygon = null;
     hoveredSectorRoomId = "";
   };
 
-  const setHoveredSector = (roomId, polygon) => {
+  const setHoveredSector = (roomId, polygon, baseStyle) => {
     if (hoveredSectorRoomId === roomId && hoveredSectorPolygon === polygon) return;
     clearHoveredSector();
     hoveredSectorRoomId = roomId;
     hoveredSectorPolygon = polygon;
+    hoveredSectorBaseStyle = baseStyle;
     polygon.setStyle(hoverSectorStyle);
     polygon.getElement()?.classList?.add("is-hover");
     polygon.bringToFront();
@@ -3567,11 +3590,13 @@ const renderFloorSectors = async (feature) => {
     const latLngs = coords.map((c) => [c[1], c[0]]);
     const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
 
-    const matchSectorStyle = buildingMatchColorForView
+    const sectorDevices = countedDevicesInFloor.filter((device) => device.roomId === sector.roomId);
+    const sectorMatchSummary = buildingMatchActive ? getInventoryMatchRateForDevices(sectorDevices) : null;
+    const matchSectorStyle = sectorMatchSummary?.color
       ? {
           ...baseSectorStyle,
-          color: buildingMatchColorForView,
-          fillColor: buildingMatchColorForView,
+          color: sectorMatchSummary.color,
+          fillColor: sectorMatchSummary.color,
           fillOpacity: 0.35,
         }
       : baseSectorStyle;
@@ -3584,7 +3609,7 @@ const renderFloorSectors = async (feature) => {
     const setHover = (hovering) => {
       if (isActive) return;
       if (hovering) {
-        setHoveredSector(sector.roomId, polygon);
+          setHoveredSector(sector.roomId, polygon, isActive ? activeSectorStyle : matchSectorStyle);
       } else if (hoveredSectorPolygon === polygon) {
         clearHoveredSector();
       }
@@ -3602,9 +3627,27 @@ const renderFloorSectors = async (feature) => {
       dropTargets.push({ roomId: sector.roomId, ring: latLngs, polygon });
     }
 
-    if (!canViewEquipment || !showSectorCounters) continue;
+     if (!canViewEquipment || !showSectorCounters) continue;
 
-    const count = countedDevicesInFloor.filter((device) => device.roomId === sector.roomId).length;
+     if (buildingMatchActive) {
+       if (!sectorMatchSummary?.label || !sectorMatchSummary.color) continue;
+       const centroid = ringCentroidLatLng(latLngs);
+       if (!centroid) continue;
+       const label = `${sectorMatchSummary.seen} de ${sectorMatchSummary.total} inventarios vistos (${sectorMatchSummary.label})`;
+       L.marker([centroid[0], centroid[1]], {
+         interactive: false,
+         keyboard: false,
+         icon: L.divIcon({
+           className: "building-match-bubble",
+           html: `<button type="button" style="background-color:${sectorMatchSummary.color};" aria-label="${escapeHtml(label)}">${sectorMatchSummary.label}</button>`,
+           iconSize: [46, 28],
+           iconAnchor: [23, 14],
+         }),
+       }).addTo(overlay);
+       continue;
+     }
+
+     const count = countedDevicesInFloor.filter((device) => device.roomId === sector.roomId).length;
     const centroid = ringCentroidLatLng(latLngs);
     const bubblePoint = resolveBubbleLatLng({
       preferred: centroid ? L.latLng(centroid[0], centroid[1]) : null,
@@ -3629,7 +3672,7 @@ const renderFloorSectors = async (feature) => {
     });
     marker.on("mouseover", () => {
       const entry = sectorEntries.find((item) => item.roomId === sector.roomId);
-      entry?.setHover(true);
+       entry?.setHover(true);
     });
     marker.on("mouseout", () => {
       const entry = sectorEntries.find((item) => item.roomId === sector.roomId);
@@ -3652,23 +3695,11 @@ const renderFloorSectors = async (feature) => {
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
-  if (buildingMatchColorForView && buildingMatchLabelForView && floorRing.length >= 3) {
-    const centroid = ringCentroidLatLng(floorRing);
-    if (centroid) {
-      const label = `${buildingMatchSummaryForView.observedInventoryCount} de ${buildingMatchSummaryForView.inventoryCount} inventarios vistos (${buildingMatchLabelForView})`;
-      L.marker([centroid[0], centroid[1]], {
-        interactive: false,
-        keyboard: false,
-        icon: L.divIcon({
-          className: "building-match-bubble",
-          html: `<button type="button" style="background-color:${buildingMatchColorForView};" aria-label="${escapeHtml(label)}">${buildingMatchLabelForView}</button>`,
-          iconSize: [46, 28],
-          iconAnchor: [23, 14],
-        }),
-      }).addTo(overlay);
-    }
+  if (buildingMatchActive) {
+    placeMatchRateBubble(overlay, floorRing, getInventoryMatchRateForDevices(countedDevicesInFloor));
+  } else {
+    placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
   }
-  placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
   await hideBuildingFloorLoading(loadingToken);
 };
 

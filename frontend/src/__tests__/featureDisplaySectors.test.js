@@ -94,7 +94,7 @@ describe("acciones del panel de edificio", () => {
   });
 
   it("muestra el contador de filtros y borra filtros en la misma fila", () => {
-    expect(source).toContain("const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || \"\").trim())]");
+    expect(source).toContain("const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || \"\").trim()), Boolean(matchFilter)]");
     expect(source).toContain("Filtros${activeFilterCount ? ` · ${activeFilterCount}` : \"\"}");
     expect(source).toContain('class="floorButton equipment-panel-clear-filters"');
     expect(source).toContain("popupDeviceSearchOpenState[featureId] = false;");
@@ -123,8 +123,10 @@ describe("acciones del panel de edificio", () => {
     expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false) =>");
     expect(source).toContain("const total = counts.seen + counts.notSeen + counts.noIdentifier;");
     expect(source).toContain("window.toggleBuildingMatchInPanel");
-    expect(source).toContain("buildingMatchColorForView");
-    expect(source).toContain("buildingMatchLabelForView");
+    expect(source).toContain("getInventoryMatchRateForDevices");
+    expect(source).toContain("placeMatchRateBubble");
+    expect(source).toContain("const sectorMatchSummary = buildingMatchActive ? getInventoryMatchRateForDevices(sectorDevices) : null;");
+    expect(source).toContain("if (buildingMatchActive) {");
     expect(source).toContain('popupDeviceMatchFilterState[featureId] = popupBuildingMatchState[featureId] ? "not_seen" : "";');
     expect(source).toContain('matchFilter === "not_seen"');
     expect(source).toContain("building-panel-inventory-match-summary");
