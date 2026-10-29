@@ -2090,8 +2090,8 @@ const buildInventoryMatchBadgeHtml = (device) => {
   const state = getInventoryObservationState(device);
   if (state === "no_snapshot") return "";
   const meta = {
-    seen: { color: "#16a34a", label: "Visto" },
-    not_seen: { color: "#dc2626", label: "No visto" },
+    seen: { color: "#16a34a", label: "Conectado a red" },
+    not_seen: { color: "#dc2626", label: "Sin conexión a red" },
     no_identifier: { color: "#d97706", label: "Sin identificador" },
   }[state];
   const title = state === "no_identifier"

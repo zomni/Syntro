@@ -113,8 +113,8 @@ describe("acciones del panel de edificio", () => {
     expect(source).toContain("foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot)");
     expect(source).toContain("const buildInventoryMatchBadgeHtml = (device) =>");
     expect(source).toContain("buildInventoryMatchBadgeHtml(device)");
-    expect(source).toContain('seen: { color: "#16a34a", label: "Visto" }');
-    expect(source).toContain('not_seen: { color: "#dc2626", label: "No visto" }');
+    expect(source).toContain('seen: { color: "#16a34a", label: "Conectado a red" }');
+    expect(source).toContain('not_seen: { color: "#dc2626", label: "Sin conexión a red" }');
     expect(source).toContain('no_identifier: { color: "#d97706", label: "Sin identificador" }');
     expect(source).not.toContain("... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas");
   });
