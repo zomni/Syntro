@@ -2314,12 +2314,12 @@ const filterPanelDevices = (devicesInScope, allDevices, allRooms, query, typeFil
     ? queryFilteredDevices.filter((device) => normalizeDeviceType(device?.type) === activeType)
     : queryFilteredDevices;
 
-  return { activeQuery, activeType, queryFilteredDevices, filteredDevices };
+  return { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices };
 };
 
 const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false, matchFilter = "") => {
   const roomsMap = buildRoomsMap(allRooms);
-  const { activeQuery, activeType, queryFilteredDevices, filteredDevices } = filterPanelDevices(
+  const { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices } = filterPanelDevices(
     devicesInFloor, allDevices, allRooms, query, typeFilter, sectorFilter
   );
 

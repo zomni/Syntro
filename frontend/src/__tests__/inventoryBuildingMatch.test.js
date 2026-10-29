@@ -27,4 +27,9 @@ describe("estado de coincidencias de inventario del panel", () => {
     expect(source).toContain("Última captura: ${escapeHtml(snapshotLabel)}");
     expect(source).toContain("timeZone: DISPLAY_TIME_ZONE");
   });
+
+  it("conserva el sector activo dentro del alcance del listado", () => {
+    expect(source).toContain("return { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices };");
+    expect(source).toContain("const { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices } = filterPanelDevices(");
+  });
 });
