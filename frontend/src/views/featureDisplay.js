@@ -294,6 +294,7 @@ const popupDeviceQueryState = {};
 const popupDevicePageSizeState = {};
 const popupDeviceSearchOpenState = {};
 const popupDeviceTypeFilterState = {};
+const popupDeviceMatchFilterState = {};
 const popupDeviceScopeState = {};
 const popupSectorFilterState = {};
 const popupSectorFilterOpenState = {};
@@ -1103,6 +1104,11 @@ const normalizeImportedInventoryItems = (items) => {
     name: item?.serialNumber || item?.description || item?.itemNumber || "Equipo",
     type: item?.inferredCategory || "other",
     foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot),
+    latestSnapshotAvailable: Boolean(item?.latestSnapshotAvailable),
+    latestSnapshotObservedAtUtc: item?.latestSnapshotObservedAtUtc || "",
+    comparableIdentifierTypes: Array.isArray(item?.comparableIdentifierTypes)
+      ? item.comparableIdentifierTypes
+      : [],
     ip: item?.ipAddress || "",
     roomId: item?.assignedRoomExternalId || "",
     assignedFloor:
@@ -1376,6 +1382,14 @@ window.clearDevicePanelFilters = (featureId) => {
   popupSectorFilterOpenState[featureId] = false;
   popupDeviceQueryState[featureId] = "";
   popupDeviceSearchOpenState[featureId] = false;
+  popupDeviceMatchFilterState[featureId] = "";
+  popupViewState[featureId] = "devices";
+  refreshCurrentPopup();
+};
+
+window.showUnseenInventoryInBuilding = (featureId) => {
+  if (!featureId) return;
+  popupDeviceMatchFilterState[featureId] = "not_seen";
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
 };
@@ -2082,13 +2096,39 @@ const getStatusMeta = (status) => {
   return { color: "#94a3b8", label: status || "Sin estado" };
 };
 
-const buildInventoryMatchBadgeHtml = (found) => {
-  const color = found ? "#16a34a" : "#dc2626";
-  const label = found ? "Conectado a red" : "Sin conexión a red";
+const getInventoryObservationState = (device) => {
+  if (!device?.latestSnapshotAvailable) return "no_snapshot";
+  if (!device.comparableIdentifierTypes?.length) return "no_identifier";
+  return device.foundInLatestSnapshot ? "seen" : "not_seen";
+};
+
+const getMissingComparableIdentifierLabel = (device) => {
+  const available = new Set(device?.comparableIdentifierTypes || []);
+  const missing = ["serie", "MAC", "IP"].filter((type) => !available.has(type));
+  return missing.length
+    ? `Falta ${missing.join(", ")}. El cruce usa serie, MAC o IP; también puede usar una IP embebida en el nombre de red.`
+    : "El equipo no tiene un identificador comparable para el cruce.";
+};
+
+const buildInventoryMatchBadgeHtml = (device) => {
+  const state = getInventoryObservationState(device);
+  if (state === "no_snapshot") return "";
+  const meta = {
+    seen: { color: "#16a34a", label: "Visto" },
+    not_seen: { color: "#dc2626", label: "No visto" },
+    no_identifier: { color: "#d97706", label: "Sin identificador" },
+  }[state];
+  const title = state === "no_identifier"
+    ? getMissingComparableIdentifierLabel(device)
+    : state === "no_snapshot"
+      ? "No existe ninguna captura de red disponible."
+      : state === "seen"
+        ? "Apareció en la última captura de red."
+        : "No apareció en la última captura de red.";
   return `
-    <span style="${CHIP_BASE_STYLE}; background:${color}1f; color:${color};">
-      <span style="width:8px; height:8px; border-radius:50%; background:${color}; display:inline-block;"></span>
-      ${label}
+    <span title="${escapeHtml(title)}" style="${CHIP_BASE_STYLE}; background:${meta.color}1f; color:${meta.color};">
+      <span style="width:8px; height:8px; border-radius:50%; background:${meta.color}; display:inline-block;"></span>
+      ${meta.label}
     </span>
   `;
 };
@@ -2219,42 +2259,90 @@ const buildDevicePageSizeHtml = (featureId, pageSize) => {
   }).join("");
 };
 
-const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false) => {
+const buildInventoryMatchSummaryHtml = (featureId, devices) => {
+  const hasSnapshot = devices.some((device) => device.latestSnapshotAvailable);
+  if (!hasSnapshot) {
+    return `
+      <div class="building-panel-inventory-match is-empty" role="status">
+        No existe ninguna captura de red disponible para comparar este inventario.
+      </div>`;
+  }
+
+  const counts = devices.reduce((summary, device) => {
+    const state = getInventoryObservationState(device);
+    if (state === "seen") summary.seen += 1;
+    if (state === "not_seen") summary.notSeen += 1;
+    if (state === "no_identifier") summary.noIdentifier += 1;
+    return summary;
+  }, { seen: 0, notSeen: 0, noIdentifier: 0 });
+  const snapshotDate = devices.find((device) => device.latestSnapshotObservedAtUtc)?.latestSnapshotObservedAtUtc;
+  const total = counts.seen + counts.notSeen + counts.noIdentifier;
+  const snapshotLabel = formatSyncTimestamp(snapshotDate);
+
+  return `
+    <div class="building-panel-inventory-match">
+      <button
+        type="button"
+        class="floorButton equipment-panel-action-button building-panel-inventory-match-button"
+        style="${getActionButtonStyle()}"
+        onclick="window.showUnseenInventoryInBuilding && window.showUnseenInventoryInBuilding('${escapeHtml(featureId)}')"
+        title="Mostrar equipos no vistos en la última captura"
+        aria-label="Mostrar equipos no vistos en la última captura"
+      >Coincidencias de inventario</button>
+      <div class="building-panel-inventory-match-summary" aria-label="Resumen de coincidencias de inventario">
+        <span>${counts.seen} vistos · ${counts.notSeen} no vistos · ${counts.noIdentifier} sin identificador · ${total} equipos</span>
+        <span>Última captura: ${escapeHtml(snapshotLabel)}</span>
+      </div>
+    </div>`;
+};
+
+const filterPanelDevices = (devicesInScope, allDevices, allRooms, query, typeFilter, sectorFilter) => {
   const roomsMap = buildRoomsMap(allRooms);
   const activeQuery = String(query || "").trim();
   const activeType = String(typeFilter || "all").trim().toLowerCase();
   const activeSectorFilter = String(sectorFilter || "").trim();
-  const sourceDevices = activeQuery ? allDevices : devicesInFloor;
+  const sourceDevices = activeQuery ? allDevices : devicesInScope;
   const sectorScopedDevices = activeSectorFilter === UNASSIGNED_SECTOR_KEY
     ? sourceDevices.filter((device) => !device.roomId)
     : activeSectorFilter
       ? sourceDevices.filter((device) => device.roomId === activeSectorFilter)
       : sourceDevices;
-
-  if (!sectorScopedDevices.length) {
-    return `No hay equipos en el sector seleccionado para ${escapeHtml(floorLabel)}.`;
-  }
-
   const queryFilteredDevices = activeQuery
     ? sectorScopedDevices.filter((device) => deviceMatchesQuery(device, activeQuery, roomsMap))
     : sectorScopedDevices;
-
   const filteredDevices = activeType && activeType !== "all"
     ? queryFilteredDevices.filter((device) => normalizeDeviceType(device?.type) === activeType)
     : queryFilteredDevices;
+
+  return { activeQuery, activeType, queryFilteredDevices, filteredDevices };
+};
+
+const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false, matchFilter = "") => {
+  const roomsMap = buildRoomsMap(allRooms);
+  const { activeQuery, activeType, queryFilteredDevices, filteredDevices } = filterPanelDevices(
+    devicesInFloor, allDevices, allRooms, query, typeFilter, sectorFilter
+  );
+
+  if (!filteredDevices.length && !queryFilteredDevices.length) {
+    return `No hay equipos en el sector seleccionado para ${escapeHtml(floorLabel)}.`;
+  }
+  const matchFilteredDevices = matchFilter === "not_seen"
+    ? filteredDevices.filter((device) => getInventoryObservationState(device) === "not_seen")
+    : filteredDevices;
 
   if (activeQuery && queryFilteredDevices.length === 0) {
     return `No hay resultados para "${escapeHtml(activeQuery)}".`;
   }
 
-  if (filteredDevices.length === 0) {
+  if (matchFilteredDevices.length === 0) {
+    if (matchFilter === "not_seen") return "No hay equipos no vistos en la última captura para este alcance.";
     return `No hay equipos del tipo ${escapeHtml(getDeviceTypeLabel(activeType))}.`;
   }
 
-  const resolvedPageSize = pageSize === "all" ? filteredDevices.length : Math.max(5, Number(pageSize) || 5);
-  let displayDevices = filteredDevices.slice(0, resolvedPageSize);
+  const resolvedPageSize = pageSize === "all" ? matchFilteredDevices.length : Math.max(5, Number(pageSize) || 5);
+  let displayDevices = matchFilteredDevices.slice(0, resolvedPageSize);
   const highlightDevice = highlightKey
-    ? filteredDevices.find((device) => matchesDeviceKey(device, highlightKey))
+    ? matchFilteredDevices.find((device) => matchesDeviceKey(device, highlightKey))
     : null;
 
   if (highlightDevice && !displayDevices.includes(highlightDevice)) {
@@ -2263,7 +2351,7 @@ const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevice
 
   let html = `
     <div class="equipment-panel-results-toolbar">
-      <span>Mostrando ${Math.min(displayDevices.length, filteredDevices.length)} de ${filteredDevices.length}</span>
+      <span>Mostrando ${Math.min(displayDevices.length, matchFilteredDevices.length)} de ${matchFilteredDevices.length}</span>
       <span class="equipment-panel-results-size-label">Mostrar</span>
       <div class="equipment-panel-results-size">${buildDevicePageSizeHtml(featureId, pageSize)}</div>
     </div>
@@ -2312,7 +2400,7 @@ const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevice
           buildFloorBadgeHtml(deviceFloor),
           roomChip,
           buildIpLabelHtml(device.ip),
-          buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)
+          buildInventoryMatchBadgeHtml(device)
         )}
         <div style="margin-top:6px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
           ${buildDashboardEquipmentLink(device.serialNumber || device.deviceId || device.name)}
@@ -2673,11 +2761,12 @@ const buildRoomDetailHtml = (featureId, room, roomDevices) => {
   return html;
 };
 
-const buildBuildingPanelPopupHtml = ({ featureName, selectedSectorContextHtml = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
+const buildBuildingPanelPopupHtml = ({ featureName, selectedSectorContextHtml = "", inventoryMatchHtml = "", featureId = "", building, currentFloor, hasView, contentHtml }) => `
   <div style="${popupShellStyle}">
     <section class="building-panel-building-context">
       ${buildBuildingPanelHeaderHtml(featureName, featureId || building?.id)}
       ${buildFloorSelectorHtml(building, currentFloor)}
+      ${inventoryMatchHtml}
     </section>
     ${selectedSectorContextHtml}
     <div style="margin-top:8px;">
@@ -2722,6 +2811,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   const devicePageSize = popupDevicePageSizeState[featureId] || 5;
   const deviceSearchOpen = popupDeviceSearchOpenState[featureId] || false;
   const deviceTypeFilter = popupDeviceTypeFilterState[featureId] || "";
+  const deviceMatchFilter = popupDeviceMatchFilterState[featureId] || "";
   const deviceScope = popupDeviceScopeState[featureId] || "";
   const selectedRoomId = popupRoomState[featureId] || null;
 
@@ -2789,6 +2879,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
 
   let contentHtml = "";
   let selectedSectorContextHtml = "";
+  let inventoryMatchHtml = "";
   if (currentView === "summary") {
     contentHtml = `
       <div style="${sectionBoxStyle}">
@@ -2839,11 +2930,11 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     const activeSectorFilter = popupSectorFilterState[featureId] || "";
     const sectorFiltersOpen = Boolean(popupSectorFilterOpenState[featureId]);
     const scopeDevices = deviceScope === "building" ? allDevices : devicesInFloor;
-    const devicesForView = activeSectorFilter === UNASSIGNED_SECTOR_KEY
-      ? scopeDevices.filter((device) => !device.roomId)
-      : activeSectorFilter
-        ? scopeDevices.filter((device) => device.roomId === activeSectorFilter)
-        : scopeDevices;
+    const panelFilteredDevices = filterPanelDevices(
+      scopeDevices, allDevices, allRooms, deviceQuery, deviceTypeFilter, activeSectorFilter
+    );
+    const devicesForView = panelFilteredDevices.filteredDevices;
+    inventoryMatchHtml = buildInventoryMatchSummaryHtml(featureId, devicesForView);
     const unassignedCount = scopeDevices.filter((device) => !device.roomId).length;
     const sectorOptionsForFilter = canManageEquipment && unassignedCount > 0
       ? [...sectorOptions, { roomId: UNASSIGNED_SECTOR_KEY, name: "Sin sector", count: unassignedCount }]
@@ -2878,7 +2969,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
           ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter)}
         </div>
         <div class="building-panel-device-results" style="margin-top:4px;">
-          ${buildDevicesListHtml(featureId, devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
+          ${buildDevicesListHtml(featureId, scopeDevices, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment, deviceMatchFilter)}
         </div>
       </div>
     `;
@@ -2894,6 +2985,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
   return buildBuildingPanelPopupHtml({
     featureName,
     selectedSectorContextHtml,
+    inventoryMatchHtml,
     featureId,
     building,
     currentFloor,

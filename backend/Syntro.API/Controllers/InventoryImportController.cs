@@ -221,16 +221,16 @@ public class InventoryImportController : ControllerBase
         if (!string.IsNullOrWhiteSpace(matchedRoomExternalId))
             query = query.Where(i => i.MatchedRoomExternalId == matchedRoomExternalId);
 
-        var latestSnapshotId = await _context.NetworkTelemetrySnapshots
+        var latestSnapshot = await _context.NetworkTelemetrySnapshots
             .AsNoTracking()
             .OrderByDescending(snapshot => snapshot.ObservedAtUtc)
             .ThenByDescending(snapshot => snapshot.Id)
-            .Select(snapshot => (Guid?)snapshot.Id)
+            .Select(snapshot => new { snapshot.Id, snapshot.ObservedAtUtc })
             .FirstOrDefaultAsync(cancellationToken);
-        var matchedInventoryIds = latestSnapshotId.HasValue
+        var matchedInventoryIds = latestSnapshot is not null
             ? await _context.NetworkTelemetryObservations
                 .AsNoTracking()
-                .Where(observation => observation.NetworkTelemetrySnapshotId == latestSnapshotId.Value &&
+                .Where(observation => observation.NetworkTelemetrySnapshotId == latestSnapshot.Id &&
                     observation.ObservationType == "device" && observation.ImportedInventoryItemId != null)
                 .Select(observation => observation.ImportedInventoryItemId!.Value)
                 .Distinct()
@@ -306,11 +306,29 @@ public class InventoryImportController : ControllerBase
             item.MatchNotes,
             item.AssignedBuildingExternalId,
             item.AssignedRoomExternalId,
-            item.AssignedFloor,
-            item.AssignmentNotes,
-            item.AssignmentUpdatedAtUtc,
-            matchedInLatestSnapshot = matchedInventoryIdSet.Contains(item.Id)
-        }));
+             item.AssignedFloor,
+             item.AssignmentNotes,
+             item.AssignmentUpdatedAtUtc,
+             matchedInLatestSnapshot = matchedInventoryIdSet.Contains(item.Id),
+             latestSnapshotAvailable = latestSnapshot is not null,
+             latestSnapshotObservedAtUtc = latestSnapshot?.ObservedAtUtc,
+             comparableIdentifierTypes = GetComparableIdentifierTypes(item.SerialNumber, item.MacAddress, item.IpAddress)
+         }));
+    }
+
+    private static IReadOnlyList<string> GetComparableIdentifierTypes(string? serialNumber, string? macAddress, string? ipAddress)
+    {
+        var types = new List<string>(3);
+        if (!string.IsNullOrWhiteSpace(serialNumber)) types.Add("serie");
+        if (!string.IsNullOrWhiteSpace(macAddress) && IsValidMacAddress(macAddress)) types.Add("MAC");
+        if (!string.IsNullOrWhiteSpace(ipAddress)) types.Add("IP");
+        return types;
+    }
+
+    private static bool IsValidMacAddress(string value)
+    {
+        var hex = new string(value.Where(char.IsLetterOrDigit).ToArray());
+        return hex.Length == 12 && hex.All(Uri.IsHexDigit);
     }
 
     [HttpGet("building-summary")]

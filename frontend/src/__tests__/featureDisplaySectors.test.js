@@ -108,16 +108,34 @@ describe("acciones del panel de edificio", () => {
 
   it("mantiene el estado de coincidencia de inventario en las tarjetas", () => {
     expect(source).toContain("foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot)");
-    expect(source).toContain("const buildInventoryMatchBadgeHtml = (found) =>");
-    expect(source).toContain("buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)");
+    expect(source).toContain("const buildInventoryMatchBadgeHtml = (device) =>");
+    expect(source).toContain("buildInventoryMatchBadgeHtml(device)");
+    expect(source).toContain('seen: { color: "#16a34a", label: "Visto" }');
+    expect(source).toContain('not_seen: { color: "#dc2626", label: "No visto" }');
+    expect(source).toContain('no_identifier: { color: "#d97706", label: "Sin identificador" }');
     expect(source).not.toContain("... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas");
+  });
+
+  it("resume el mismo alcance del listado y abre solo los no vistos", () => {
+    expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices) =>");
+    expect(source).toContain("const total = counts.seen + counts.notSeen + counts.noIdentifier;");
+    expect(source).toContain("window.showUnseenInventoryInBuilding");
+    expect(source).toContain('popupDeviceMatchFilterState[featureId] = "not_seen";');
+    expect(source).toContain('matchFilter === "not_seen"');
+    expect(source).toContain("building-panel-inventory-match-summary");
+  });
+
+  it("muestra un aviso único cuando no existe captura y explica el identificador faltante", () => {
+    expect(source).toContain("No existe ninguna captura de red disponible para comparar este inventario.");
+    expect(source).toContain("getMissingComparableIdentifierLabel");
+    expect(source).toContain("El cruce usa serie, MAC o IP; también puede usar una IP embebida en el nombre de red.");
   });
 
   it("mantiene las cinco opciones de cantidad junto al resumen del listado", () => {
     expect(source).toContain("const buildDevicePageSizeHtml = (featureId, pageSize) =>");
     expect(source).toContain("[5, 10, 20, 50, \"all\"]");
     expect(source).toContain("equipment-panel-results-toolbar");
-    expect(source).toContain("Mostrando ${Math.min(displayDevices.length, filteredDevices.length)} de ${filteredDevices.length}");
+    expect(source).toContain("Mostrando ${Math.min(displayDevices.length, matchFilteredDevices.length)} de ${matchFilteredDevices.length}");
   });
 
   it("ofrece la navegación al edificio desde el encabezado lateral", () => {
