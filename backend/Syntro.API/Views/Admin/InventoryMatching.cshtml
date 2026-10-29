@@ -1,5 +1,6 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
 @{
     ViewData["Title"] = "Coincidencias inventario";
     Layout = "~/Views/Shared/_Layout.cshtml";
@@ -8,6 +9,8 @@
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
+    var displayTimeZoneId = Syntro.API.Services.TelemetryTimeSettings.ResolveTimeZone(Config).Id;
+    var displayLocale = Syntro.API.Services.TelemetryTimeSettings.ResolveLocale(Config);
 }
 
 <style>
@@ -48,6 +51,37 @@
         transform: scale(1.08);
         box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
     }
+    .matching-context-strip {
+        border: 0;
+        border-radius: 18px;
+        background: linear-gradient(135deg, #0f172a 0%, #1f3b57 52%, #184e77 100%);
+        color: #fff;
+        box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+    }
+    .matching-context-strip .form-select {
+        min-width: min(100%, 540px);
+        border-color: rgba(255, 255, 255, 0.25);
+        background-color: rgba(255, 255, 255, 0.96);
+    }
+    .matching-context-meta { color: rgba(255, 255, 255, 0.72); }
+    .matching-summary-card .card-body { height: 100%; }
+    .matching-kpi-tile { min-height: 116px; }
+    .matching-summary-note { color: #64748b; }
+    .matching-method-badge { min-width: 96px; justify-content: center; }
+    .matching-method-weak { opacity: .72; }
+    .matching-method-weak .matching-method-badge { border-style: dashed !important; }
+    .matching-risk-track { position: relative; height: 10px; min-width: 120px; border-radius: 999px; background: #e2e8f0; overflow: visible; }
+    .matching-risk-track > div { height: 100%; min-width: 4px; display: flex; border-radius: inherit; overflow: hidden; }
+    .matching-risk-count { white-space: nowrap; color: #475569; font-size: .78rem; }
+    .matching-risk-legend { display: flex; flex-wrap: wrap; gap: .75rem 1rem; color: #64748b; font-size: .78rem; }
+    .matching-risk-legend span { display: inline-flex; align-items: center; gap: .35rem; }
+    .matching-risk-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .matching-info-alert { border: 0; border-left: 3px solid #f59e0b; background: #fffbeb; color: #92400e; }
+    .matching-filter-chip { border: 1px solid #cbd5e1; background: #fff; color: #475569; }
+    .matching-filter-chip:hover { border-color: #0f766e; color: #0f766e; }
+    .matching-filter-chip:focus-visible { outline: 3px solid rgba(14, 165, 233, .45); outline-offset: 2px; }
+    .matching-filter-chip.is-active { border-color: #0f766e; background: #0f766e; color: #fff; box-shadow: 0 0 0 2px rgba(15, 118, 110, .16); }
+    .matching-muted-value { color: #64748b; font-weight: 400; }
     .telemetry-table-wrap {
         border: 1px solid rgba(148, 163, 184, 0.16);
         border-radius: 16px;
@@ -103,6 +137,24 @@
     .telemetry-pill-unknown { background: #e2e8f0; color: #475569; }
     .telemetry-pill-matched { background: #dcfce7; color: #15803d; }
     .telemetry-pill-unmatched { background: #fee2e2; color: #b91c1c; }
+    .match-method-row { display: grid; grid-template-columns: minmax(110px, 1fr) auto; gap: .6rem; align-items: center; }
+    .match-method-bar, .risk-level-bar { height: 9px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+    .match-method-fill { height: 100%; border-radius: inherit; background: #0ea5e9; }
+    .match-method-weak .match-method-fill { background: #94a3b8; }
+    .risk-level-row { display: grid; grid-template-columns: 76px 58px minmax(150px, 1fr) 52px; gap: .65rem; align-items: center; }
+    .risk-level-bar { min-width: 4px; }
+    .risk-level-bar-inner { height: 100%; min-width: 4px; display: flex; border-radius: inherit; overflow: hidden; }
+    .risk-segment-matched { background: #16a34a; }
+    .risk-segment-unmatched { background: #dc2626; }
+    .matching-filter-label { display: block; margin-bottom: .2rem; color: #64748b; font-size: .75rem; font-weight: 600; }
+    .matching-count-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .telemetry-pill-risk-critical { background: #fee2e2; color: #b91c1c; }
+    .telemetry-pill-risk-high { background: #ffedd5; color: #c2410c; }
+    .telemetry-pill-risk-medium { background: #fef3c7; color: #a16207; }
+    .telemetry-pill-risk-low { background: #dcfce7; color: #15803d; }
+    @@media (max-width: 767.98px) {
+        .risk-level-row { grid-template-columns: 68px 44px minmax(90px, 1fr) 44px; gap: .35rem; }
+    }
     .match-chip {
         display: inline-flex;
         align-items: center;
@@ -140,27 +192,38 @@
     }
 </style>
 
-<div class="d-flex flex-wrap align-items-start justify-content-between gap-3 mb-4">
-    <div class="page-header px-4 py-3 rounded-3" style="background: linear-gradient(135deg, var(--pi-primary-soft), rgba(45,212,191,0.06)); border-left: 4px solid var(--pi-primary); box-shadow: 0 2px 10px rgba(15,118,110,0.08);">
-        <h2 class="fw-bold mb-0 fs-4" style="color: var(--pi-deep);">Coincidencias inventario</h2>
-    </div>
-    <div class="d-flex flex-wrap align-items-center gap-2">
-        <select id="matching-snapshot-select" class="form-select form-select-sm w-mobile-100" style="min-width: 320px;">
-            <option value="">Cargando snapshots...</option>
-        </select>
-        @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin))
-        {
-            <button type="button" id="matching-rematch-btn" class="btn btn-sm btn-primary">
-                <i class="bi bi-arrow-repeat me-1"></i>Recalcular coincidencias
-            </button>
-        }
+<div class="matching-context-strip p-3 p-lg-4 mb-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div>
+            <div class="small text-uppercase fw-semibold matching-context-meta mb-1"><i class="bi bi-diagram-3 me-1"></i>Contexto de cruce</div>
+            <h2 class="fw-bold mb-0 fs-4">Coincidencias de inventario</h2>
+        </div>
+        <div class="d-flex flex-wrap align-items-center justify-content-end gap-2">
+            <select id="matching-snapshot-select" class="form-select form-select-sm w-mobile-100">
+                <option value="">Cargando snapshots...</option>
+            </select>
+            <span id="matching-active-chip" class="badge rounded-pill bg-info-subtle text-info-emphasis">Activo</span>
+            <span id="matching-calculation-label" class="small matching-context-meta text-nowrap">Capturado: -</span>
+            @if (User.IsInRole(Syntro.API.Models.AppRoles.Admin))
+            {
+                <button type="button" id="matching-rematch-btn" class="btn btn-sm btn-light text-primary fw-semibold">
+                    <i class="bi bi-arrow-repeat me-1"></i>Recalcular
+                </button>
+            }
+        </div>
     </div>
 </div>
 
-<div id="matching-summary-area" class="row g-3 mb-3">
+<div class="card telemetry-card telemetry-card-static mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Resumen del cruce</h5>
+            <span class="badge bg-light text-muted">Snapshot seleccionado</span>
+        </div>
+        <div id="matching-summary-area" class="row g-3">
     <div class="col-md-3">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
+        <div class="card telemetry-card matching-summary-card h-100">
+            <div class="card-body matching-kpi-tile d-flex align-items-center gap-3">
                 <div class="telemetry-kpi bg-primary-subtle text-primary-emphasis"><i class="bi bi-hdd-network fs-4"></i></div>
                 <div>
                     <div class="small text-muted text-uppercase">Dispositivos</div>
@@ -170,19 +233,19 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
+        <div class="card telemetry-card matching-summary-card h-100">
+            <div class="card-body matching-kpi-tile d-flex align-items-center gap-3">
                 <div class="telemetry-kpi bg-success-subtle text-success-emphasis"><i class="bi bi-check2-circle fs-4"></i></div>
                 <div>
-                    <div class="small text-muted text-uppercase">Coincididos</div>
+                             <div class="small text-muted text-uppercase">Coincidentes</div>
                     <div class="fs-4 fw-bold text-success" id="kpi-matched">0</div>
                 </div>
             </div>
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
+        <div class="card telemetry-card matching-summary-card h-100">
+            <div class="card-body matching-kpi-tile d-flex align-items-center gap-3">
                 <div class="telemetry-kpi bg-danger-subtle text-danger-emphasis"><i class="bi bi-x-circle fs-4"></i></div>
                 <div>
                     <div class="small text-muted text-uppercase">Sin coincidir</div>
@@ -192,15 +255,19 @@
         </div>
     </div>
     <div class="col-md-3">
-        <div class="card telemetry-card">
-            <div class="card-body d-flex align-items-center gap-3">
+        <div class="card telemetry-card matching-summary-card h-100">
+            <div class="card-body matching-kpi-tile d-flex align-items-center gap-3">
                 <div class="telemetry-kpi bg-info-subtle text-info-emphasis"><i class="bi bi-graph-up-arrow fs-4"></i></div>
                 <div>
                     <div class="small text-muted text-uppercase">Tasa de cruce</div>
-                    <div class="fs-4 fw-bold" id="kpi-rate">0%</div>
+                     <div class="fs-4 fw-bold" id="kpi-rate">0%</div>
+                     <div class="small text-muted" id="kpi-rate-base">0 de 0 dispositivos</div>
                 </div>
             </div>
         </div>
+    </div>
+</div>
+        <div id="matching-summary-note" class="matching-summary-note small mt-3">Cobertura de inventario: -</div>
     </div>
 </div>
 
@@ -208,7 +275,7 @@
     <div class="col-lg-4">
         <div class="card telemetry-card h-100">
             <div class="card-header">
-                <h6 class="mb-0 fw-semibold">Metodo de coincidencia</h6>
+                         <h6 class="mb-0 fw-semibold">Método de coincidencia</h6>
             </div>
             <div class="card-body" id="match-key-area">
                 <div class="d-flex flex-wrap gap-2">
@@ -231,40 +298,27 @@
     </div>
 </div>
 
-<div class="card telemetry-card mb-3">
-    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <h6 class="mb-0 fw-semibold">Top dispositivos sin inventario</h6>
-    </div>
-    <div class="card-body p-0" id="top-unmatched-area">
-        <div class="telemetry-loading-shell m-3">
-            <div class="telemetry-loading-content">
-                <span class="text-muted">Sin datos</span>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="card telemetry-card">
     <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
         <h6 class="mb-0 fw-semibold">Detalle de cruce</h6>
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <input type="search" id="matching-search" class="form-control form-control-sm w-mobile-100" placeholder="Buscar equipo, usuario, IP..." style="width: 240px;">
-            <select id="matching-state-select" class="form-select form-select-sm w-mobile-100" style="width: 150px;">
-                <option value="">Todos</option>
-                <option value="matched">Coincididos</option>
-                <option value="unmatched">Sin coincidir</option>
-            </select>
-            <select id="matching-risk-select" class="form-select form-select-sm w-mobile-100" style="width: 130px;">
-                <option value="">Todo riesgo</option>
-                <option value="critical">Critico</option>
-                <option value="high">Alto</option>
-                <option value="medium">Medio</option>
-                <option value="low">Bajo</option>
-            </select>
-        </div>
-    </div>
-    <div class="card-body">
-        <div id="matching-table" class="mb-2"></div>
+         <div class="d-flex flex-wrap align-items-end gap-2">
+             <div><label class="matching-filter-label" for="matching-search">Buscar</label><input type="search" id="matching-search" class="form-control form-control-sm w-mobile-100" placeholder="Equipo, usuario, IP..." style="width: 220px;"></div>
+             <div>
+                 <span class="matching-filter-label">Estado</span>
+                 <div id="matching-state-chips" class="matching-count-chips" role="group" aria-label="Filtrar por estado de coincidencia"></div>
+             </div>
+             <div><label class="matching-filter-label" for="matching-risk-select">Nivel de riesgo</label><select id="matching-risk-select" class="form-select form-select-sm w-mobile-100" style="width: 130px;">
+                 <option value="">Todo riesgo</option>
+                 <option value="critical">Crítico</option>
+                 <option value="high">Alto</option>
+                 <option value="medium">Medio</option>
+                 <option value="low">Bajo</option>
+             </select></div>
+             <div><label class="matching-filter-label" for="matching-page-size">Cantidad por página</label><select id="matching-page-size" class="form-select form-select-sm" style="width: 145px;"><option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select></div>
+         </div>
+     </div>
+     <div class="card-body">
+         <div id="matching-table" class="mb-2"></div>
         <div id="matching-pagination" class="d-flex justify-content-center gap-2"></div>
     </div>
 </div>
@@ -280,15 +334,42 @@ window.addEventListener("DOMContentLoaded", () => {
     const snapshotSelect = document.getElementById("matching-snapshot-select");
     const rematchBtn = document.getElementById("matching-rematch-btn");
     const searchInput = document.getElementById("matching-search");
-    const stateSelect = document.getElementById("matching-state-select");
+    const stateChips = document.getElementById("matching-state-chips");
     const riskSelect = document.getElementById("matching-risk-select");
+    const pageSizeSelect = document.getElementById("matching-page-size");
     const table = document.getElementById("matching-table");
     const pagination = document.getElementById("matching-pagination");
+    const matchingSummaryNote = document.getElementById("matching-summary-note");
 
     let currentSnapshotId = activeSnapshotId || noSnapshotId;
+    let activeMatchState = "";
     let latestPage = null;
     let latestSummary = null;
 
+    const parseApiUtcDate = (value) => {
+        if (!value) return null;
+        if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+        const text = String(value).trim();
+        if (!text) return null;
+        const normalized = /z|[+\-]\d{2}:\d{2}$/i.test(text) ? text : `${text}Z`;
+        const parsed = new Date(normalized);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+    };
+    const formatDateTime = (value) => {
+        const parsed = parseApiUtcDate(value);
+        if (!parsed) return "";
+        const parts = new Intl.DateTimeFormat("@displayLocale", {
+            timeZone: "@displayTimeZoneId",
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hourCycle: "h23"
+        }).formatToParts(parsed).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+        return `${parts.day}-${parts.month}-${parts.year} ${parts.hour}:${parts.minute}`;
+    };
+    const riskLabel = (level) => ({ critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo", unknown: "Sin dato" }[String(level || "unknown").toLowerCase()] || "Sin dato");
     const formatKeyLabel = (key) => {
         switch ((key || "").toLowerCase()) {
             case "serial": return "Serie";
@@ -296,16 +377,16 @@ window.addEventListener("DOMContentLoaded", () => {
             case "ip": return "IP exacta";
             case "ip_in_name": return "IP en nombre";
             case "inventario": return "Inventario";
-            default: return key || "Sin etiqueta";
+            default: return key || "Sin método";
         }
     };
 
     const riskPill = (level, score) =>
-        `<span class="telemetry-pill telemetry-pill-${(level || "unknown").toLowerCase()}">${(level || "")} (${score ?? 0})</span>`;
+        `<span class="telemetry-pill telemetry-pill-${(level || "unknown").toLowerCase()}">${riskLabel(level)} (${score ?? 0})</span>`;
 
     const matchPill = (matched) =>
         matched
-            ? '<span class="telemetry-pill telemetry-pill-matched">Coincidido</span>'
+            ? '<span class="telemetry-pill telemetry-pill-matched">Coincidente</span>'
             : '<span class="telemetry-pill telemetry-pill-unmatched">Sin coincidir</span>';
 
     const renderSnapshotSelect = () => {
@@ -318,9 +399,8 @@ window.addEventListener("DOMContentLoaded", () => {
         snapshotsSeed.forEach((snap) => {
             const option = document.createElement("option");
             option.value = snap.id;
-            const observedAt = snap.observedAtUtc ? new Date(snap.observedAtUtc).toLocaleString("es-CL") : "";
-            const captureLabel = snap.runNumber ? `#${snap.runNumber}` : "";
-            option.textContent = `${captureLabel}${captureLabel ? " " : ""}${snap.sourceName || "Telemetria"} | ${observedAt} | ${snap.riskLevel || ""} (${snap.deviceCount ?? 0} disp)`;
+            const captureLabel = snap.runNumber ? `#${snap.runNumber}` : "Snapshot";
+            option.textContent = `${captureLabel} · ${formatDateTime(snap.observedAtUtc)} · ${snap.deviceCount ?? 0} equipos · ${riskLabel(snap.riskLevel)} (${snap.riskScore ?? 0})${snap.id === currentSnapshotId ? " · Activo" : ""}`;
             option.title = snap.runNumber
                 ? `Captura #${snap.runNumber}`
                 : (snap.id ? `Snapshot ${snap.id}` : "");
@@ -335,97 +415,98 @@ window.addEventListener("DOMContentLoaded", () => {
             document.getElementById("kpi-matched").textContent = "0";
             document.getElementById("kpi-unmatched").textContent = "0";
             document.getElementById("kpi-rate").textContent = "0%";
+            document.getElementById("kpi-rate-base").textContent = "0 de 0 dispositivos";
+            matchingSummaryNote.textContent = "Cobertura de inventario: -";
+            stateChips.innerHTML = "";
+            document.getElementById("matching-calculation-label").textContent = "Capturado: -";
             document.getElementById("match-key-area").innerHTML = '<span class="badge bg-light text-muted">Snapshot sin datos</span>';
             document.getElementById("risk-breakdown-area").innerHTML = '<span class="badge bg-light text-muted">Snapshot sin datos</span>';
-            document.getElementById("top-unmatched-area").innerHTML = '<div class="p-4 text-center text-muted">Selecciona una snapshot con datos.</div>';
             return;
         }
 
         document.getElementById("kpi-total").textContent = summary.deviceCount ?? 0;
         document.getElementById("kpi-matched").textContent = summary.matchedCount ?? 0;
         document.getElementById("kpi-unmatched").textContent = summary.unmatchedCount ?? 0;
-        document.getElementById("kpi-rate").textContent = `${summary.matchRate ?? 0}%`;
+        const matchRate = summary.deviceCount > 0 ? Math.round((summary.matchedCount / summary.deviceCount) * 100) : 0;
+        const coverageRate = summary.inventoryCount > 0 ? Math.round((summary.observedInventoryCount / summary.inventoryCount) * 100) : 0;
+        document.getElementById("kpi-rate").textContent = `${matchRate}%`;
+        document.getElementById("kpi-rate-base").textContent = `${summary.matchedCount ?? 0} de ${summary.deviceCount ?? 0} dispositivos`;
+        matchingSummaryNote.textContent = `Cobertura de inventario: ${coverageRate}% (${summary.observedInventoryCount ?? 0} de ${summary.inventoryCount ?? 0})`;
+        stateChips.innerHTML = [
+            ["", "Todos", summary.deviceCount ?? 0],
+            ["matched", "Coincidentes", summary.matchedCount ?? 0],
+            ["unmatched", "Sin coincidencia", summary.unmatchedCount ?? 0]
+        ].map(([value, label, count]) => `<button type="button" class="btn btn-sm rounded-pill matching-filter-chip ${activeMatchState === value ? "is-active" : ""}" data-match-state="${value}" aria-pressed="${activeMatchState === value}">${label}: ${count}</button>`).join("");
+        stateChips.querySelectorAll("[data-match-state]").forEach((chip) => chip.addEventListener("click", () => {
+            activeMatchState = chip.dataset.matchState || "";
+            renderSummary(summary);
+            loadMatches(1);
+        }));
 
         const keyCounts = summary.matchKeyCounts || {};
         const keyEntries = Object.entries(keyCounts).sort((a, b) => b[1] - a[1]);
         const keyArea = document.getElementById("match-key-area");
+        const matchedTotal = Math.max(1, Number(summary.matchedCount) || 0);
         keyArea.innerHTML = keyEntries.length === 0
-            ? '<span class="badge bg-light text-muted">Sin coincidencias con clave</span>'
-            : keyEntries.map(([key, count]) =>
-                `<span class="badge bg-info-subtle text-info-emphasis fs-6">${formatKeyLabel(key)}: ${count}</span>`).join(" ") +
-              '<div class="small text-muted mt-2">Clave usada por el motor heuristico al cruzar con el inventario.</div>';
+            ? '<span class="badge bg-light text-muted">Sin coincidencias con método</span>'
+            : keyEntries.map(([key, count]) => {
+                const pct = Math.round((count / matchedTotal) * 100);
+                const weak = key === "ip" || key === "ip_in_name";
+                return `<div class="match-method-row ${weak ? "match-method-weak" : ""} mb-2"><span class="badge bg-primary-subtle text-primary-emphasis matching-method-badge">${formatKeyLabel(key)} <strong>${count}</strong> <span class="small">(${pct}%)</span>${weak ? ' <span class="d-block small fw-normal">menor confianza</span>' : ""}</span><div class="match-method-bar" title="${pct}% de las coincidencias"><div class="match-method-fill" style="width:${Math.max(2, pct)}%"></div></div></div>`;
+            }).join("") +
+              '<div class="small text-muted mt-3">Proporción sobre los dispositivos coincidentes. IP exacta e IP en nombre son métodos de menor estabilidad que serie o MAC.</div>';
 
         const matchedByRisk = summary.matchedByRiskLevel || {};
         const unmatchedByRisk = summary.unmatchedByRiskLevel || {};
         const riskArea = document.getElementById("risk-breakdown-area");
         const riskLevels = [
-            { key: "critical", label: "Critico", cls: "text-danger" },
-            { key: "high",     label: "Alto",    cls: "text-warning" },
-            { key: "medium",   label: "Medio",   cls: "text-info" },
-            { key: "low",      label: "Bajo",    cls: "text-success" }
+            { key: "critical", label: "Crítico" },
+            { key: "high",     label: "Alto" },
+            { key: "medium",   label: "Medio" },
+            { key: "low",      label: "Bajo" }
         ];
-        const rows = riskLevels.map(({ key, label, cls }) => {
+        const riskColors = {
+            critical: ["#fecaca", "#ef4444"],
+            high: ["#fed7aa", "#f97316"],
+            medium: ["#fef08a", "#eab308"],
+            low: ["#bbf7d0", "#22c55e"]
+        };
+        const snapshotTotal = Math.max(1, Number(summary.deviceCount) || 0);
+        const rows = riskLevels.map(({ key, label }) => {
             const m = matchedByRisk[key] ?? 0;
             const u = unmatchedByRisk[key] ?? 0;
             const total = m + u;
-            const pct = total > 0 ? Math.round((m / total) * 100) : 0;
+            const levelPct = total > 0 ? (total / snapshotTotal) * 100 : 0;
+            const matchedPct = total > 0 ? (m / total) * 100 : 0;
+            const colors = riskColors[key] || ["#cbd5e1", "#64748b"];
             return `<tr>
-                <td class="fw-semibold ${cls}">${label}</td>
-                <td class="text-center">${m}</td>
-                <td class="text-center">${u}</td>
-                <td style="width:40%">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="flex-grow-1" style="height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;">
-                            <div style="width:${pct}%;height:100%;background:${cls === "text-danger" ? "#ef4444" : cls === "text-warning" ? "#f59e0b" : cls === "text-info" ? "#0ea5e9" : "#22c55e"};border-radius:4px;"></div>
-                        </div>
-                        <span class="small text-muted" style="min-width:32px;text-align:right;">${pct}%</span>
-                    </div>
-                </td>
+                <td class="fw-semibold">${label}</td>
+                <td class="text-end">${total}</td>
+                <td class="text-end">${m}</td>
+                <td class="text-end">${u}</td>
+                <td><div class="d-flex align-items-center gap-2"><div class="matching-risk-track" style="width:${Math.max(1.5, levelPct)}%" title="${total} de ${snapshotTotal} equipos"><div><div style="width:${matchedPct}%;background:${colors[0]}"></div><div style="width:${100 - matchedPct}%;background:${colors[1]}"></div></div></div><span class="matching-risk-count">${Math.round(levelPct)}%</span></div></td>
             </tr>`;
         }).join("");
         riskArea.innerHTML = `
             <table class="table table-sm align-middle mb-0">
                 <thead>
                     <tr>
-                        <th>Estado</th>
-                        <th class="text-center">Coincididos</th>
-                        <th class="text-center">Sin coincidir</th>
-                        <th>Proporcion</th>
+                        <th>Nivel de riesgo</th>
+                        <th class="text-end">Equipos</th>
+                        <th class="text-end">Coincidentes</th>
+                        <th class="text-end">Sin coincidir</th>
+                        <th>Proporción del snapshot</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
-            </table>`;
+            </table>
+            <div class="matching-risk-legend mt-2"><span><i style="background:#16a34a"></i>Coincidentes</span><span><i style="background:#dc2626"></i>Sin coincidir</span><span>La proporción es el total del nivel sobre todos los equipos del snapshot.</span></div>
+            ${summary.sourceType !== "live-scan" ? '<div class="small text-warning-emphasis mt-2"><i class="bi bi-info-circle me-1"></i>Sin coincidencia en inventario suma 35 puntos al riesgo.</div>' : ""}`;
 
-        const topUnmatched = Array.isArray(summary.topUnmatched) ? summary.topUnmatched : [];
-        const topArea = document.getElementById("top-unmatched-area");
-        if (topUnmatched.length === 0) {
-            topArea.innerHTML = '<div class="p-4 text-center text-muted">No hay dispositivos sin coincidencia.</div>';
-        } else {
-            topArea.innerHTML = `
-                <div class="table-responsive">
-                    <table class="table align-middle table-sm mb-0">
-                        <thead>
-                            <tr>
-                                <th>Equipo</th>
-                                <th>Usuario</th>
-                                <th>IP</th>
-                                <th>Hostname</th>
-                                <th>Riesgo</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${topUnmatched.map((item) => `
-                                <tr>
-                                    <td class="fw-semibold">${item.deviceName || "Sin nombre"}</td>
-                                    <td>${item.username || ""}</td>
-                                    <td>${item.ipAddress || ""}</td>
-                                    <td>${item.hostName || ""}</td>
-                                    <td>${riskPill(item.riskLevel, item.riskScore)}</td>
-                                </tr>`).join("")}
-                        </tbody>
-                    </table>
-                </div>`;
-        }
+        const calculationLabel = summary.lastRematchAtUtc
+            ? `Recalculado: ${formatDateTime(summary.lastRematchAtUtc)}`
+            : `Capturado: ${formatDateTime(summary.observedAtUtc)}`;
+        document.getElementById("matching-calculation-label").textContent = calculationLabel;
     };
 
     const buildSortableHeader = (label, sortKey) => {
@@ -462,11 +543,8 @@ window.addEventListener("DOMContentLoaded", () => {
                                 <th>Usuario</th>
                                 <th>IP</th>
                                 <th>S/N</th>
-                                <th>Clave</th>
-                                <th>Estado</th>
-                                <th>Item inventario</th>
-                                <th>Responsable</th>
-                                <th>Asignado a</th>
+                                <th>Método</th>
+                                <th>Inventario</th>
                                 <th>${buildSortableHeader("Riesgo", "risk")}</th>
                             </tr>
                         </thead>
@@ -479,27 +557,15 @@ window.addEventListener("DOMContentLoaded", () => {
                                     </td>
                                     <td data-label="Usuario">${item.username || ""}</td>
                                     <td data-label="IP">${item.ipAddress || ""}</td>
-                                    <td data-label="S/N">${item.serialNumber || item.macAddress || ""}</td>
-                                    <td data-label="Clave"><span class="badge bg-secondary-subtle text-secondary-emphasis">${formatKeyLabel(item.matchKey)}</span></td>
-                                    <td data-label="Estado">${matchPill(item.matched)}</td>
-                                    <td data-label="Item inventario">
+                                    <td data-label="S/N">${item.serialNumber || "sin S/N"}</td>
+                                    <td data-label="Método"><span class="badge bg-secondary-subtle text-secondary-emphasis">${item.matched ? formatKeyLabel(item.matchKey) : "—"}</span></td>
+                                    <td data-label="Inventario">
                                         ${item.matched
-                                            ? `<div class="small fw-semibold">${item.inventoryItemNumber || item.inventorySerial || "Item"}</div>
-                                               <div class="small text-muted">${item.inventoryDescription || item.inventorySerial || ""}</div>`
-                                            : '<span class="text-muted small">-</span>'}
-                                    </td>
-                                    <td data-label="Responsable">
-                                        ${item.matched
-                                            ? `<div class="small">${item.inventoryResponsibleUser || "-"}</div>
-                                               <div class="small text-muted">${item.inventoryEmail || ""}</div>`
-                                            : '<span class="text-muted small">-</span>'}
-                                    </td>
-                                    <td data-label="Asignado a">
-                                        ${item.matched
-                                            ? `<div class="small">${item.inventoryAssignedBuildingExternalId || "-"}</div>
-                                               <div class="small text-muted">${item.inventoryAssignedRoomExternalId || ""}</div>`
-                                            : `<div class="small">${item.buildingExternalId || "-"}</div>
-                                               <div class="small text-muted">${item.roomExternalId || ""}</div>`}
+                                            ? `<div class="small fw-semibold">${item.inventoryItemNumber || item.inventorySerial || "Ítem"}</div>
+                                               <div class="small text-muted">${item.inventoryDescription || item.inventorySerial || ""}</div>
+                                               <div class="small">${item.inventoryResponsibleUser || "-"}${item.inventoryEmail ? ` · ${item.inventoryEmail}` : ""}</div>
+                                               <div class="small text-muted">${item.inventoryAssignedBuildingExternalId || item.buildingExternalId || "-"}${item.inventoryAssignedRoomExternalId || item.roomExternalId ? ` · ${item.inventoryAssignedRoomExternalId || item.roomExternalId}` : ""}</div>`
+                                            : '<span class="text-muted small">sin registro en inventario</span>'}
                                     </td>
                                     <td data-label="Riesgo">${riskPill(item.riskLevel, item.riskScore)}</td>
                                 </tr>`).join("")}
@@ -520,7 +586,7 @@ window.addEventListener("DOMContentLoaded", () => {
         const nextDisabled = page >= totalPages ? "disabled" : "";
         pagination.innerHTML = `
             <button type="button" class="btn btn-outline-secondary btn-sm" ${previousDisabled} data-page="${page - 1}">Anterior</button>
-            <span class="align-self-center small text-muted">Pagina ${page} de ${totalPages} (${totalCount})</span>
+            <span class="align-self-center small text-muted">Página ${page} de ${totalPages} (${totalCount})</span>
             <button type="button" class="btn btn-outline-secondary btn-sm" ${nextDisabled} data-page="${page + 1}">Siguiente</button>`;
 
         pagination.querySelectorAll("[data-page]").forEach((button) => {
@@ -555,9 +621,9 @@ window.addEventListener("DOMContentLoaded", () => {
 
         const params = new URLSearchParams({
             page: String(page),
-            pageSize: "25",
+            pageSize: pageSizeSelect.value || "25",
             search: searchInput.value.trim() || "",
-            matchState: stateSelect.value || "",
+            matchState: activeMatchState,
             riskLevel: riskSelect.value || "",
             sortBy: sortBy || latestPage?.sortBy || "risk",
             sortDirection: sortDirection || latestPage?.sortDirection || "desc"
@@ -662,8 +728,8 @@ window.addEventListener("DOMContentLoaded", () => {
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => loadMatches(1), 350);
     });
-    stateSelect.addEventListener("change", () => loadMatches(1));
     riskSelect.addEventListener("change", () => loadMatches(1));
+    pageSizeSelect.addEventListener("change", () => loadMatches(1));
     snapshotSelect.addEventListener("change", onSnapshotChange);
     if (rematchBtn) {
         rematchBtn.addEventListener("click", runRematch);

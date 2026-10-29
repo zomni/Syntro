@@ -1,5 +1,6 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@using System.Globalization
 @inject Microsoft.Extensions.Configuration.IConfiguration Config
 @model Syntro.API.ViewModels.NetworkTelemetryDashboardViewModel
 @{
@@ -17,7 +18,23 @@
         out var configuredFreshnessMinutes)
         ? configuredFreshnessMinutes
         : 30;
+    var mlWeight = double.TryParse(Config["MlSettings:RiskMlWeight"], NumberStyles.Float, CultureInfo.InvariantCulture, out var configuredMlWeight)
+        ? configuredMlWeight
+        : 0.6d;
+    var ruleWeight = double.TryParse(Config["MlSettings:RiskRuleWeight"], NumberStyles.Float, CultureInfo.InvariantCulture, out var configuredRuleWeight)
+        ? configuredRuleWeight
+        : 0.4d;
+    var mlWeightPercentText = (mlWeight * 100).ToString("0.#", CultureInfo.InvariantCulture);
+    var ruleWeightPercentText = (ruleWeight * 100).ToString("0.#", CultureInfo.InvariantCulture);
     var riskScorePercent = Math.Clamp(Model.LatestRiskScore, 0, 100);
+    var riskDeviceTotal = Math.Max(Model.LatestDeviceCount, 0);
+    var riskHighOrCritical = Math.Clamp(Model.LatestHighRiskDeviceCount, 0, riskDeviceTotal);
+    var riskMedium = Math.Clamp(Model.LatestMediumRiskDeviceCount, 0, Math.Max(0, riskDeviceTotal - riskHighOrCritical));
+    var riskLow = Math.Clamp(Model.LatestLowRiskDeviceCount, 0, Math.Max(0, riskDeviceTotal - riskHighOrCritical - riskMedium));
+    var riskUnclassified = Math.Max(0, riskDeviceTotal - riskHighOrCritical - riskMedium - riskLow);
+    var freshnessBadgeText = Model.LatestObservedAtUtc is null
+        ? Model.HealthLabel
+        : $"{Model.HealthLabel} · hace {Math.Max(0, (int)Math.Floor((DateTime.UtcNow - Model.LatestObservedAtUtc.Value).TotalMinutes))} min · límite {freshnessMinutes} min";
     var freshnessText = Model.LatestObservedAtUtc is null
         ? "Sin captura disponible para evaluar la frescura."
         : $"Última captura hace {Math.Max(0, (int)Math.Floor((DateTime.UtcNow - Model.LatestObservedAtUtc.Value).TotalMinutes))} min; límite configurado: {freshnessMinutes} min.";
@@ -291,6 +308,18 @@
     .telemetry-pill.telemetry-pill-medium { background: #fef3c7; color: #a16207; }
     .telemetry-pill.telemetry-pill-low { background: #dcfce7; color: #15803d; }
     .telemetry-pill.telemetry-pill-unknown { background: #e2e8f0; color: #475569; }
+    .telemetry-risk-cell { min-width: 260px; }
+    .telemetry-risk-line { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .telemetry-risk-reason { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.15; vertical-align: middle; }
+    .telemetry-risk-info { line-height: 1; }
+    .telemetry-distribution { padding: 12px 14px; border: 1px solid #e2e8f0; border-radius: 14px; background: #f8fafc; }
+    .telemetry-distribution-bar { display: flex; height: 12px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+    .telemetry-distribution-bar span { display: block; min-width: 0; }
+    .telemetry-distribution-high { background: #ef4444; }
+    .telemetry-distribution-medium { background: #facc15; }
+    .telemetry-distribution-low { background: #22c55e; }
+    .telemetry-distribution-unknown { background: #94a3b8; }
+    .telemetry-schedule-anomaly { color: #a16207; font-weight: 600; }
 
     .telemetry-inline-actions {
         display: flex;
@@ -702,11 +731,11 @@
     </div>
 </div>
 
-<div class="card telemetry-card telemetry-card-static mb-4">
+<div id="telemetry-summary-card" class="card telemetry-card telemetry-card-static mb-4">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">Resumen de la última observación</h5>
-            <span class="badge bg-@Model.HealthTone">@Model.HealthLabel</span>
+            <span class="badge bg-@Model.HealthTone">@freshnessBadgeText</span>
         </div>
 
         @if (!Model.HasData)
@@ -731,7 +760,7 @@
                     <div class="p-3 bg-light rounded-3 transition-hover">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi bi-people text-info"></i>
-                            <div class="text-muted small">Usuarios</div>
+                            <div class="text-muted small">Identidades observadas</div>
                         </div>
                         <div class="fs-4 fw-bold">@Model.LatestConnectedUserCount</div>
                     </div>
@@ -740,7 +769,7 @@
                     <div class="p-3 bg-light rounded-3 transition-hover">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi bi-shield-exclamation text-danger"></i>
-                            <div class="text-muted small">Altos y criticos</div>
+                            <div class="text-muted small">Alto o crítico</div>
                         </div>
                         <div class="fs-4 fw-bold">@Model.LatestHighRiskDeviceCount</div>
                     </div>
@@ -749,9 +778,38 @@
                     <div class="p-3 bg-light rounded-3 transition-hover">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <i class="bi bi-shield-check text-warning"></i>
-                            <div class="text-muted small">Medios</div>
+                            <div class="text-muted small">Medio</div>
                         </div>
                         <div class="fs-4 fw-bold">@Model.LatestMediumRiskDeviceCount</div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="telemetry-distribution" aria-label="Distribución de riesgo de equipos del snapshot">
+                        <div class="d-flex justify-content-between align-items-center small mb-2">
+                            <span class="fw-semibold">Distribución de riesgo de equipos del snapshot</span>
+                            <span class="text-muted">@riskDeviceTotal equipos</span>
+                        </div>
+                        <div class="telemetry-distribution-bar">
+                            @if (riskDeviceTotal > 0)
+                            {
+                                <span class="telemetry-distribution-high" style="width:@(riskHighOrCritical * 100.0 / riskDeviceTotal)%" title="Alto o crítico: @riskHighOrCritical"></span>
+                                <span class="telemetry-distribution-medium" style="width:@(riskMedium * 100.0 / riskDeviceTotal)%" title="Medio: @riskMedium"></span>
+                                <span class="telemetry-distribution-low" style="width:@(riskLow * 100.0 / riskDeviceTotal)%" title="Bajo: @riskLow"></span>
+                                @if (riskUnclassified > 0)
+                                {
+                                    <span class="telemetry-distribution-unknown" style="width:@(riskUnclassified * 100.0 / riskDeviceTotal)%" title="Sin nivel: @riskUnclassified"></span>
+                                }
+                            }
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 small text-muted mt-2">
+                            <span><i class="bi bi-circle-fill text-danger me-1"></i>Alto o crítico: @riskHighOrCritical</span>
+                            <span><i class="bi bi-circle-fill text-warning me-1"></i>Medio: @riskMedium</span>
+                            <span><i class="bi bi-circle-fill text-success me-1"></i>Bajo: @riskLow</span>
+                            @if (riskUnclassified > 0)
+                            {
+                                <span><i class="bi bi-circle-fill text-secondary me-1"></i>Sin nivel: @riskUnclassified</span>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -759,7 +817,7 @@
     </div>
 </div>
 
-<div class="card telemetry-card telemetry-card-static mb-4">
+<div id="telemetry-device-card" class="card telemetry-card telemetry-card-static mb-4">
     <div class="card-body">
         <div class="mb-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center;">
             <div class="d-flex align-items-center gap-2" style="justify-self:start;">
@@ -777,7 +835,7 @@
                 <h5 class="mb-0">Equipos observados en red</h5>
             </div>
             <div style="justify-self:end;">
-                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Vista principal de recopilacion en vivo de equipos y dispositivos en la red.">
+                    <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Vista principal de recopilación en vivo de equipos y dispositivos en la red.">
                     <i class="bi bi-info-lg"></i>
                 </button>
             </div>
@@ -844,7 +902,7 @@
                         <option value="patch">Parches</option>
                         <option value="online">Red</option>
                         <option value="ping">Ping</option>
-                        <option value="observed">Ultima observacion</option>
+                <option value="observed">Última observación</option>
                     </select>
                 </div>
                 <div class="col-sm-6 col-xl-2">
@@ -855,7 +913,7 @@
                     </select>
                 </div>
                 <div class="col-sm-6 col-xl-2">
-                    <label class="form-label small text-muted">Por pagina</label>
+                    <label class="form-label small text-muted">Por página</label>
                     <select id="telemetry-device-page-size" class="form-select">
                         <option value="10" selected>10</option>
                         <option value="25">25</option>
@@ -884,7 +942,7 @@
     </div>
 </div>
 
-<div class="card telemetry-card telemetry-card-static mb-4">
+<div id="telemetry-risk-card" class="card telemetry-card telemetry-card-static mb-4">
     <div class="card-body">
         <div class="mb-3" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center;">
             <div style="justify-self:start;"></div>
@@ -901,18 +959,19 @@
             </div>
         </div>
         <div class="telemetry-risk-scale mb-4" aria-label="Escala real del puntaje de riesgo">
-            <span class="telemetry-risk-marker-label" style="left:20%;">20</span>
+            <span class="telemetry-risk-marker-label" style="left:20%;">20/100 · Medio</span>
             <span class="telemetry-risk-marker" style="left:20%;" title="Inicio del nivel medio: 20 puntos"></span>
             <div class="telemetry-risk-scale-track"><span></span><span></span><span></span><span></span></div>
             <div class="telemetry-risk-scale-labels"><span>Bajo &lt;20</span><span>Medio 20–39</span><span>Alto 40–69</span><span>Crítico ≥70</span></div>
         </div>
+        <div class="small text-muted mb-4">Promedio de riesgo de dispositivos e identidades; no refleja la cantidad de equipos de alto riesgo.</div>
         <div class="row g-4">
             <div class="col-xl-8">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <div class="fw-semibold small mb-0"><i class="bi bi-diagram-3 me-1 text-primary"></i>Riesgo por subred</div>
                     <div class="d-flex align-items-center gap-2">
                         <span id="telemetry-subnet-summary" class="small text-muted"></span>
-                        <label class="form-label small text-muted mb-0" for="telemetry-subnet-page-size">Por pagina</label>
+                        <label class="form-label small text-muted mb-0" for="telemetry-subnet-page-size">Por página</label>
                         <select id="telemetry-subnet-page-size" class="form-select form-select-sm" style="width:auto;">
                             <option value="10">10</option>
                             <option value="20">20</option>
@@ -931,12 +990,13 @@
                 }
             </div>
             <div class="col-xl-4">
-                <div class="fw-semibold small mb-3"><i class="bi bi-activity me-1 text-primary"></i>Riesgo tecnico en vivo</div>
+                        <div class="fw-semibold small mb-2"><i class="bi bi-activity me-1 text-primary"></i>Identidades en vivo</div>
+                        <div class="small text-muted mb-3">Total de identidades evaluadas: @Model.SessionOverview.TotalEvaluatedUsers. Estas cifras no representan el total de equipos del snapshot.</div>
                 <div class="row g-2">
                     <div class="col-6">
                         <div class="telemetry-mini-stat">
                             <div class="d-flex align-items-center gap-1 text-muted small">
-                                <i class="bi bi-person-check text-success"></i>Conectados
+                                <i class="bi bi-person-check text-success"></i>Identidades conectadas sin riesgo alto o crítico
                             </div>
                             <div class="fs-4 fw-bold">@Model.SessionOverview.ActiveUserCount</div>
                         </div>
@@ -944,7 +1004,7 @@
                     <div class="col-6">
                         <div class="telemetry-mini-stat">
                             <div class="d-flex align-items-center gap-1 text-muted small">
-                                <i class="bi bi-shield-exclamation text-danger"></i>Riesgo alto
+                                <i class="bi bi-shield-exclamation text-danger"></i>Identidades en línea con riesgo alto o crítico
                             </div>
                             <div class="fs-4 fw-bold">@Model.SessionOverview.LockedUserCount</div>
                         </div>
@@ -983,10 +1043,10 @@
                 <span class="d-inline-flex align-items-center justify-content-center rounded-2" style="width:28px;height:28px;background:rgba(37,99,235,0.12)">
                     <i class="bi bi-people" style="font-size:0.85rem;color:#2563eb"></i>
                 </span>
-                <h5 class="mb-0">Endpoints y estado de red</h5>
+                <h5 class="mb-0">Identidades observadas y estado de red</h5>
             </div>
             <div style="justify-self:end;">
-                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Lista de identidades o sesiones detectadas en el último snapshot, con latencia, puertos y cantidad de equipos vinculados.">
+                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Una identidad observada por equipo detectado cuando no existe una observación de usuario; incluye estado, latencia, puertos y equipos vinculados.">
                     <i class="bi bi-info-lg"></i>
                 </button>
             </div>
@@ -1016,14 +1076,14 @@
                         <option value="role">Perfil</option>
                         <option value="state">Estado</option>
                         <option value="subnet">Subred</option>
-                        <option value="lastSeen">Ultima deteccion</option>
+                        <option value="lastSeen">Última detección</option>
                         <option value="ping">Latencia</option>
                         <option value="ports">Puertos</option>
                         <option value="linkedDevices">Equipos</option>
                     </select>
                 </div>
                 <div class="col-lg-2">
-                    <label class="form-label small text-muted">Por pagina</label>
+                    <label class="form-label small text-muted">Por página</label>
                     <select id="telemetry-session-page-size" class="form-select">
                         <option value="10" selected>10</option>
                         <option value="20">20</option>
@@ -1053,7 +1113,7 @@
                 <h5 class="mb-0">Administración de snapshots</h5>
             </div>
             <div style="justify-self:end;">
-                <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Historial paginado de capturas manuales y automaticas con busqueda, filtros y ordenamiento.">
+                    <button type="button" class="telemetry-help" data-bs-toggle="tooltip" data-bs-placement="left" title="Historial paginado de capturas manuales y automáticas con búsqueda, filtros y ordenamiento.">
                     <i class="bi bi-info-lg"></i>
                 </button>
             </div>
@@ -1074,15 +1134,15 @@
                     </select>
                 </div>
                 <div class="col-lg-2">
-                    <label class="form-label small text-muted">Dia</label>
+                        <label class="form-label small text-muted">Día</label>
                     <select id="telemetry-snapshot-weekday" class="form-select">
                         <option value="">Todos</option>
                         <option value="lunes">Lunes</option>
                         <option value="martes">Martes</option>
-                        <option value="miercoles">Miercoles</option>
+                        <option value="miercoles">Miércoles</option>
                         <option value="jueves">Jueves</option>
                         <option value="viernes">Viernes</option>
-                        <option value="sabado">Sabado</option>
+                        <option value="sabado">Sábado</option>
                         <option value="domingo">Domingo</option>
                     </select>
                 </div>
@@ -1116,7 +1176,7 @@
                     </select>
                 </div>
                 <div class="col-lg-1">
-                    <label class="form-label small text-muted">Por pagina</label>
+                    <label class="form-label small text-muted">Por página</label>
                     <select id="telemetry-snapshot-page-size" class="form-select">
                         <option value="10" selected>10</option>
                         <option value="20">20</option>
@@ -1249,7 +1309,7 @@
             <div class="row g-3 align-items-end">
                 <div class="col-lg-4">
                     <label class="form-label small text-muted">Buscar</label>
-                    <input id="telemetry-scheduled-search" type="text" class="form-control" placeholder="Dia, hora, estado, cron o planificacion" />
+                    <input id="telemetry-scheduled-search" type="text" class="form-control" placeholder="Día, hora, estado, cron o planificación" />
                 </div>
                 <div class="col-lg-2">
                     <label class="form-label small text-muted">Estado</label>
@@ -1263,15 +1323,15 @@
                     </select>
                 </div>
                 <div class="col-lg-2">
-                    <label class="form-label small text-muted">Dia</label>
+                    <label class="form-label small text-muted">Día</label>
                     <select id="telemetry-scheduled-weekday" class="form-select">
                         <option value="">Todos</option>
                         <option value="lunes">Lunes</option>
                         <option value="martes">Martes</option>
-                        <option value="miercoles">Miercoles</option>
+                        <option value="miercoles">Miércoles</option>
                         <option value="jueves">Jueves</option>
                         <option value="viernes">Viernes</option>
-                        <option value="sabado">Sabado</option>
+                        <option value="sabado">Sábado</option>
                         <option value="domingo">Domingo</option>
                     </select>
                 </div>
@@ -1381,6 +1441,11 @@
         let activeSnapshotId = "@Model.ActiveSnapshotId";
         const noSnapshotId = "00000000-0000-0000-0000-000000000000";
         const deviceTable = document.getElementById("telemetry-device-table");
+        const deviceCard = document.getElementById("telemetry-device-card");
+        const riskCard = document.getElementById("telemetry-risk-card");
+        if (deviceCard && riskCard && deviceCard.parentElement === riskCard.parentElement) {
+            deviceCard.parentElement.insertBefore(riskCard, deviceCard);
+        }
         const deviceSummary = document.getElementById("telemetry-device-summary");
         const devicePagination = document.getElementById("telemetry-device-pagination");
         const subnetTable = document.getElementById("telemetry-subnet-table");
@@ -1420,6 +1485,19 @@
         const sessionStateSelect = document.getElementById("telemetry-session-state");
         const sessionSortSelect = document.getElementById("telemetry-session-sort");
         const sessionPageSizeSelect = document.getElementById("telemetry-session-page-size");
+        const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+            "&": "&amp;",
+            "<": "&lt;",
+            ">": "&gt;",
+            "\"": "&quot;",
+            "'": "&#39;"
+        })[character]);
+        const riskLevelLabel = (level) => ({ critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo", unknown: "Sin dato" }[String(level || "unknown").toLowerCase()] || "Sin dato");
+        const onlineLabel = (value) => value === true ? "En línea" : value === false ? "Fuera de línea" : "Sin dato";
+        const sortLabel = (value) => ({ risk: "Riesgo", serial: "S/N", device: "Equipo", user: "Usuario", subnet: "Subred", profile: "Perfil", ip: "IP", os: "SO", model: "Modelo", category: "Categoría", antivirus: "AV", patch: "Parches", online: "Red", ping: "Ping", observed: "Última observación" }[value] || value || "");
+        const sortDirectionLabel = (value) => value === "asc" ? "ascendente" : "descendente";
+        const snapshotSourceTypeLabel = (value) => ({ received: "Recibido", collector: "Agente collector", collectoragent: "Agente collector", manual: "Manual", scheduled: "Programado", automatic: "Automático" }[String(value || "").toLowerCase()] || value || "Sin dato");
+        const snapshotStatusLabel = (value) => ({ received: "Recibido", pending: "Pendiente", completed: "Completado", failed: "Fallido" }[String(value || "").toLowerCase()] || value || "Sin dato");
         const snapshotTable = document.getElementById("telemetry-snapshot-table");
         const snapshotSummary = document.getElementById("telemetry-snapshot-summary");
         const snapshotPagination = document.getElementById("telemetry-snapshot-pagination");
@@ -1714,10 +1792,10 @@
                 chips.push(`Subred: ${subnetInput.value.trim()}`);
             }
             if (sortBySelect?.value) {
-                chips.push(`Orden: ${sortBySelect.value} ${sortDirectionSelect?.value || "desc"}`);
+                chips.push(`Orden: ${sortLabel(sortBySelect.value)} ${sortDirectionLabel(sortDirectionSelect?.value || "desc")}`);
             }
             if (pageSizeSelect?.value) {
-                chips.push(`Página: ${pageSizeSelect.value}`);
+                chips.push(`${pageSizeSelect.value} por página`);
             }
 
             activeFiltersContainer.innerHTML = chips.length === 0
@@ -1861,7 +1939,7 @@
                     <div class="telemetry-loading-content">
                         <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
                         <div class="fw-semibold">${message}</div>
-                        <div class="small text-muted">Estamos reuniendo el historial de capturas manuales, automaticas y programadas.</div>
+                        <div class="small text-muted">Estamos reuniendo el historial de capturas manuales, automáticas y programadas.</div>
                     </div>
                 </div>`;
         };
@@ -1894,9 +1972,14 @@
             } else {
                 const currentSortBy = data?.sortBy || sortBySelect?.value || "risk";
                 const currentDirection = data?.sortDirection || sortDirectionSelect?.value || "desc";
+                const showSerial = items.some((item) => String(item.serialNumber || "").trim());
+                const showMac = items.some((item) => String(item.macAddress || "").trim());
+                const showModel = items.some((item) => String(item.manufacturer || item.model || "").trim());
+                const showAntivirus = items.some((item) => String(item.antivirusStatus || "").trim());
+                const showPatch = items.some((item) => String(item.patchStatus || "").trim());
                 const rows = items.map((item, index) => `
                     <tr class="${item.id === activeSnapshotId ? "telemetry-row-active" : ""}">
-                        <td class="fw-semibold" data-label="S/N">${item.serialNumber || ""}</td>
+                        ${showSerial ? `<td class="fw-semibold" data-label="S/N">${escapeHtml(item.serialNumber)}</td>` : ""}
                         <td data-label="Equipo">
                             <div class="fw-semibold">${item.deviceName || item.hostName || "Sin nombre"}</div>
                             <div class="small text-muted">${item.hostName || ""}${item.processor ? ` | ${item.processor}` : ""}</div>
@@ -1906,17 +1989,21 @@
                         <td data-label="Subred">${item.subnetCidr || ""}</td>
                         <td data-label="Perfil">${item.networkProfile || ""}</td>
                         <td data-label="IP">${item.ipAddress || ""}</td>
-                        <td data-label="MAC">${item.macAddress || ""}</td>
+                        ${showMac ? `<td data-label="MAC">${escapeHtml(item.macAddress)}</td>` : ""}
                         <td data-label="SO">${item.operatingSystem || ""} ${item.operatingSystemVersion || ""}</td>
-                        <td data-label="Modelo">${item.manufacturer || ""} ${item.model || ""}</td>
-                        <td data-label="AV">${item.antivirusStatus || ""}</td>
-                        <td data-label="Parches">${item.patchStatus || ""}</td>
-                        <td data-label="Red">${item.isOnline === true ? '<span class="badge bg-success-subtle text-success-emphasis">Online</span>' : item.isOnline === false ? '<span class="badge bg-secondary-subtle text-secondary-emphasis">Offline</span>' : '<span class="badge bg-light text-muted">Sin dato</span>'}</td>
+                        ${showModel ? `<td data-label="Modelo">${escapeHtml(`${item.manufacturer || ""} ${item.model || ""}`.trim())}</td>` : ""}
+                        ${showAntivirus ? `<td data-label="AV">${escapeHtml(item.antivirusStatus)}</td>` : ""}
+                        ${showPatch ? `<td data-label="Parches">${escapeHtml(item.patchStatus)}</td>` : ""}
+                        <td data-label="Red"><span class="badge ${item.isOnline === true ? "bg-success-subtle text-success-emphasis" : item.isOnline === false ? "bg-secondary-subtle text-secondary-emphasis" : "bg-light text-muted"}">${onlineLabel(item.isOnline)}</span></td>
                         <td data-label="Ping">${item.pingMs ?? ""}${item.pingMs != null ? " ms" : ""}</td>
-                        <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span>
-                            <button class="btn btn-sm btn-outline-secondary ms-1 py-0 px-1" title="Ver detalle de riesgo" data-device-index="${index}"><i class="bi bi-info-circle"></i></button>
+                        <td class="telemetry-risk-cell" data-label="Riesgo">
+                            <div class="telemetry-risk-line">
+                                <span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${riskLevelLabel(item.riskLevel)} (${item.riskScore ?? 0})</span>
+                                <button class="btn btn-sm btn-outline-secondary telemetry-risk-info py-0 px-1" title="Ver detalle de riesgo" data-device-index="${index}"><i class="bi bi-info-circle"></i></button>
+                                ${Array.isArray(item.riskReasons) && item.riskReasons.find((reason) => !String(reason).startsWith("[ML]")) ? `<span class="telemetry-risk-reason small text-muted" title="${escapeHtml(item.riskReasons.find((reason) => !String(reason).startsWith("[ML]")))}">${escapeHtml(item.riskReasons.find((reason) => !String(reason).startsWith("[ML]")))}</span>` : ""}
+                            </div>
                         </td>
-                        <td data-label="Fuente">${item.scoringSource === "ml-hybrid" ? `<span class="badge bg-success-subtle text-success-emphasis" title="ML Probability: ${(item.mlProbability * 100).toFixed(0)}%">ML ${(item.mlProbability * 100).toFixed(0)}%</span>` : `<span class="badge bg-light text-muted">Reglas</span>`}</td>
+                        <td data-label="Fuente">${item.scoringSource === "ml-hybrid" ? `<span class="badge bg-success-subtle text-success-emphasis" title="Probabilidad estimada por el modelo de riesgo; se combina con reglas para calcular el puntaje final.">ML ${(item.mlProbability * 100).toFixed(0)}%</span>` : `<span class="badge bg-light text-muted">Reglas</span>`}</td>
                     </tr>
                 `).join("");
 
@@ -1925,18 +2012,18 @@
                         <table class="table align-middle table-sm">
                             <thead>
                                 <tr>
-                                    <th>${buildSortableHeader("S/N", "serial", currentSortBy, currentDirection, "device")}</th>
+                                    ${showSerial ? `<th>${buildSortableHeader("S/N", "serial", currentSortBy, currentDirection, "device")}</th>` : ""}
                                     <th>${buildSortableHeader("Equipo", "device", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Cat.", "category", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Usuario", "user", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Subred", "subnet", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Perfil", "profile", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("IP", "ip", currentSortBy, currentDirection, "device")}</th>
-                                    <th>${buildSortableHeader("MAC", "mac", currentSortBy, currentDirection, "device")}</th>
+                                    ${showMac ? `<th>${buildSortableHeader("MAC", "mac", currentSortBy, currentDirection, "device")}</th>` : ""}
                                     <th>${buildSortableHeader("SO", "os", currentSortBy, currentDirection, "device")}</th>
-                                    <th>${buildSortableHeader("Modelo", "model", currentSortBy, currentDirection, "device")}</th>
-                                    <th>${buildSortableHeader("AV", "antivirus", currentSortBy, currentDirection, "device")}</th>
-                                    <th>${buildSortableHeader("Parches", "patch", currentSortBy, currentDirection, "device")}</th>
+                                    ${showModel ? `<th>${buildSortableHeader("Modelo", "model", currentSortBy, currentDirection, "device")}</th>` : ""}
+                                    ${showAntivirus ? `<th>${buildSortableHeader("AV", "antivirus", currentSortBy, currentDirection, "device")}</th>` : ""}
+                                    ${showPatch ? `<th>${buildSortableHeader("Parches", "patch", currentSortBy, currentDirection, "device")}</th>` : ""}
                                     <th>${buildSortableHeader("Red", "online", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Ping", "ping", currentSortBy, currentDirection, "device")}</th>
                                     <th>${buildSortableHeader("Riesgo", "risk", currentSortBy, currentDirection, "device")}</th>
@@ -1964,6 +2051,11 @@
                     const idx = parseInt(btn.getAttribute("data-device-index"), 10);
                     if (Number.isFinite(idx) && items[idx]) showRiskDetail(items[idx]);
                 });
+            }
+
+            if (totalPages <= 1) {
+                devicePagination.innerHTML = "";
+                return;
             }
 
             const previousDisabled = page <= 1 ? "disabled" : "";
@@ -2074,6 +2166,11 @@
                 return;
             }
 
+            if (totalPages <= 1) {
+                container.innerHTML = "";
+                return;
+            }
+
             container.innerHTML = `
                 <button type="button" class="btn btn-outline-secondary btn-sm" ${page <= 1 ? "disabled" : ""} data-page="${page - 1}">Anterior</button>
                 <span class="align-self-center small text-muted">Página ${page} de ${totalPages}</span>
@@ -2146,12 +2243,12 @@
                             <thead>
                                 <tr>
                                     <th>${buildSortableHeader("Subred", "subnet", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("Eq.", "devices", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("C", "critical", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("A", "high", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("M", "medium", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("B", "low", subnetSortBy, subnetSortDirection, "subnet")}</th>
-                                    <th>${buildSortableHeader("Max.", "risk", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Equipos", "devices", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Críticos", "critical", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Altos", "high", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Medios", "medium", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Bajos", "low", subnetSortBy, subnetSortDirection, "subnet")}</th>
+                                    <th>${buildSortableHeader("Riesgo máximo", "risk", subnetSortBy, subnetSortDirection, "subnet")}</th>
                                     <th></th>
                                 </tr>
                             </thead>
@@ -2159,12 +2256,12 @@
                                 ${pageItems.map((item) => `
                                     <tr class="telemetry-clickable-row" data-subnet-filter="${item.subnetCidr || ""}">
                                         <td data-label="Subred">${item.subnetCidr || ""}</td>
-                                        <td data-label="Eq.">${item.deviceCount ?? 0}</td>
-                                        <td data-label="C">${item.criticalCount ?? 0}</td>
-                                        <td data-label="A">${item.highCount ?? 0}</td>
-                                        <td data-label="M">${item.mediumCount ?? 0}</td>
-                                        <td data-label="B">${item.lowCount ?? 0}</td>
-                                        <td data-label="Max."><span class="telemetry-pill telemetry-pill-${item.maxRiskLevel || "unknown"}">${item.maxRiskLevel || ""} (${item.maxRiskScore ?? 0})</span></td>
+                                         <td data-label="Equipos">${item.deviceCount ?? 0}</td>
+                                         <td data-label="Críticos">${item.criticalCount ?? 0}</td>
+                                         <td data-label="Altos">${item.highCount ?? 0}</td>
+                                         <td data-label="Medios">${item.mediumCount ?? 0}</td>
+                                         <td data-label="Bajos">${item.lowCount ?? 0}</td>
+                                         <td data-label="Riesgo máximo"><span class="telemetry-pill telemetry-pill-${item.maxRiskLevel || "unknown"}">${riskLevelLabel(item.maxRiskLevel)} (${item.maxRiskScore ?? 0})</span></td>
                                         <td class="td-actions" data-label="Acciones"><button type="button" class="btn btn-sm btn-outline-primary" data-subnet-filter="${item.subnetCidr || ""}">Ver</button></td>
                                     </tr>
                                 `).join("")}
@@ -2194,9 +2291,9 @@
             renderClientPager(subnetPagination, safePage, totalPages, renderSubnetRiskSummaries);
         };
 
-        const sessionStateBadge = (state, label) => {
+        const sessionStateBadge = (state, label, riskLevel) => {
+            if (state === "locked") return `<span class="badge ${riskLevel === "critical" ? "bg-danger" : "bg-warning text-dark"}">${riskLevelLabel(riskLevel)}</span>`;
             if (state === "active") return `<span class="badge bg-success">${label}</span>`;
-            if (state === "locked") return `<span class="badge bg-danger">${label}</span>`;
             if (state === "mfa-pending") return `<span class="badge bg-warning text-dark">${label}</span>`;
             return `<span class="badge bg-secondary">${label}</span>`;
         };
@@ -2205,12 +2302,12 @@
             <tr>
                 <td class="fw-semibold" data-label="Endpoint">${user.username || ""}</td>
                 <td data-label="Perfil">${user.role || ""}</td>
-                <td data-label="Estado">${sessionStateBadge(user.sessionState, user.sessionStateLabel || user.sessionState || "")}</td>
+                <td data-label="Estado">${sessionStateBadge(user.sessionState, user.sessionStateLabel || user.sessionState || "", user.riskLevel)}</td>
                 <td data-label="Subred">${user.subnetCidr || ""}</td>
-                <td data-label="Ultima deteccion">${user.lastSeenAtUtc ? formatChileDateTime(user.lastSeenAtUtc) : "-"}</td>
+                <td data-label="Última detección">${user.lastSeenAtUtc ? formatChileDateTime(user.lastSeenAtUtc) : "-"}</td>
                 <td data-label="Latencia">${user.pingMs == null ? "-" : `${user.pingMs} ms`}</td>
                 <td data-label="Puertos">${user.openPorts || ""}</td>
-                <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${user.riskLevel || "unknown"}">${user.riskLevel || ""} (${user.riskScore ?? 0})</span></td>
+                <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${user.riskLevel || "unknown"}">${riskLevelLabel(user.riskLevel)} (${user.riskScore ?? 0})</span></td>
                 <td data-label="Equipos">${user.linkedDeviceCount ?? 0}</td>
             </tr>
         `).join("");
@@ -2269,7 +2366,7 @@
             sessionSummary.textContent = `Mostrando ${pageItems.length} de ${totalCount} endpoints.`;
             sessionTable.innerHTML = totalCount === 0
                 ? `<div class="text-muted">No hay endpoints para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>${buildSortableHeader("Endpoint", "username", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Perfil", "role", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Estado", "state", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Subred", "subnet", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Ultima deteccion", "lastSeen", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Latencia", "ping", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Puertos", "ports", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Riesgo", "risk", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Equipos", "linkedDevices", sortBy, sessionSortDirection, "session")}</th></tr></thead><tbody>${buildSessionRows(pageItems)}</tbody></table></div>`;
+                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>${buildSortableHeader("Endpoint", "username", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Perfil", "role", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Estado", "state", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Subred", "subnet", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Última detección", "lastSeen", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Latencia", "ping", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Puertos", "ports", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Riesgo", "risk", sortBy, sessionSortDirection, "session")}</th><th>${buildSortableHeader("Equipos", "linkedDevices", sortBy, sessionSortDirection, "session")}</th></tr></thead><tbody>${buildSessionRows(pageItems)}</tbody></table></div>`;
 
             sessionTable.querySelectorAll("[data-session-sort]").forEach((button) => {
                 button.addEventListener("click", () => {
@@ -2326,18 +2423,16 @@
             snapshotSummary.textContent = `Mostrando ${items.length} de ${totalCount} snapshots. Página ${page} de ${totalPages}.`;
             snapshotTable.innerHTML = items.length === 0
                 ? `<div class="text-muted">No hay snapshots para ese filtro.</div>`
-                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Dia", "weekday", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Hora", "timeSlot", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Usuarios", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
-                    <tr>
-                        <td data-label="Captura"><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber > 0 ? item.runNumber : (item.id ? String(item.id).slice(0, 8) : '-')}</span></td>
-                        <td data-label="Fecha">${formatChileDateTime(item.observedAtUtc)}</td>
-                        <td data-label="Dia">${formatChileWeekday(item.observedAtUtc)}</td>
-                        <td data-label="Hora">${formatChileTime(item.observedAtUtc)}</td>
-                        <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${item.sourceType || ""} · ${item.triggerLabel || ""}</div></td>
-                        <td data-label="Estado"><div>${item.status || ""}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
-                        <td data-label="Usuarios">${item.connectedUserCount ?? 0}</td>
-                        <td data-label="Equipos">${item.deviceCount ?? 0}</td>
-                        <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${item.riskLevel || ""} (${item.riskScore ?? 0})</span></td>
-                        <td class="text-end text-nowrap td-actions" data-label="Acciones">${String(item.id) === String(activeSnapshotId) ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir esta snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-danger" title="Eliminar esta snapshot" data-delete-snapshot="${item.id}"><i class="bi bi-trash3"></i></button></td>
+                : `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr><th>Captura</th><th>${buildSortableHeader("Fecha y hora", "observedAt", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Fuente", "sourceName", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Estado", "triggerType", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Identidades", "connectedUserCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "snapshot")}</th><th>${buildSortableHeader("Riesgo", "riskScore", currentSortBy, currentDirection, "snapshot")}</th><th></th></tr></thead><tbody>${items.map((item) => `
+                     <tr class="${String(item.id) === String(activeSnapshotId) ? "telemetry-row-active" : ""}">
+                         <td data-label="Captura"><span class="fw-semibold" title="snapshot ${item.id || '-'}">#${item.runNumber > 0 ? item.runNumber : (item.id ? String(item.id).slice(0, 8) : '-')}</span></td>
+                         <td data-label="Fecha y hora">${formatChileDateTime(item.observedAtUtc)}</td>
+                         <td data-label="Fuente"><div class="fw-semibold">${item.sourceName || ""}</div><div class="small text-muted">${snapshotSourceTypeLabel(item.sourceType)} · ${item.triggerLabel || ""}</div></td>
+                         <td data-label="Estado"><div>${snapshotStatusLabel(item.status)}</div><div class="small text-muted">${item.createdByUsername || ""}</div></td>
+                         <td data-label="Identidades">${item.connectedUserCount ?? 0}</td>
+                         <td data-label="Equipos">${item.deviceCount ?? 0}</td>
+                         <td data-label="Riesgo"><span class="telemetry-pill telemetry-pill-${item.riskLevel || "unknown"}">${riskLevelLabel(item.riskLevel)} (${item.riskScore ?? 0})</span></td>
+                         <td class="text-end text-nowrap td-actions" data-label="Acciones">${String(item.id) === String(activeSnapshotId) ? '<span class="badge bg-primary-subtle text-primary-emphasis me-2">Activa</span>' : ''}<a href="/dashboard/network-telemetry?snapshotId=${item.id}" class="btn btn-sm btn-outline-primary me-1" title="Abrir este snapshot"><i class="bi bi-eye"></i></a><button type="button" class="btn btn-sm btn-outline-secondary ${String(item.id) === String(activeSnapshotId) ? "opacity-50" : ""}" title="Eliminar este snapshot" data-delete-snapshot="${item.id}" data-delete-active="${String(item.id) === String(activeSnapshotId)}" data-run-number="${item.runNumber || ""}"><i class="bi bi-trash3"></i></button></td>
                     </tr>`).join("")}</tbody></table></div>`;
 
             snapshotTable.querySelectorAll("[data-snapshot-sort]").forEach((button) => {
@@ -2352,9 +2447,15 @@
 
             snapshotTable.querySelectorAll("[data-delete-snapshot]").forEach((button) => {
                 button.addEventListener("click", async () => {
-                    const snapshotId = button.getAttribute("data-delete-snapshot");
-                    if (!snapshotId) return;
-                    if (!(await SyntroUI.confirm(`¿Esta seguro de eliminar ${item.runNumber > 0 ? `la captura #${item.runNumber}` : `la snapshot #${String(snapshotId).slice(0, 8)}`}? Los datos de observacion asociados tambien se eliminaran.`))) {
+                     const snapshotId = button.getAttribute("data-delete-snapshot");
+                     if (!snapshotId) return;
+                     const isActive = button.getAttribute("data-delete-active") === "true";
+                     const runNumber = button.getAttribute("data-run-number");
+                     const captureLabel = runNumber ? `la captura #${runNumber}` : `el snapshot #${String(snapshotId).slice(0, 8)}`;
+                     const confirmation = isActive
+                         ? `Este es el snapshot activo. Si lo eliminas, la vista perderá su referencia actual y se eliminarán sus observaciones. Escribe mentalmente esta confirmación y acepta para continuar: ¿Eliminar ${captureLabel}?`
+                         : `¿Eliminar ${captureLabel}? Los datos de observación asociados también se eliminarán.`;
+                     if (!(await SyntroUI.confirm(confirmation))) {
                         return;
                     }
 
@@ -2457,7 +2558,7 @@
                     <div class="telemetry-loading-content">
                         <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
                         <div class="fw-semibold">${message}</div>
-                        <div class="small text-muted">Estamos reuniendo el historial de escaneos automaticos programados.</div>
+                        <div class="small text-muted">Estamos reuniendo el historial de escaneos automáticos programados.</div>
                     </div>
                 </div>`;
         };
@@ -2478,18 +2579,30 @@
                 scheduledTable.innerHTML = `<div class="text-muted">No hay escaneos programados para ese filtro.</div>`;
                 return;
             }
+            const hasScheduledErrors = items.some((item) => item.status === "failed" && item.errorMessage);
+            const formatDuration = (startedAtUtc, completedAtUtc) => {
+                if (!startedAtUtc || !completedAtUtc) return "-";
+                const seconds = Math.max(0, Math.round((new Date(completedAtUtc) - new Date(startedAtUtc)) / 1000));
+                return `${Math.floor(seconds / 60)} min ${String(seconds % 60).padStart(2, "0")} s`;
+            };
+            const formatScheduleDifference = (scheduledAtUtc, startedAtUtc) => {
+                if (!scheduledAtUtc || !startedAtUtc) return "-";
+                const seconds = Math.round((new Date(startedAtUtc) - new Date(scheduledAtUtc)) / 1000);
+                if (seconds === 0) return "En hora";
+                const absolute = Math.abs(seconds);
+                const value = `${absolute} s ${seconds < 0 ? "antes" : "después"}`;
+                return seconds < 0 ? `<span class="telemetry-schedule-anomaly" title="El despacho quedó registrado antes del slot programado; requiere revisión de relojes o del cálculo del scheduler."><i class="bi bi-exclamation-circle me-1"></i>${value}</span>` : value;
+            };
             scheduledTable.innerHTML = `<div class="telemetry-table-wrap table-responsive data-table-card"><table class="table align-middle"><thead><tr>
                 <th>ID</th>
-                <th>Planificacion</th>
-                <th>${buildSortableHeader("Dia", "scheduledDayLocal", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>${buildSortableHeader("Hora", "scheduledTimeLocal", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>${buildSortableHeader("Fecha", "scheduledAtUtc", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>${buildSortableHeader("Inicio", "startedAtUtc", currentSortBy, currentDirection, "scheduled")}</th>
+                <th>Planificación</th>
+                <th>${buildSortableHeader("Programado", "scheduledAtUtc", currentSortBy, currentDirection, "scheduled")}</th>
+                <th>${buildSortableHeader("Enviado al agente", "startedAtUtc", currentSortBy, currentDirection, "scheduled")}</th>
+                <th>Diferencia</th>
+                <th>Duración</th>
                 <th>${buildSortableHeader("Estado", "status", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>Error</th>
-                <th>${buildSortableHeader("Equipos", "deviceCount", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>${buildSortableHeader("Usuarios", "userCount", currentSortBy, currentDirection, "scheduled")}</th>
-                <th>Accion</th>
+                ${hasScheduledErrors ? "<th>Error</th>" : ""}
+                <th>Acción</th>
             </tr></thead><tbody>            ${items.map((item) => {
                 const statusBadge = item.status === "completed" ? '<span class="badge bg-success">Completado</span>'
                     : item.status === "failed" ? '<span class="badge bg-danger">Fallado</span>'
@@ -2497,24 +2610,22 @@
                     : item.status === "skipped" ? '<span class="badge bg-warning text-dark">Saltado</span>'
                     : item.status === "queued" ? '<span class="badge bg-info text-dark">En cola</span>'
                     : '<span class="badge bg-secondary">' + (item.statusLabel || item.status || "") + '</span>';
-                const createdAt = item.createdAtUtc ? formatChileDate(item.createdAtUtc) : "-";
-                const startedAt = item.startedAtUtc ? formatChileTime(item.startedAtUtc) : "-";
+                const scheduledAt = item.scheduledAtUtc ? formatChileDateTime(item.scheduledAtUtc) : "-";
+                const sentAt = item.startedAtUtc ? formatChileDateTime(item.startedAtUtc) : "-";
                 const errMsg = item.status === "failed" && item.errorMessage ? `<div class="small text-danger" title="${item.errorMessage.replace(/"/g, "&quot;")}">${item.errorMessage.length > 80 ? item.errorMessage.substring(0, 80) + "..." : item.errorMessage}</div>` : "";
                 const loadBtn = item.snapshotId && item.snapshotId !== noSnapshotId
                     ? `<a href="/dashboard/network-telemetry?snapshotId=${item.snapshotId}" class="btn btn-sm btn-outline-primary" title="Cargar esta snapshot"><i class="bi bi-eye"></i></a>`
                     : '<span class="text-muted">-</span>';
                 return `<tr>
                     <td class="fw-semibold" data-label="ID" title="snapshot ${item.snapshotId || '-'}">#${item.runNumber > 0 ? item.runNumber : (item.snapshotId ? String(item.snapshotId).slice(0, 8) : '-')}</td>
-                    <td data-label="Planificacion">${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
-                    <td data-label="Dia">${item.scheduledDayLocal || ""}</td>
-                    <td data-label="Hora">${item.scheduledTimeLocal || ""}</td>
-                    <td data-label="Fecha">${createdAt}</td>
-                    <td data-label="Inicio">${startedAt}</td>
+                    <td data-label="Planificación">${item.scheduleLabel || '<span class="text-muted small">-</span>'}</td>
+                    <td data-label="Programado">${scheduledAt}</td>
+                    <td data-label="Enviado al agente">${sentAt}</td>
+                    <td data-label="Diferencia">${formatScheduleDifference(item.scheduledAtUtc, item.startedAtUtc)}</td>
+                    <td data-label="Duración">${formatDuration(item.startedAtUtc, item.completedAtUtc)}</td>
                     <td data-label="Estado">${statusBadge}</td>
-                    <td data-label="Error">${errMsg || '<span class="text-muted small">-</span>'}</td>
-                    <td data-label="Equipos">${item.deviceCount != null ? item.deviceCount : '-'}</td>
-                    <td data-label="Usuarios">${item.userCount != null ? item.userCount : '-'}</td>
-                    <td class="td-actions" data-label="Accion">${loadBtn}</td>
+                    ${hasScheduledErrors ? `<td data-label="Error">${errMsg || '<span class="text-muted small">-</span>'}</td>` : ""}
+                    <td class="td-actions" data-label="Acción">${loadBtn}</td>
                 </tr>`;
             }).join("")}</tbody></table></div>`;
 
@@ -3255,26 +3366,43 @@
         var body = document.getElementById("riskDetailBody");
         if (!body || !item) return;
 
+        var escapePopup = function(value) {
+            return String(value ?? "").replace(/[&<>"']/g, function(character) {
+                return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[character];
+            });
+        };
         var level = (item.riskLevel || "unknown").toLowerCase();
         var pillColor = { critical: "bg-danger", high: "bg-warning text-dark", medium: "bg-info", low: "bg-success", unknown: "bg-secondary" }[level] || "bg-secondary";
+        var levelLabel = { critical: "Crítico", high: "Alto", medium: "Medio", low: "Bajo", unknown: "Sin dato" }[level] || "Sin dato";
+        var deviceLabel = item.deviceName || item.hostName || "Sin nombre";
+        var popupDate = item.observedAtUtc
+            ? new Intl.DateTimeFormat("@displayLocale", { timeZone: "@displayTimeZoneId", dateStyle: "short", timeStyle: "medium" }).format(new Date(item.observedAtUtc))
+            : "";
 
-        var reasons = Array.isArray(item.riskReasons) ? item.riskReasons : [];
+        var reasons = (Array.isArray(item.riskReasons) ? item.riskReasons : [])
+            .filter(function(reason) { return !String(reason).startsWith("[ML]"); });
         var reasonsHtml = reasons.length > 0
             ? '<ul class="mb-0">' + reasons.map(function(r) {
-                var isMl = r.indexOf("[ML]") === 0;
-                var icon = isMl ? "bi-robot" : "bi-exclamation-triangle text-warning";
-                return '<li class="mb-1"><i class="bi ' + icon + ' me-1"></i>' + r + '</li>';
+                return '<li class="mb-1"><i class="bi bi-exclamation-triangle text-warning me-1"></i>' + escapePopup(r) + '</li>';
             }).join("") + '</ul>'
             : '<span class="text-muted">Sin factores de riesgo registrados</span>';
 
         var scoreBreakdown = "";
         if (item.scoringSource === "ml-hybrid" && item.ruleBasedScore != null) {
-            var mlProb = item.mlProbability != null ? (item.mlProbability * 100).toFixed(0) + "%" : "N/A";
+            var mlScore = item.mlProbability != null ? Math.trunc(Number(item.mlProbability) * 100) : null;
+            var ruleScore = Number(item.ruleBasedScore);
+            var mlContribution = mlScore == null ? null : mlScore * @mlWeight.ToString(CultureInfo.InvariantCulture);
+            var ruleContribution = ruleScore * @ruleWeight.ToString(CultureInfo.InvariantCulture);
+            var calculatedScore = mlContribution == null ? null : Math.min(100, Math.trunc(mlContribution + ruleContribution));
+            var storedScore = Number(item.riskScore ?? 0);
+            var mismatch = calculatedScore != null && calculatedScore !== storedScore;
             scoreBreakdown = '<div class="alert alert-info py-2 mb-3">'
-                + '<strong>Desglose de score:</strong> '
-                + 'Reglas: <strong>' + item.ruleBasedScore + '</strong> &rarr; '
-                + 'ML: <strong>' + mlProb + '</strong> &rarr; '
-                + 'Hibrido: <strong>' + (item.riskScore ?? 0) + '</strong>'
+                + '<strong>Mezcla ponderada:</strong> '
+                + 'ML ' + (mlScore == null ? 'sin dato' : '<strong>' + mlScore + '/100 × ' + @mlWeightPercentText + '% = ' + mlContribution.toFixed(1) + '</strong>') + ' + '
+                + 'reglas <strong>' + ruleScore + '/100 × ' + @ruleWeightPercentText + '% = ' + ruleContribution.toFixed(1) + '</strong>'
+                + ' → puntaje guardado <strong>' + storedScore + '/100</strong>.'
+                + '<div class="small mt-1">El resultado de la mezcla se trunca a entero.</div>'
+                + (mismatch ? '<div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle me-1"></i>La fórmula visible da ' + calculatedScore + ', pero el puntaje guardado es ' + storedScore + '. No se recalculó.</div>' : '')
                 + '</div>';
         }
 
@@ -3285,14 +3413,18 @@
             matchInfo = '<div class="mt-2"><small class="text-muted"><i class="bi bi-link-45deg me-1"></i>Sin coincidencia en inventario</small></div>';
         }
 
+        document.getElementById("riskDetailModalLabel").textContent = 'Detalle de riesgo · ' + deviceLabel;
         body.innerHTML = ''
             + '<div class="d-flex align-items-center gap-3 mb-3">'
-            + '  <span class="badge ' + pillColor + ' fs-5 text-uppercase">' + (item.riskLevel || "unknown") + ' (' + (item.riskScore ?? 0) + '/100)</span>'
+            + '  <span class="badge ' + pillColor + ' fs-5">' + levelLabel + ' (' + (item.riskScore ?? 0) + '/100)</span>'
             + '</div>'
             + '<div class="row mb-3 text-muted small">'
-            + '  <div class="col-md-6"><strong>Equipo:</strong> ' + (item.deviceName || item.hostName || "Sin nombre") + '</div>'
-            + '  <div class="col-md-3"><strong>IP:</strong> ' + (item.ipAddress || "-") + '</div>'
-            + '  <div class="col-md-3"><strong>MAC:</strong> ' + (item.macAddress || "-") + '</div>'
+            + '  <div class="col-md-6"><strong>Equipo:</strong> ' + escapePopup(deviceLabel) + '</div>'
+            + '  <div class="col-md-3"><strong>IP:</strong> ' + escapePopup(item.ipAddress || "-") + '</div>'
+            + (item.macAddress ? '  <div class="col-md-3"><strong>MAC:</strong> ' + escapePopup(item.macAddress) + '</div>' : '')
+            + (item.username ? '  <div class="col-md-4"><strong>Usuario:</strong> ' + escapePopup(item.username) + '</div>' : '')
+            + (item.subnetCidr ? '  <div class="col-md-4"><strong>Subred:</strong> ' + escapePopup(item.subnetCidr) + '</div>' : '')
+            + (popupDate ? '  <div class="col-md-4"><strong>Snapshot:</strong> ' + escapePopup(popupDate) + '</div>' : '')
             + '</div>'
             + scoreBreakdown
             + '<h6 class="mb-2"><i class="bi bi-list-check me-1"></i>Factores de riesgo</h6>'

@@ -72,6 +72,7 @@ public class NetworkTelemetryMatchingSummaryViewModel
     public int ObservedInventoryCount { get; set; }
     public double InventoryCoverageRate { get; set; }
     public double MatchRate { get; set; }
+    public DateTime? LastRematchAtUtc { get; set; }
     public IReadOnlyDictionary<string, int> MatchKeyCounts { get; set; } = new Dictionary<string, int>();
     public IReadOnlyDictionary<string, int> MatchedByRiskLevel { get; set; } = new Dictionary<string, int>();
     public IReadOnlyDictionary<string, int> UnmatchedByRiskLevel { get; set; } = new Dictionary<string, int>();

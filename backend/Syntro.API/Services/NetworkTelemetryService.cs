@@ -3300,6 +3300,13 @@ public class NetworkTelemetryService
             })
             .ToListAsync(cancellationToken);
 
+        var lastRematchAtUtc = await _context.AuditLogEntries
+            .AsNoTracking()
+            .Where(entry => entry.ActionType == "network-telemetry-rematch" && entry.Details.Contains(snapshotId.ToString()))
+            .OrderByDescending(entry => entry.CreatedAtUtc)
+            .Select(entry => (DateTime?)entry.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
         return new NetworkTelemetryMatchingSummaryViewModel
         {
             SnapshotId = snapshotId,
@@ -3315,7 +3322,8 @@ public class NetworkTelemetryService
             InventoryCount = inventoryIds.Count,
             ObservedInventoryCount = observedInventoryIds.Count,
             InventoryCoverageRate = inventoryCoverageRate,
-            MatchRate = inventoryCoverageRate,
+            MatchRate = totalCount == 0 ? 0 : Math.Round(matchedCount * 100.0 / totalCount, 1),
+            LastRematchAtUtc = lastRematchAtUtc,
             MatchKeyCounts = matchKeyCounts,
             MatchedByRiskLevel = matchedByRisk,
             UnmatchedByRiskLevel = unmatchedByRisk,
