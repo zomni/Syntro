@@ -1269,8 +1269,6 @@ const buildDeviceControlsHtml = (
   filtersOpen = false,
   typeFilter = ""
 ) => {
-  const sizeOptions = [5, 10, 20, 50, "all"];
-  const resolvedSize = pageSize === "all" ? "all" : Math.max(5, Number(pageSize) || 5);
   const buttonLabel = isOpen ? "Cerrar" : "Buscar";
   const inputHtml = isOpen
     ? `<input type="text" value="${escapeHtml(query || "")}" placeholder="Buscar equipo..."`
@@ -1278,87 +1276,79 @@ const buildDeviceControlsHtml = (
         + ` style="flex:1; min-width:160px; padding:8px 10px; border:1px solid #cbd5f5; border-radius:10px; font-size:12px;" />`
     : "";
 
-  let sizeButtons = "";
-  for (const size of sizeOptions) {
-    const isActive = String(resolvedSize) === String(size);
-    sizeButtons += `
-      <button
-        class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
-        style="${getChipButtonStyle(isActive, true)}"
-        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', '${size}')"
-      >
-        ${size === "all" ? "Todos" : size}
-      </button>`;
-  }
-
   const hasSectorFilters = sectorOptions.length > 0;
   const activeSector = hasSectorFilters ? sectorOptions.find((s) => s.roomId === sectorFilter) : null;
   const activeType = normalizeDeviceType(typeFilter || "all");
   const hasTypeFilter = activeType && activeType !== "all";
+  const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || "").trim())]
+    .filter(Boolean).length;
 
   let filtersButtonHtml = "";
-  let activeFilterBannerHtml = "";
   let filtersPanelHtml = "";
 
-  if (hasSectorFilters || hasTypeFilter) {
-    filtersButtonHtml = `
-      <button
-        class="floorButton equipment-panel-chip-button${Boolean(activeSector) || hasTypeFilter || filtersOpen ? " is-active" : ""}"
-        style="${getChipButtonStyle(Boolean(activeSector) || hasTypeFilter || filtersOpen, false)}"
-        onclick="window.toggleSectorFilters && window.toggleSectorFilters('${escapeHtml(featureId)}')"
-      >
-        ${resizeIcon(PACKAGE_ICON_SVG)} Filtros
-      </button>`;
+  filtersButtonHtml = `
+    <button
+      class="floorButton equipment-panel-chip-button${activeFilterCount || filtersOpen ? " is-active" : ""}"
+      style="${getChipButtonStyle(Boolean(activeFilterCount) || filtersOpen, false)}"
+      onclick="window.toggleSectorFilters && window.toggleSectorFilters('${escapeHtml(featureId)}')"
+      aria-expanded="${String(filtersOpen)}"
+    >
+      ${resizeIcon(PACKAGE_ICON_SVG)} Filtros${activeFilterCount ? ` · ${activeFilterCount}` : ""}
+    </button>`;
 
-    if (hasTypeFilter) {
-      activeFilterBannerHtml = `
-        <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(activeType)}1f; color:${getDeviceTypeColor(activeType)};">
-            ${getDeviceTypeIconHtml(activeType)} ${escapeHtml(getDeviceTypeLabel(activeType))}
-          </span>
-        </div>`;
-    }
+  const clearFiltersHtml = activeFilterCount
+    ? `<button
+         class="floorButton equipment-panel-clear-filters"
+         onclick="window.clearDevicePanelFilters && window.clearDevicePanelFilters('${escapeHtml(featureId)}')"
+         title="Borrar filtros activos"
+       >Borrar filtros</button>`
+    : "";
 
-    if (filtersOpen) {
-      const typeChips = ["all", "pc", "printer"]
-        .map((type) => `
-          <button
-            class="floorButton equipment-panel-chip-button${activeType === type ? " is-active" : ""}"
-            style="${getChipButtonStyle(activeType === type, true)}"
-            onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
-          >
-            ${type === "all" ? "Todos los tipos" : `${getDeviceTypeIconHtml(type)} ${escapeHtml(getDeviceTypeLabel(type))}`}
-          </button>`)
-        .join("");
-      const allChips = `
+  if (filtersOpen) {
+    const typeChips = ["all", "pc", "printer"]
+      .map((type) => `
         <button
-          class="floorButton equipment-panel-chip-button${activeSector ? "" : " is-active"}"
-          style="${getChipButtonStyle(!activeSector, true)}"
-          onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+          class="floorButton equipment-panel-chip-button${activeType === type ? " is-active" : ""}"
+          style="${getChipButtonStyle(activeType === type, true)}"
+          onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
+          aria-pressed="${String(activeType === type)}"
         >
-          Todos los sectores
-        </button>`;
-      const sectorChips = sectorOptions
-        .map(
-          (s) => `
-            <button
-              class="floorButton equipment-panel-chip-button${activeSector?.roomId === s.roomId ? " is-active" : ""}"
-              style="${getChipButtonStyle(activeSector?.roomId === s.roomId, true)}"
-              onclick="window.setSectorFilter && window.setSectorFilter('${escapeHtml(featureId)}', '${escapeHtml(s.roomId)}')"
-            >
-              ${escapeHtml(s.name)} · ${s.count}
-            </button>`
-        )
-        .join("");
-      filtersPanelHtml = `
-        <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-          <div style="width:100%; font-size:12px; color:#475569;">Filtrar por tipo</div>
-          ${typeChips}
-          <div style="width:100%; font-size:12px; color:#475569; margin-top:4px;">Filtrar por sector</div>
-          ${allChips}
-          ${sectorChips}
-        </div>`;
-    }
+          ${type === "all" ? "Todos los tipos" : `${getDeviceTypeIconHtml(type)} ${escapeHtml(getDeviceTypeLabel(type))}`}
+        </button>`)
+      .join("");
+    const allChips = `
+      <button
+        class="floorButton equipment-panel-chip-button${activeSector ? "" : " is-active"}"
+        style="${getChipButtonStyle(!activeSector, true)}"
+        onclick="window.clearSectorFilter && window.clearSectorFilter('${escapeHtml(featureId)}')"
+        aria-pressed="${String(!activeSector)}"
+      >
+        Todos los sectores
+      </button>`;
+    const sectorChips = sectorOptions
+      .map(
+        (s) => `
+          <button
+            class="floorButton equipment-panel-chip-button${activeSector?.roomId === s.roomId ? " is-active" : ""}"
+            style="${getChipButtonStyle(activeSector?.roomId === s.roomId, true)}"
+            onclick="window.setSectorFilter && window.setSectorFilter('${escapeHtml(featureId)}', '${escapeHtml(s.roomId)}')"
+            aria-pressed="${String(activeSector?.roomId === s.roomId)}"
+          >
+            ${escapeHtml(s.name)} · ${s.count}
+          </button>`
+      )
+      .join("");
+    filtersPanelHtml = `
+      <div class="equipment-panel-filters">
+        <div class="equipment-panel-filter-group">
+          <span class="equipment-panel-filter-label">Tipo</span>
+          <div class="equipment-panel-filter-chips">${typeChips}</div>
+        </div>
+        <div class="equipment-panel-filter-group">
+          <span class="equipment-panel-filter-label">Sector</span>
+          <div class="equipment-panel-filter-chips equipment-panel-sector-chips">${allChips}${sectorChips}</div>
+        </div>
+      </div>`;
   }
 
   return `
@@ -1372,14 +1362,10 @@ const buildDeviceControlsHtml = (
       </button>
       ${inputHtml}
       ${filtersButtonHtml}
+      ${clearFiltersHtml}
       ${extraActions}
     </div>
-    ${activeFilterBannerHtml}
     ${filtersPanelHtml}
-    <div style="margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
-      <div style="font-size:12px; color:#475569;">Mostrar</div>
-      ${sizeButtons}
-    </div>
   `;
 };
 
@@ -1388,6 +1374,8 @@ window.clearDevicePanelFilters = (featureId) => {
   popupDeviceTypeFilterState[featureId] = "";
   popupSectorFilterState[featureId] = "";
   popupSectorFilterOpenState[featureId] = false;
+  popupDeviceQueryState[featureId] = "";
+  popupDeviceSearchOpenState[featureId] = false;
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
 };
@@ -2170,7 +2158,7 @@ const buildChipsRowHtml = (...chips) => `
   </div>
 `;
 
-const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
+const buildDevicesSummaryHtml = (devices) => {
   const counts = countDevicesByType(devices);
   const presentTypes = INVENTORY_CATEGORY_ORDER.filter((type) => counts[type]);
   const extraTypes = Object.keys(counts).filter(
@@ -2190,20 +2178,8 @@ const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
   return buildChipsRowHtml(
     ...allTypes.map(
       (type) => {
-        const isClickable = ["pc", "printer"].includes(type);
         const content = `${getDeviceTypeIconHtml(type)} <span style="font-weight:700;">${counts[type]}</span>`;
-        if (!isClickable) {
-          return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;
-        }
-        return `<button
-          type="button"
-          class="floorButton equipment-panel-chip-button equipment-panel-counter-button${normalizeDeviceType(activeType || "all") === type ? " is-active" : ""}"
-          style="${CHIP_BASE_STYLE} ${getChipButtonStyle(normalizeDeviceType(activeType || "all") === type, true)} background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};"
-          onclick="window.setDeviceTypeFilter && window.setDeviceTypeFilter('${escapeHtml(featureId)}', '${type}')"
-          title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"
-          aria-label="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}: ${counts[type]}"
-          aria-pressed="${String(normalizeDeviceType(activeType || "all") === type)}"
-        >${content}</button>`;
+        return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;
       }
     )
   );
@@ -2212,7 +2188,8 @@ const buildDevicesSummaryHtml = (devices, featureId, activeType = "") => {
 const buildDeviceScopeSummaryHtml = (floorLabel, devices, sectorOptions = [], activeSector = null) => {
   const sectorLabel = activeSector
     ? `Sector ${activeSector.name}`
-    : `${sectorOptions.length} sector(es)`;
+    : `${sectorOptions.length} ${sectorOptions.length === 1 ? "sector" : "sectores"}`;
+  const equipmentLabel = `${devices.length} ${devices.length === 1 ? "equipo" : "equipos"}`;
 
   return `
     <div class="building-panel-scope-summary" aria-live="polite">
@@ -2221,14 +2198,28 @@ const buildDeviceScopeSummaryHtml = (floorLabel, devices, sectorOptions = [], ac
       <span aria-hidden="true">·</span>
       <span>${escapeHtml(sectorLabel)}</span>
       <span aria-hidden="true">·</span>
-      <span>${devices.length} equipo(s)</span>
+      <span>${equipmentLabel}</span>
     </div>
   `;
 };
 
 const UNASSIGNED_SECTOR_KEY = "__unassigned__";
 
-const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false) => {
+const buildDevicePageSizeHtml = (featureId, pageSize) => {
+  const resolvedSize = pageSize === "all" ? "all" : Math.max(5, Number(pageSize) || 5);
+  return [5, 10, 20, 50, "all"].map((size) => {
+    const isActive = String(resolvedSize) === String(size);
+    return `
+      <button
+        class="floorButton equipment-panel-chip-button${isActive ? " is-active" : ""}"
+        style="${getChipButtonStyle(isActive, true)}"
+        onclick="window.setDevicePageSize && window.setDevicePageSize('${escapeHtml(featureId)}', '${size}')"
+        aria-pressed="${String(isActive)}"
+      >${size === "all" ? "Todos" : size}</button>`;
+  }).join("");
+};
+
+const buildDevicesListHtml = (featureId, devicesInFloor, roomsInFloor, allDevices, allRooms, floorLabel, highlightKey, query, pageSize, typeFilter, sectorFilter = "", canManageEquipment = false) => {
   const roomsMap = buildRoomsMap(allRooms);
   const activeQuery = String(query || "").trim();
   const activeType = String(typeFilter || "all").trim().toLowerCase();
@@ -2271,8 +2262,10 @@ const buildDevicesListHtml = (devicesInFloor, roomsInFloor, allDevices, allRooms
   }
 
   let html = `
-    <div style="margin-bottom:6px; font-size:12px; color:#475569;">
-      Mostrando ${Math.min(displayDevices.length, filteredDevices.length)} de ${filteredDevices.length}
+    <div class="equipment-panel-results-toolbar">
+      <span>Mostrando ${Math.min(displayDevices.length, filteredDevices.length)} de ${filteredDevices.length}</span>
+      <span class="equipment-panel-results-size-label">Mostrar</span>
+      <div class="equipment-panel-results-size">${buildDevicePageSizeHtml(featureId, pageSize)}</div>
     </div>
   `;
 
@@ -2852,7 +2845,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
         ? scopeDevices.filter((device) => device.roomId === activeSectorFilter)
         : scopeDevices;
     const unassignedCount = scopeDevices.filter((device) => !device.roomId).length;
-    const sectorOptionsForFilter = canManageEquipment
+    const sectorOptionsForFilter = canManageEquipment && unassignedCount > 0
       ? [...sectorOptions, { roomId: UNASSIGNED_SECTOR_KEY, name: "Sin sector", count: unassignedCount }]
       : sectorOptions;
     const activeSectorOption = activeSectorFilter
@@ -2873,7 +2866,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     contentHtml = `
       <div style="${sectionBoxStyle}">
         ${buildDeviceScopeSummaryHtml(floorLabel, devicesForView, sectorOptions, activeSectorOption)}
-        ${buildDevicesSummaryHtml(devicesForView, featureId, deviceTypeFilter)}
+        ${buildDevicesSummaryHtml(devicesForView)}
         ${
           canManageEquipment
             ? `<div style="margin-top:6px; font-size:11px; color:#475569;">
@@ -2885,7 +2878,7 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
           ${buildDeviceControlsHtml(featureId, deviceQuery, deviceSearchOpen, devicePageSize, adminActionsHtml, sectorOptionsForFilter, activeSectorFilter, sectorFiltersOpen, deviceTypeFilter)}
         </div>
         <div class="building-panel-device-results" style="margin-top:4px;">
-          ${buildDevicesListHtml(devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
+          ${buildDevicesListHtml(featureId, devicesForView, roomsInFloor, allDevices, allRooms, devicesScopeLabel, popupDeviceState[featureId], deviceQuery, devicePageSize, deviceTypeFilter, activeSectorFilter, canManageEquipment)}
         </div>
       </div>
     `;

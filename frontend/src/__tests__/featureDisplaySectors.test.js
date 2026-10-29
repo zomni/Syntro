@@ -84,26 +84,40 @@ describe("jerarquia visual de edificio y sector", () => {
 });
 
 describe("acciones del panel de edificio", () => {
-  it("mantiene filtros internos de tipo y permite activarlos desde los contadores", () => {
-    expect(source).toContain("const buildDevicesSummaryHtml = (devices, featureId, activeType = \"\")");
+  it("mantiene los contadores como chips visuales y deja el tipo dentro de Filtros", () => {
+    expect(source).toContain("const buildDevicesSummaryHtml = (devices) =>");
     expect(source).toContain('const typeChips = ["all", "pc", "printer"]');
     expect(source).toContain('return `<span style="${CHIP_BASE_STYLE}; background:${getDeviceTypeColor(type)}1f; color:${getDeviceTypeColor(type)};">${content}</span>`;');
-    expect(source).toContain('title="Filtrar por ${escapeHtml(getDeviceTypeLabel(type))}"');
+    expect(source).not.toContain("equipment-panel-counter-button");
     expect(source).toContain("popupDeviceTypeFilterState[featureId] === nextType ? \"\" : nextType");
     expect(source).toContain("window.clearDevicePanelFilters");
   });
 
-  it("reemplaza el estado de actividad por coincidencia con la última captura", () => {
+  it("muestra el contador de filtros y borra filtros en la misma fila", () => {
+    expect(source).toContain("const activeFilterCount = [hasTypeFilter, Boolean(activeSector), Boolean(String(query || \"\").trim())]");
+    expect(source).toContain("Filtros${activeFilterCount ? ` · ${activeFilterCount}` : \"\"}");
+    expect(source).toContain('class="floorButton equipment-panel-clear-filters"');
+    expect(source).toContain("popupDeviceSearchOpenState[featureId] = false;");
+  });
+
+  it("permite que los chips de sector envuelvan sin desbordar el panel", () => {
+    expect(source).toContain("equipment-panel-sector-chips");
+    expect(css).toMatch(/\.equipment-panel-filter-chips\s*\{[\s\S]*?flex-wrap:\s*wrap;[\s\S]*?min-width:\s*0;/);
+    expect(css).not.toMatch(/\.equipment-panel-sector-chips\s*\{[\s\S]*?overflow-y:/);
+  });
+
+  it("mantiene el estado de coincidencia de inventario en las tarjetas", () => {
     expect(source).toContain("foundInLatestSnapshot: Boolean(item?.matchedInLatestSnapshot)");
-    expect(source).toContain('const label = found ? "Conectado a red" : "Sin conexión a red";');
+    expect(source).toContain("const buildInventoryMatchBadgeHtml = (found) =>");
     expect(source).toContain("buildInventoryMatchBadgeHtml(device.foundInLatestSnapshot)");
     expect(source).not.toContain("... y ${filteredDevices.length - resolvedPageSize} equipo(s) mas");
   });
 
-  it("incluye la opción para mostrar todos los equipos", () => {
-    expect(source).toContain('const sizeOptions = [5, 10, 20, 50, "all"];');
-    expect(source).toContain('${size === "all" ? "Todos" : size}');
-    expect(source).toContain('const resolvedPageSize = pageSize === "all" ? filteredDevices.length');
+  it("mantiene las cinco opciones de cantidad junto al resumen del listado", () => {
+    expect(source).toContain("const buildDevicePageSizeHtml = (featureId, pageSize) =>");
+    expect(source).toContain("[5, 10, 20, 50, \"all\"]");
+    expect(source).toContain("equipment-panel-results-toolbar");
+    expect(source).toContain("Mostrando ${Math.min(displayDevices.length, filteredDevices.length)} de ${filteredDevices.length}");
   });
 
   it("ofrece la navegación al edificio desde el encabezado lateral", () => {
