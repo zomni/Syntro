@@ -295,6 +295,7 @@ const popupDevicePageSizeState = {};
 const popupDeviceSearchOpenState = {};
 const popupDeviceTypeFilterState = {};
 const popupDeviceMatchFilterState = {};
+const popupBuildingMatchState = {};
 const popupDeviceScopeState = {};
 const popupSectorFilterState = {};
 const popupSectorFilterOpenState = {};
@@ -928,23 +929,9 @@ const findBuildingInCatalog = async (feature) => {
 };
 
 const loadBuildingDetail = async (building) => {
-  if (!building) return null;
-
-  try {
-    const response = await fetch(
-      `data/interiors/${building.id}/building_detail.json?v=${Date.now()}`,
-      { cache: "no-store" }
-    );
-
-    if (!response.ok) {
-      return null;
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error(`Error cargando building_detail de ${building.id}:`, error);
-    return null;
-  }
+  // main no distribuye archivos estaticos de interiores; el detalle es
+  // opcional y las salas/equipos llegan desde los endpoints del backend.
+  return null;
 };
 
 const loadBackendRoomsForBuilding = async (building) => {
@@ -994,32 +981,12 @@ const loadRoomsForBuilding = async (building) => {
     return [];
   }
 
-  const roomFilePromises = building.floors.map(async (floor) => {
-    try {
-      const response = await fetch(
-        `data/interiors/${building.id}/floor_${floor}_rooms.json?v=${Date.now()}`,
-        { cache: "no-store" }
-      );
-
-      if (!response.ok) {
-        return [];
-      }
-
-      const data = await response.json();
-      return Array.isArray(data.rooms) ? data.rooms : [];
-    } catch (error) {
-      console.error(`Error cargando salas de ${building.id} piso ${floor}:`, error);
-      return [];
-    }
-  });
-
-  const [roomsByFloor, backendRooms, manualRooms] = await Promise.all([
-    Promise.all(roomFilePromises),
+  const [backendRooms, manualRooms] = await Promise.all([
     loadBackendRoomsForBuilding(building),
     loadManualRoomsForBuilding(building),
   ]);
 
-  const mergedRooms = mergeRoomsWithBackendOverrides(roomsByFloor.flat(), backendRooms);
+  const mergedRooms = mergeRoomsWithBackendOverrides([], backendRooms);
   const knownRoomIds = new Set(mergedRooms.map((room) => room.roomId));
 
   return [...mergedRooms, ...manualRooms.filter((room) => !knownRoomIds.has(room.roomId))];
@@ -1307,7 +1274,8 @@ const buildDeviceControlsHtml = (
          class="floorButton equipment-panel-clear-filters"
          onclick="window.clearDevicePanelFilters && window.clearDevicePanelFilters('${escapeHtml(featureId)}')"
          title="Borrar filtros activos"
-       >Borrar filtros</button>`
+         aria-label="Borrar filtros activos"
+       >×</button>`
     : "";
 
   if (filtersOpen) {
@@ -1383,15 +1351,22 @@ window.clearDevicePanelFilters = (featureId) => {
   popupDeviceQueryState[featureId] = "";
   popupDeviceSearchOpenState[featureId] = false;
   popupDeviceMatchFilterState[featureId] = "";
+  popupBuildingMatchState[featureId] = false;
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
 };
 
-window.showUnseenInventoryInBuilding = (featureId) => {
+window.toggleBuildingMatchInPanel = (featureId) => {
   if (!featureId) return;
-  popupDeviceMatchFilterState[featureId] = "not_seen";
+  popupBuildingMatchState[featureId] = !popupBuildingMatchState[featureId];
+  popupDeviceMatchFilterState[featureId] = popupBuildingMatchState[featureId] ? "not_seen" : "";
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
+  if (currentOpenLayer) {
+    renderFloorSectors(currentOpenLayer.feature).catch((error) =>
+      console.error("[mapa] error actualizando coincidencias del edificio:", error)
+    );
+  }
 };
 
 
@@ -2259,7 +2234,7 @@ const buildDevicePageSizeHtml = (featureId, pageSize) => {
   }).join("");
 };
 
-const buildInventoryMatchSummaryHtml = (featureId, devices) => {
+const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false) => {
   const hasSnapshot = devices.some((device) => device.latestSnapshotAvailable);
   if (!hasSnapshot) {
     return `
@@ -2285,10 +2260,11 @@ const buildInventoryMatchSummaryHtml = (featureId, devices) => {
         type="button"
         class="floorButton equipment-panel-action-button building-panel-inventory-match-button"
         style="${getActionButtonStyle()}"
-        onclick="window.showUnseenInventoryInBuilding && window.showUnseenInventoryInBuilding('${escapeHtml(featureId)}')"
-        title="Mostrar equipos no vistos en la última captura"
-        aria-label="Mostrar equipos no vistos en la última captura"
-      >Coincidencias de inventario</button>
+        onclick="window.toggleBuildingMatchInPanel && window.toggleBuildingMatchInPanel('${escapeHtml(featureId)}')"
+        title="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
+        aria-label="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
+        aria-pressed="${String(matchActive)}"
+      >${matchActive ? "Ocultar coincidencias" : "Coincidencias de inventario"}</button>
       <div class="building-panel-inventory-match-summary" aria-label="Resumen de coincidencias de inventario">
         <span>${counts.seen} vistos · ${counts.notSeen} no vistos · ${counts.noIdentifier} sin identificador · ${total} equipos</span>
         <span>Última captura: ${escapeHtml(snapshotLabel)}</span>
@@ -2934,7 +2910,11 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
       scopeDevices, allDevices, allRooms, deviceQuery, deviceTypeFilter, activeSectorFilter
     );
     const devicesForView = panelFilteredDevices.filteredDevices;
-    inventoryMatchHtml = buildInventoryMatchSummaryHtml(featureId, devicesForView);
+    inventoryMatchHtml = buildInventoryMatchSummaryHtml(
+      featureId,
+      devicesForView,
+      Boolean(popupBuildingMatchState[featureId])
+    );
     const unassignedCount = scopeDevices.filter((device) => !device.roomId).length;
     const sectorOptionsForFilter = canManageEquipment && unassignedCount > 0
       ? [...sectorOptions, { roomId: UNASSIGNED_SECTOR_KEY, name: "Sin sector", count: unassignedCount }]
@@ -3532,6 +3512,18 @@ const renderFloorSectors = async (feature) => {
   const countedDevicesInFloor = popupTypeFilter
     ? devicesInFloor.filter((device) => normalizeDeviceType(device?.type) === popupTypeFilter)
     : devicesInFloor;
+  const buildingMatchActive = Boolean(popupBuildingMatchState[featureId]);
+  let buildingMatchColorForView = null;
+  let buildingMatchLabelForView = null;
+  let buildingMatchSummaryForView = null;
+  if (buildingMatchActive) {
+    const matchData = await loadBuildingMatchData();
+    buildingMatchSummaryForView = getBuildingMatchSummaryForType(matchData.get(featureId));
+    if (buildingMatchSummaryForView?.matchRate !== null && buildingMatchSummaryForView?.inventoryCount > 0) {
+      buildingMatchColorForView = buildingMatchColor(buildingMatchSummaryForView.matchRate);
+      buildingMatchLabelForView = buildingMatchPercentLabel(buildingMatchSummaryForView.matchRate);
+    }
+  }
 
   const sectorCountByRoom = new Map();
   for (const sector of sectors) {
@@ -3575,8 +3567,16 @@ const renderFloorSectors = async (feature) => {
     const latLngs = coords.map((c) => [c[1], c[0]]);
     const isActive = activeSectorFilter && activeSectorFilter === sector.roomId;
 
+    const matchSectorStyle = buildingMatchColorForView
+      ? {
+          ...baseSectorStyle,
+          color: buildingMatchColorForView,
+          fillColor: buildingMatchColorForView,
+          fillOpacity: 0.35,
+        }
+      : baseSectorStyle;
     const polygon = L.polygon(latLngs, {
-      ...(isActive ? activeSectorStyle : baseSectorStyle),
+      ...(isActive ? activeSectorStyle : matchSectorStyle),
       className: isActive ? "building-view-sector is-active" : "building-view-sector",
       interactive: true,
     }).addTo(overlay);
@@ -3652,6 +3652,22 @@ const renderFloorSectors = async (feature) => {
 
   const floorRing =
     feature.geometry?.type === "Polygon" ? feature.geometry.coordinates[0].map((c) => [c[1], c[0]]) : [];
+  if (buildingMatchColorForView && buildingMatchLabelForView && floorRing.length >= 3) {
+    const centroid = ringCentroidLatLng(floorRing);
+    if (centroid) {
+      const label = `${buildingMatchSummaryForView.observedInventoryCount} de ${buildingMatchSummaryForView.inventoryCount} inventarios vistos (${buildingMatchLabelForView})`;
+      L.marker([centroid[0], centroid[1]], {
+        interactive: false,
+        keyboard: false,
+        icon: L.divIcon({
+          className: "building-match-bubble",
+          html: `<button type="button" style="background-color:${buildingMatchColorForView};" aria-label="${escapeHtml(label)}">${buildingMatchLabelForView}</button>`,
+          iconSize: [46, 28],
+          iconAnchor: [23, 14],
+        }),
+      }).addTo(overlay);
+    }
+  }
   placeFloorTotalBubble(overlay, floorRing, countedDevicesInFloor.length, floor, featureId);
   await hideBuildingFloorLoading(loadingToken);
 };

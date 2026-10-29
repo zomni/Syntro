@@ -98,6 +98,9 @@ describe("acciones del panel de edificio", () => {
     expect(source).toContain("Filtros${activeFilterCount ? ` · ${activeFilterCount}` : \"\"}");
     expect(source).toContain('class="floorButton equipment-panel-clear-filters"');
     expect(source).toContain("popupDeviceSearchOpenState[featureId] = false;");
+    expect(source).toContain('aria-label="Borrar filtros activos"');
+    expect(source).toContain(">×</button>`");
+    expect(css).toMatch(/\.equipment-panel-clear-filters\s*\{[\s\S]*?border-radius:\s*50%;/);
   });
 
   it("permite que los chips de sector envuelvan sin desbordar el panel", () => {
@@ -117,10 +120,12 @@ describe("acciones del panel de edificio", () => {
   });
 
   it("resume el mismo alcance del listado y abre solo los no vistos", () => {
-    expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices) =>");
+    expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false) =>");
     expect(source).toContain("const total = counts.seen + counts.notSeen + counts.noIdentifier;");
-    expect(source).toContain("window.showUnseenInventoryInBuilding");
-    expect(source).toContain('popupDeviceMatchFilterState[featureId] = "not_seen";');
+    expect(source).toContain("window.toggleBuildingMatchInPanel");
+    expect(source).toContain("buildingMatchColorForView");
+    expect(source).toContain("buildingMatchLabelForView");
+    expect(source).toContain('popupDeviceMatchFilterState[featureId] = popupBuildingMatchState[featureId] ? "not_seen" : "";');
     expect(source).toContain('matchFilter === "not_seen"');
     expect(source).toContain("building-panel-inventory-match-summary");
   });

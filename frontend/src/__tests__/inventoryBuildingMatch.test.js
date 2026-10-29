@@ -32,4 +32,10 @@ describe("estado de coincidencias de inventario del panel", () => {
     expect(source).toContain("return { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices };");
     expect(source).toContain("const { activeQuery, activeType, activeSectorFilter, queryFilteredDevices, filteredDevices } = filterPanelDevices(");
   });
+
+  it("usa las salas del backend sin solicitar archivos estaticos inexistentes", () => {
+    expect(source).toContain("const [backendRooms, manualRooms] = await Promise.all([");
+    expect(source).not.toContain("data/interiors/${building.id}/floor_");
+    expect(source).not.toContain("data/interiors/${building.id}/building_detail.json");
+  });
 });

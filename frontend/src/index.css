@@ -1141,14 +1141,20 @@ body.session-warning-open .leaflet-container {
 }
 
 .equipment-panel-clear-filters {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin: 0;
-    min-height: 36px;
-    padding: 8px 12px;
+    width: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0;
     border: 1px solid #c2410c;
-    border-radius: 999px;
+    border-radius: 50%;
     background: #fff7ed;
     color: #c2410c;
-    font-size: 12px;
+    font-size: 20px;
+    line-height: 1;
     font-weight: 700;
 }
 
