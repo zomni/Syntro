@@ -24,9 +24,9 @@
     <stop offset="0" stop-color="#2F6FED" stop-opacity=".35"/><stop offset="1" stop-color="#2F6FED" stop-opacity="0"/>
   </radialGradient>
 </defs>
-<polygon points="256.0,24.0 456.9,140.0 456.9,372.0 256.0,488.0 55.1,372.0 55.1,140.0" fill="url(#kbg)" stroke="url(#krim)" stroke-width="7" stroke-linejoin="round"/>
+<polygon points="256.0,24.0 456.9,140.0 456.9,372.0 256.0,488.0 55.1,372.0 55.1,140.0" fill="none" stroke="url(#krim)" stroke-width="7" stroke-linejoin="round"/>
 <polygon points="256.0,40.0 443.1,148.0 443.1,364.0 256.0,472.0 68.9,364.0 68.9,148.0" fill="none" stroke="#67E8F9" stroke-opacity=".22" stroke-width="1.5" stroke-linejoin="round"/>
-<circle cx="256" cy="256" r="190" fill="url(#kglow)"/>
+<circle cx="256" cy="256" r="190" fill="none"/>
 <circle cx="256" cy="256" r="190" fill="none" stroke="#67E8F9" stroke-opacity=".55" stroke-width="3" stroke-linecap="round" stroke-dasharray="0.1 12.4"/>
 <g stroke="#061737" stroke-width="5" stroke-linejoin="round">
   <polygon points="134.8,186.0 256.0,256.0 256.0,396.0 134.8,326.0" fill="url(#kfl)"/>
