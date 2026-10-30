@@ -27,12 +27,10 @@ describe("branding assets", () => {
     expect(indexHtml).toContain('href="assets/branding/apple-touch-icon-180.png?v=20261030a"');
   });
 
-  test("mantiene transparentes las placas de los logos", () => {
+  test("conserva las placas internas de la identidad visual", () => {
     const mark = fs.readFileSync(path.join(brandingDir, "syntro-logo-mark.svg"), "utf8");
     const simpleIcon = fs.readFileSync(path.join(brandingDir, "syntro-icon-simple.svg"), "utf8");
-    expect(mark).toContain('fill="none" stroke="url(#mrim)"');
-    expect(mark).not.toContain('fill="url(#mbg)"');
-    expect(simpleIcon).toContain('fill="none" stroke="url(#irim)"');
-    expect(simpleIcon).not.toContain('fill="url(#ibg)"');
+    expect(mark).toContain('fill="url(#mbg)" stroke="url(#mrim)"');
+    expect(simpleIcon).toContain('fill="url(#ibg)" stroke="url(#irim)"');
   });
 });

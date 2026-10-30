@@ -5,8 +5,8 @@
   <linearGradient id="ibg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0E316F"/><stop offset="1" stop-color="#050F2B"/></linearGradient>
   <linearGradient id="irim" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67E8F9"/><stop offset=".5" stop-color="#2F6FED"/><stop offset="1" stop-color="#14B8A6"/></linearGradient>
 </defs>
-<polygon points="256.0,20.0 460.4,138.0 460.4,374.0 256.0,492.0 51.6,374.0 51.6,138.0" fill="none" stroke="url(#irim)" stroke-width="16" stroke-linejoin="round"/>
-<polygon points="256.0,116.0 377.2,186.0 377.2,326.0 256.0,396.0 134.8,326.0 134.8,186.0" fill="none"/>
+<polygon points="256.0,20.0 460.4,138.0 460.4,374.0 256.0,492.0 51.6,374.0 51.6,138.0" fill="url(#ibg)" stroke="url(#irim)" stroke-width="16" stroke-linejoin="round"/>
+<polygon points="256.0,116.0 377.2,186.0 377.2,326.0 256.0,396.0 134.8,326.0 134.8,186.0" fill="#2F6FED" fill-opacity=".35"/>
 <path d="M342 182 C322 128 176 126 176 196 C176 256 336 244 336 314 C336 384 188 384 168 330" fill="none" stroke="#FFFFFF" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
 <circle cx="342" cy="182" r="20" fill="#22D3EE" stroke="#061737" stroke-width="6"/>
 <circle cx="168" cy="330" r="30" fill="#FFB020" stroke="#061737" stroke-width="9"/>
