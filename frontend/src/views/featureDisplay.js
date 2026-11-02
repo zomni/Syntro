@@ -1356,6 +1356,11 @@ window.clearDevicePanelFilters = (featureId) => {
   popupBuildingMatchState[featureId] = false;
   popupViewState[featureId] = "devices";
   refreshCurrentPopup();
+  if (currentOpenLayer) {
+    renderFloorSectors(currentOpenLayer.feature).catch((error) =>
+      console.error("[mapa] error renderizando sectores al borrar filtros:", error)
+    );
+  }
 };
 
 window.toggleBuildingMatchInPanel = (featureId) => {

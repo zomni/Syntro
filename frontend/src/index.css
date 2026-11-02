@@ -3647,6 +3647,11 @@ body.map-building-panel #bLoc {
     display: none !important;
 }
 
+/* La vista del edificio ocupa el mapa y no muestra los controles de sesion. */
+body.map-building-panel .session-mode-badge {
+    display: none !important;
+}
+
 body.map-building-panel .building-view-map {
     animation: buildingPanelReveal 0.35s ease-out;
 }

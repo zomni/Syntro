@@ -162,6 +162,11 @@ describe("acciones del panel de edificio", () => {
 });
 
 describe("visibilidad de los sectores", () => {
+  it("refresca el mapa al borrar los filtros del panel", () => {
+    expect(source).toContain('window.clearDevicePanelFilters = (featureId) =>');
+    expect(source).toMatch(/window\.clearDevicePanelFilters = \(featureId\) => \{[\s\S]*?popupSectorFilterState\[featureId\] = "";[\s\S]*?renderFloorSectors\(currentOpenLayer\.feature\)/);
+  });
+
   it("usa fondo y borde visibles en reposo", () => {
     expect(source).toMatch(/const baseSectorStyle = \{[\s\S]*?weight: 1\.8,[\s\S]*?fillOpacity: 0\.16/);
   });
