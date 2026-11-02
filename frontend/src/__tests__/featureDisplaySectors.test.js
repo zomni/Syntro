@@ -120,7 +120,7 @@ describe("acciones del panel de edificio", () => {
   });
 
   it("resume el mismo alcance del listado y abre solo los no vistos", () => {
-    expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false) =>");
+    expect(source).toContain("const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false, scopeLabel = \"\") =>");
     expect(source).toContain("const total = counts.seen + counts.notSeen + counts.noIdentifier;");
     expect(source).toContain("window.toggleBuildingMatchInPanel");
     expect(source).toContain("getInventoryMatchRateForDevices");

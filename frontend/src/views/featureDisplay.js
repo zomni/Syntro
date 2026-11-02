@@ -695,8 +695,11 @@ const formatSyncTimestamp = (value) => {
   }
 
   return date.toLocaleString(DISPLAY_LOCALE, {
-    dateStyle: "short",
-    timeStyle: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
     timeZone: DISPLAY_TIME_ZONE,
   });
@@ -2241,7 +2244,9 @@ const buildDevicePageSizeHtml = (featureId, pageSize) => {
   }).join("");
 };
 
-const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false) => {
+const getInventoryMatchSegmentWidth = (count, total) => (total > 0 ? `${(count / total) * 100}%` : "0%");
+
+const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false, scopeLabel = "") => {
   const hasSnapshot = devices.some((device) => device.latestSnapshotAvailable);
   if (!hasSnapshot) {
     return `
@@ -2260,22 +2265,50 @@ const buildInventoryMatchSummaryHtml = (featureId, devices, matchActive = false)
   const snapshotDate = devices.find((device) => device.latestSnapshotObservedAtUtc)?.latestSnapshotObservedAtUtc;
   const total = counts.seen + counts.notSeen + counts.noIdentifier;
   const snapshotLabel = formatSyncTimestamp(snapshotDate);
+  const snapshotTooltip = `Última captura: ${snapshotLabel}. Este dato proviene de la última captura de red, no de la conexión en tiempo real.`;
+  const seenColor = buildingMatchColor(100) || "#16a34a";
+  const notSeenColor = buildingMatchColor(0) || "#dc2626";
+  const noIdentifierColor = "#2563eb";
+  const segments = [
+    { count: counts.seen, color: seenColor, label: "Conectados a red" },
+    { count: counts.notSeen, color: notSeenColor, label: "Sin conexión a red" },
+    { count: counts.noIdentifier, color: noIdentifierColor, label: "Sin identificador" },
+  ].filter((segment) => segment.count > 0);
+  const segmentBar = total > 0
+    ? segments
+      .map(
+        (segment) =>
+          `<span class="building-panel-inventory-match-segment" style="width:${getInventoryMatchSegmentWidth(segment.count, total)}; background:${segment.color};" title="${escapeHtml(`${segment.label}: ${segment.count}`)}"></span>`
+      )
+      .join("")
+    : "";
+  const countLabels = [
+    counts.seen > 0 ? `<span><i style="background:${seenColor};"></i>${counts.seen} conectados a red</span>` : "",
+    counts.notSeen > 0 ? `<span><i style="background:${notSeenColor};"></i>${counts.notSeen} sin conexión a red</span>` : "",
+    counts.noIdentifier > 0 ? `<span><i style="background:${noIdentifierColor};"></i>${counts.noIdentifier} sin identificador</span>` : "",
+  ].filter(Boolean).join("");
+  const scopeTitle = scopeLabel ? `Coincidencias · ${scopeLabel}` : "Coincidencias";
 
   return `
     <div class="building-panel-inventory-match">
-      <button
-        type="button"
-        class="floorButton equipment-panel-action-button building-panel-inventory-match-button"
-        style="${getActionButtonStyle()}"
-        onclick="window.toggleBuildingMatchInPanel && window.toggleBuildingMatchInPanel('${escapeHtml(featureId)}')"
-        title="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
-        aria-label="${matchActive ? "Ocultar coincidencias de inventario" : "Mostrar coincidencias de inventario"}"
-        aria-pressed="${String(matchActive)}"
-      ><span class="session-mode-match-icon" aria-hidden="true"></span>${matchActive ? "Ocultar coincidencias" : "Coincidencias de inventario"}</button>
-      <div class="building-panel-inventory-match-summary" aria-label="Resumen de coincidencias de inventario">
-        <span>${counts.seen} conectados a red · ${counts.notSeen} sin conexión a red · ${counts.noIdentifier} sin identificador · ${total} equipos</span>
-        <span>Última captura: ${escapeHtml(snapshotLabel)}</span>
+      <div class="building-panel-inventory-match-heading">
+        <strong>${escapeHtml(scopeTitle)}</strong>
+        <div class="building-panel-inventory-match-actions">
+          <button
+            type="button"
+            class="building-panel-inventory-match-toggle"
+            onclick="window.toggleBuildingMatchInPanel && window.toggleBuildingMatchInPanel('${escapeHtml(featureId)}')"
+            title="${matchActive ? "Ocultar coincidencias de inventario en el mapa" : "Mostrar coincidencias de inventario en el mapa"}"
+            aria-label="${matchActive ? "Ocultar coincidencias de inventario en el mapa" : "Mostrar coincidencias de inventario en el mapa"}"
+            aria-pressed="${String(matchActive)}"
+          ><span class="session-mode-match-icon" aria-hidden="true"></span></button>
+          <span class="building-panel-inventory-match-info" role="img" aria-label="${escapeHtml(snapshotTooltip)}" title="${escapeHtml(snapshotTooltip)}">i</span>
+        </div>
       </div>
+      ${total > 0
+        ? `<div class="building-panel-inventory-match-bar" role="img" aria-label="Distribución de coincidencias de inventario">${segmentBar}</div>
+           <div class="building-panel-inventory-match-summary" aria-label="Resumen de coincidencias de inventario">${countLabels}</div>`
+        : `<div class="building-panel-inventory-match-empty">Sin equipos</div>`}
     </div>`;
 };
 
@@ -2920,7 +2953,8 @@ const getFeaturePopupHtml = async (feature, { onShellReady } = {}) => {
     inventoryMatchHtml = buildInventoryMatchSummaryHtml(
       featureId,
       devicesForView,
-      Boolean(popupBuildingMatchState[featureId])
+      Boolean(popupBuildingMatchState[featureId]),
+      deviceScope === "building" ? "Edificio completo" : `Piso ${floorLabel}`
     );
     const unassignedCount = scopeDevices.filter((device) => !device.roomId).length;
     const sectorOptionsForFilter = canManageEquipment && unassignedCount > 0
