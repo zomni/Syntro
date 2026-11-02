@@ -11,6 +11,7 @@ import {
 } from "@app/addData";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel } from "../config/staticIconCatalog.js";
 import { loadSession } from "../utils/session.js";
+import { fetchInflight, fetchMutation } from "../utils/inflightFetch.js";
 import {
   getAdminMapToolSection,
   requestAdminMapToolMode,
@@ -131,7 +132,7 @@ const attachDragHandlers = () => {
 
 const postMarkerBackend = async (marker) => {
   try {
-    const resp = await fetch(`${BACKEND_API_URL}/api/map-markers`, {
+    const resp = await fetchMutation(`${BACKEND_API_URL}/api/map-markers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -165,7 +166,7 @@ const postMarkerBackend = async (marker) => {
 
 const putMarkerBackend = async (externalId, changes) => {
   try {
-    const resp = await fetch(`${BACKEND_API_URL}/api/map-markers/${externalId}`, {
+    const resp = await fetchMutation(`${BACKEND_API_URL}/api/map-markers/${externalId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -184,7 +185,7 @@ const putMarkerBackend = async (externalId, changes) => {
 
 const deleteMarkerBackend = async (externalId) => {
   try {
-    const resp = await fetch(`${BACKEND_API_URL}/api/map-markers/${externalId}`, {
+    const resp = await fetchMutation(`${BACKEND_API_URL}/api/map-markers/${externalId}`, {
       method: "DELETE",
       credentials: "include",
     });
@@ -273,7 +274,7 @@ const addEditorInteractiveMarker = (marker) => {
 const fetchCampusMarkers = async () => {
   let allGlobal = [];
   try {
-    const resp = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=-1`, { cache: "no-store" });
+    const resp = await fetchInflight(`${BACKEND_API_URL}/api/map-markers?floor=-1`, { cache: "no-store" });
     allGlobal = resp.ok ? await resp.json() : [];
   } catch {
     return;

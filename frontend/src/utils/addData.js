@@ -33,6 +33,7 @@ import { pointInRing } from "../utils/geometry.js";
 import { getActiveCampus } from "./goToCampus.js";
 import { getSite } from "../config/siteConfig.js";
 import { fetchRevalidated, resetRevalidatedFetch } from "./revalidatedFetch.js";
+import { fetchInflight } from "./inflightFetch.js";
 
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
@@ -352,7 +353,7 @@ const addManualRoomPolygonsForFloor = async (floorNumber, expectedRenderSequence
 
   let rooms = [];
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/manual-rooms`, {
+    const response = await fetchInflight(`${BACKEND_API_URL}/api/manual-rooms`, {
       cache: "no-store",
     });
     rooms = response.ok ? await response.json() : [];
@@ -589,7 +590,7 @@ const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
 
   let markers = [];
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=${floorNumber}`, {
+    const response = await fetchInflight(`${BACKEND_API_URL}/api/map-markers?floor=${floorNumber}`, {
       cache: "no-store",
     });
     markers = response.ok ? await response.json() : [];
@@ -604,7 +605,7 @@ const addMapMarkersForFloor = async (floorNumber, expectedRenderSequence) => {
 
   let globalMarkers = [];
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/map-markers?floor=-1`, {
+    const response = await fetchInflight(`${BACKEND_API_URL}/api/map-markers?floor=-1`, {
       cache: "no-store",
     });
     globalMarkers = response.ok ? await response.json() : [];

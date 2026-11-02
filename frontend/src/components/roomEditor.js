@@ -19,6 +19,7 @@ import { divideBuildingIntoSectors, sectorCountForArea } from "../utils/sectorDi
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
 import { appConfirm, appPrompt } from "../utils/appDialog.js";
 import { loadSession } from "../utils/session.js";
+import { fetchInflight, fetchMutation } from "../utils/inflightFetch.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -394,7 +395,7 @@ const fetchRoomsForFloor = async (buildingExternalId, floor) => {
 };
 
 const fetchMarkersForFloor = async (buildingExternalId, floor) => {
-  const response = await fetch(
+  const response = await fetchInflight(
     `${getApiUrl()}/api/map-markers?buildingExternalId=${encodeURIComponent(buildingExternalId)}&floor=${floor}`,
     { credentials: "include", cache: "no-store" }
   );
@@ -2954,7 +2955,7 @@ const saveRoomEditorMarkers = async (state, pushError) => {
   const blockErrors = [];
 
   for (const externalId of state.removedMarkerExternalIds || []) {
-    const res = await fetch(`${getApiUrl()}/api/map-markers/${encodeURIComponent(externalId)}`, {
+    const res = await fetchMutation(`${getApiUrl()}/api/map-markers/${encodeURIComponent(externalId)}`, {
       method: "DELETE",
       credentials: "include",
     });
@@ -2970,7 +2971,7 @@ const saveRoomEditorMarkers = async (state, pushError) => {
 
   for (const marker of state.markers || []) {
     if (marker.isNew) {
-      const res = await fetch(`${getApiUrl()}/api/map-markers`, {
+      const res = await fetchMutation(`${getApiUrl()}/api/map-markers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -2994,7 +2995,7 @@ const saveRoomEditorMarkers = async (state, pushError) => {
         marker.isNew = false;
       }
     } else {
-      const res = await fetch(`${getApiUrl()}/api/map-markers/${encodeURIComponent(marker.externalId)}`, {
+      const res = await fetchMutation(`${getApiUrl()}/api/map-markers/${encodeURIComponent(marker.externalId)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -3050,7 +3051,7 @@ const saveRoomEditor = async () => {
 
   try {
     for (const externalId of currentEditorState.removedManualRoomExternalIds || []) {
-      const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(externalId)}`, {
+      const res = await fetchMutation(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(externalId)}`, {
         method: "DELETE",
         credentials: "include",
       });
@@ -3062,7 +3063,7 @@ const saveRoomEditor = async () => {
     }
 
     for (const externalId of currentEditorState.removedSyncedRoomExternalIds || []) {
-      const res = await fetch(`${getApiUrl()}/api/synced-rooms/${encodeURIComponent(externalId)}`, {
+      const res = await fetchMutation(`${getApiUrl()}/api/synced-rooms/${encodeURIComponent(externalId)}`, {
         method: "DELETE",
         credentials: "include",
       });
@@ -3076,7 +3077,7 @@ const saveRoomEditor = async () => {
     for (const room of currentEditorState.rooms) {
       if (room.isNew) {
         const coordinates = parseGeometryToCoordinates(room.geometryJson);
-        const res = await fetch(`${getApiUrl()}/api/manual-rooms`, {
+        const res = await fetchMutation(`${getApiUrl()}/api/manual-rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -3111,7 +3112,7 @@ const saveRoomEditor = async () => {
           continue;
         }
         const coordinates = parseGeometryToCoordinates(room.geometryJson);
-        const res = await fetch(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
+        const res = await fetchMutation(`${getApiUrl()}/api/manual-rooms/${encodeURIComponent(room.externalId)}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
@@ -3451,7 +3452,7 @@ const saveQuickSuggestions = async () => {
   setAdminMapToolsStatus("Guardando sugerencias...");
 
   try {
-    const response = await fetch(`${getApiUrl()}/api/room-layouts/bulk-save`, {
+    const response = await fetchMutation(`${getApiUrl()}/api/room-layouts/bulk-save`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",

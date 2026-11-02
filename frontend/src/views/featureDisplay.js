@@ -15,6 +15,7 @@ import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/building
 import { pointInRing, ringCentroidLatLng } from "../utils/roomEditorGeometry.js";
 import { loadSession } from "../utils/session.js";
 import { fetchRevalidated } from "../utils/revalidatedFetch.js";
+import { fetchInflight, fetchMutation } from "../utils/inflightFetch.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -940,7 +941,7 @@ const loadBackendRoomsForBuilding = async (building) => {
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchInflight(
       `${BACKEND_API_URL}/api/synced-rooms?buildingExternalId=${encodeURIComponent(building.id)}`,
       { cache: "no-store" }
     );
@@ -998,7 +999,7 @@ const loadManualRoomsForBuilding = async (building) => {
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchInflight(
       `${BACKEND_API_URL}/api/manual-rooms?buildingExternalId=${encodeURIComponent(building.id)}`,
       { cache: "no-store" }
     );
@@ -1031,7 +1032,7 @@ const loadBackendInventoryForBuilding = async (building) => {
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchInflight(
       `${BACKEND_API_URL}/api/inventory-import/items?assignedBuildingExternalId=${encodeURIComponent(
         building.id
       )}`,
@@ -3309,7 +3310,7 @@ const assignEquipmentToSector = async (itemId, roomExternalId) => {
   if (!itemId) return false;
 
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/inventory-assignments/items/${encodeURIComponent(itemId)}`, {
+    const response = await fetchMutation(`${BACKEND_API_URL}/api/inventory-assignments/items/${encodeURIComponent(itemId)}`, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -3533,7 +3534,7 @@ const renderFloorSectors = async (feature) => {
   const [allRooms, backendInventoryItems, mapMarkers] = await Promise.all([
     loadRoomsForBuilding(building),
     canViewEquipment ? loadBackendInventoryForBuilding(building) : Promise.resolve([]),
-    fetch(
+    fetchInflight(
       `${BACKEND_API_URL}/api/map-markers?buildingExternalId=${encodeURIComponent(
         featureId
       )}&floor=${encodeURIComponent(floor)}`,

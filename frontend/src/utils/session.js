@@ -1,8 +1,10 @@
 import { appConfig } from "../config/appConfig.js";
+import { clearInflightFetches } from "./inflightFetch.js";
 
 let sessionPromise = null;
 
 export const loadSession = ({ forceRefresh = false } = {}) => {
+  if (forceRefresh) clearInflightFetches();
   if (sessionPromise && !forceRefresh) {
     return sessionPromise;
   }
@@ -18,5 +20,6 @@ export const loadSession = ({ forceRefresh = false } = {}) => {
 };
 
 export const resetSessionCache = () => {
+  clearInflightFetches();
   sessionPromise = null;
 };

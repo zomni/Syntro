@@ -9,6 +9,7 @@ import campuses from "../data/campuses.js";
 import { appConfig } from "./appConfig.js";
 import { identifiers } from "../utils/identifiers.js";
 import { loadSession } from "../utils/session.js";
+import { clearInflightFetches, fetchInflight } from "../utils/inflightFetch.js";
 
 const parseStaticSite = (campusKey, config) => ({
   campusKey,
@@ -36,7 +37,7 @@ let sitesSource = "static";
 let sitesLoadedPromise = null;
 let isBackendAuthenticated = null;
 let serverOverrides = null;
-let serverOverridesPromise = null;
+let overridesVersion = 0;
 const viewportStorageKey = "syntro-site-viewport-overrides";
 const boundsStorageKey = "syntro-site-bounds-overrides";
 
@@ -85,30 +86,19 @@ const writeBoundsOverride = (campusKey, bounds) => {
 };
 
 const fetchServerOverrides = async () => {
-  if (serverOverridesPromise) {
-    return serverOverridesPromise;
-  }
-
-  serverOverridesPromise = (async () => {
-    try {
-      const response = await fetch(`${appConfig.apiBaseUrl}/api/sites/viewport-overrides`, {
+  const version = overridesVersion;
+  try {
+      const response = await fetchInflight(`${appConfig.apiBaseUrl}/api/sites/viewport-overrides`, {
         cache: "no-store",
       });
       if (response.ok) {
         const data = await response.json();
-        if (data && typeof data === "object") {
+        if (version === overridesVersion && data && typeof data === "object") {
           serverOverrides = data;
         }
       }
-    } catch {
+  } catch {
       // Backend no disponible, usar fallback localStorage.
-    }
-  })();
-
-  try {
-    await serverOverridesPromise;
-  } finally {
-    serverOverridesPromise = null;
   }
 };
 
@@ -213,6 +203,9 @@ export const updateSiteViewport = (campusKey, viewport) => {
     return false;
   }
 
+  overridesVersion += 1;
+  clearInflightFetches();
+
   site.minZoom = minZoom;
   site.maxZoom = maxZoom;
   writeViewportOverride(campusKey, minZoom, maxZoom);
@@ -232,6 +225,8 @@ export const updateSiteViewport = (campusKey, viewport) => {
 export const updateSiteBounds = (campusKey, bounds) => {
   const site = sites[campusKey];
   if (!site || !Array.isArray(bounds) || bounds.length < 3) return false;
+  overridesVersion += 1;
+  clearInflightFetches();
   site.bounds = bounds.map((point) => [Number(point[0]), Number(point[1])]);
   writeBoundsOverride(campusKey, site.bounds);
 
@@ -250,6 +245,8 @@ export const resetSiteBounds = (campusKey) => {
   const site = sites[campusKey];
   const original = campuses[campusKey];
   if (!site || !original || !Array.isArray(original.bounds)) return false;
+  overridesVersion += 1;
+  clearInflightFetches();
   site.bounds = original.bounds.map((point) => [Number(point[0]), Number(point[1])]);
   const overrides = readBoundsOverrides();
   delete overrides[campusKey];
@@ -269,7 +266,8 @@ export const resetSitesCache = (keepStatic = true) => {
   sitesLoadedPromise = null;
   isBackendAuthenticated = null;
   serverOverrides = null;
-  serverOverridesPromise = null;
+  overridesVersion += 1;
+  clearInflightFetches();
   sites = keepStatic ? applyViewportOverrides(normalizeStaticSites()) : {};
   sitesSource = "static";
 };

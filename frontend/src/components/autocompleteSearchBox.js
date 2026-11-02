@@ -12,6 +12,7 @@ import { mergeGeoJsonWithSearch, primeSearchMetadata } from "@app/searchMetadata
 import { queryFloorButtons } from "../utils/floorButtons.js";
 import { BASE_FLOOR_NUMBER } from "../utils/buildingCatalog.js";
 import { computeDropDownPosition, resolveResultIcon } from "../utils/searchDropDown.js";
+import { fetchInflight } from "../utils/inflightFetch.js";
 
 // import "../lib/jquery/jquery-3.6.0.min.js"; // Not working with webpack
 
@@ -331,7 +332,7 @@ import Fuse from "../lib/fuse/fuse.basic.esm.min.js";
     }
 
     try {
-      const response = await fetch(
+      const response = await fetchInflight(
         `${BACKEND_API_URL}/api/inventory-import/items?search=${encodeURIComponent(query)}`,
         { cache: "no-store", credentials: "include" }
       );

@@ -11,6 +11,7 @@ import { identifiers } from "../utils/identifiers.js";
 import { validateZoomRange } from "../utils/viewportRules.js";
 import { registerBuildingUndo } from "@app/walkingRouteEditor";
 import { loadSession } from "../utils/session.js";
+import { fetchMutation } from "../utils/inflightFetch.js";
 
 const controlsClass = "site-viewport-controls";
 const statusClass = "site-viewport-status";
@@ -171,7 +172,7 @@ const saveBoundary = async () => {
   showStatus("Guardando limite...");
 
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
+    const response = await fetchMutation(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
@@ -218,7 +219,7 @@ const restoreBoundary = async () => {
   showStatus("Restaurando limite...");
 
   try {
-    await fetch(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
+    await fetchMutation(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/bounds`, {
       method: "DELETE",
       credentials: "include",
       cache: "no-store",
@@ -279,7 +280,7 @@ const saveViewport = async () => {
   showStatus("Guardando...");
 
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/viewport`, {
+    const response = await fetchMutation(`${BACKEND_API_URL}/api/sites/${encodeURIComponent(campus)}/viewport`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
