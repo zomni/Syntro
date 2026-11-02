@@ -25,7 +25,7 @@ const firstCampus = resolveFirstCampus();
 
 export const map = L.map("map", {
   zoomControl: false,
-  attributionControl: false,
+  attributionControl: true,
   maxBounds: firstCampus.bounds ? firstCampus.bounds.pad(0.02) : undefined,
   maxBoundsViscosity: 1.0,
 }).setView(firstCampus.center, firstCampus.zoom);
@@ -35,6 +35,7 @@ export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/
   keepBuffer: 8,
   updateWhenIdle: false,
   updateWhenZooming: true,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 });
 
 export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
@@ -42,16 +43,33 @@ export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGI
   keepBuffer: 8,
   updateWhenIdle: false,
   updateWhenZooming: true,
-  attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGPSW, and the GIS User Community",
+  attribution: 'Tiles &copy; Esri and contributors; fallback &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 });
+
+let tileWarning;
+const showTileWarning = () => {
+  if (!tileWarning) {
+    tileWarning = document.createElement("div");
+    tileWarning.className = "map-tile-warning";
+    tileWarning.setAttribute("role", "status");
+    tileWarning.textContent = "No se pudieron cargar algunos mosaicos.";
+    map.getContainer().appendChild(tileWarning);
+  }
+  tileWarning.hidden = false;
+};
 
 const installTileFallback = (layer, fallbackTemplate) => {
   layer.on("tileerror", (event) => {
     const tile = event?.tile;
-    if (!tile || tile.dataset.syntroFallbackAttempted === "true") return;
+    if (!tile) return;
+    if (tile.dataset.syntroFallbackAttempted === "true") {
+      showTileWarning();
+      return;
+    }
     tile.dataset.syntroFallbackAttempted = "true";
     const coords = event.coords;
     if (!coords) return;
+    tile.addEventListener("error", showTileWarning, { once: true });
     tile.src = L.Util.template(fallbackTemplate, {
       s: "a",
       x: coords.x,
@@ -64,9 +82,15 @@ const installTileFallback = (layer, fallbackTemplate) => {
 installTileFallback(osmLayer, "https://tile.openstreetmap.de/{z}/{x}/{y}.png");
 installTileFallback(satelliteLayer, "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png");
 
-// Street tiles are the default for normal users; satellite imagery remains an
-// explicit opt-in through the map view toggle.
-osmLayer.addTo(map);
+export const getSatellitePreference = () => {
+  try {
+    return window.localStorage.getItem("syntro-map-layer") !== "streets";
+  } catch {
+    return true;
+  }
+};
+
+(getSatellitePreference() ? satelliteLayer : osmLayer).addTo(map);
 
 let locationTrackingActive = false;
 let userLocationMarker = null;

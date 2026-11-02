@@ -3647,6 +3647,19 @@ body.map-building-panel #bLoc {
     display: none !important;
 }
 
+.map-tile-warning {
+  position: absolute;
+  bottom: 28px;
+  left: 8px;
+  z-index: 1000;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #7c3d12;
+  font-size: 12px;
+  pointer-events: none;
+}
+
 .map-auxiliary-loading::after {
   content: "Actualizando capas...";
   position: absolute;

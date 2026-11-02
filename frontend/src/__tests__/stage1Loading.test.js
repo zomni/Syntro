@@ -38,8 +38,8 @@ describe("carga progresiva de la etapa 1", () => {
     expect(cssSource).toContain(".manual-room-polygon");
   });
 
-  test("la vista normal inicia con calles y satelite queda opt-in", () => {
-    expect(mapSource).toMatch(/osmLayer\.addTo\(map\)/);
-    expect(mapSource).not.toMatch(/satelliteLayer\)\.addTo\(map\)/);
+  test("la vista inicia con satelite salvo preferencia guardada de calles", () => {
+    expect(mapSource).toContain('getItem("syntro-map-layer") !== "streets"');
+    expect(mapSource).toContain("getSatellitePreference() ? satelliteLayer : osmLayer");
   });
 });

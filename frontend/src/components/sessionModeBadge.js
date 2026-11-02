@@ -1,4 +1,4 @@
-import { BACKEND_API_URL, map, osmLayer, satelliteLayer } from "../views/map.js";
+import { BACKEND_API_URL, map, osmLayer, satelliteLayer, getSatellitePreference } from "../views/map.js";
 import { identifiers } from "../utils/identifiers.js";
 import { goTo } from "@app/goToCampus";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
@@ -12,7 +12,7 @@ const sessionPollMs = 10000;
 let lastSessionKey = "";
 let pollHandle = null;
 let minimalMapMode = true;
-let satelliteActive = false;
+let satelliteActive = getSatellitePreference();
 let buildingMatchActive = false;
 
 const updateMinimalMapMode = () => {
@@ -108,6 +108,11 @@ const ensureSessionToggleButtons = (session) => {
       event.preventDefault();
       event.stopPropagation();
       satelliteActive = !satelliteActive;
+      try {
+        window.localStorage.setItem("syntro-map-layer", satelliteActive ? "satellite" : "streets");
+      } catch {
+        // The selected layer still works when storage is unavailable.
+      }
       if (satelliteActive) {
         osmLayer.remove();
         satelliteLayer.addTo(map);
@@ -306,10 +311,17 @@ const refreshSessionBadge = async ({ forceRefresh = false } = {}) => {
 export const initSessionModeBadge = async () => {
   await refreshSessionBadge();
 
-  window.addEventListener("focus", () => refreshSessionBadge({ forceRefresh: true }));
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void refreshSessionBadge({ forceRefresh: true });
+  });
+  window.addEventListener("focus", () => {
+    if (document.visibilityState === "visible") void refreshSessionBadge({ forceRefresh: true });
+  });
   window.addEventListener("resize", positionInventoryLink);
 
   if (!pollHandle) {
-    pollHandle = window.setInterval(() => refreshSessionBadge({ forceRefresh: true }), sessionPollMs);
+    pollHandle = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshSessionBadge({ forceRefresh: true });
+    }, sessionPollMs);
   }
 };
