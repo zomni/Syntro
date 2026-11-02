@@ -3,7 +3,8 @@
 /////////////////////////////////////////////////////////////////////////////////
 
 import { map, HOST_URL, BACKEND_API_URL } from "../views/map.js";
-import { getCatalogFileName, getPrimaryCampusKey } from "../utils/campusConfig.js";
+import { getCatalogFileName, getPrimaryCampusKey, getCurrentCampusKey } from "../utils/campusConfig.js";
+import { createBuildingNameLabelController, getBuildingDisplayName } from "../utils/buildingNameLabelController.js";
 import { mergeCatalogWithSearch, resetSearchMetadataCaches } from "@app/searchMetadata";
 import { refreshCurrentMapData, goTo } from "@app/goToCampus";
 import { resetBuildingsCatalogCache, buildStaticMarkerIcon, staticMarkerSizeForZoom } from "@app/addData";
@@ -1094,24 +1095,7 @@ const normalizeImportedInventoryItems = (items) => {
   }));
 };
 
-const getFeatureDisplayName = (feature, building) => {
-  if (building) {
-    return (
-      building.searchTitle ||
-      building.realName ||
-      building.displayName ||
-      feature?.properties?.name ||
-      feature?.properties?.sourceId ||
-      "Edificio sin nombre"
-    );
-  }
-
-  return (
-    feature?.properties?.name ||
-    feature?.properties?.sourceId ||
-    "Edificio sin nombre"
-  );
-};
+const getFeatureDisplayName = getBuildingDisplayName;
 
 const getFeatureMapLabel = (feature) => {
   const properties = feature?.properties || {};
@@ -1149,6 +1133,17 @@ const compactMapLabel = (value) => {
   return `${compact || label.slice(0, maxLength - 3)}...`;
 };
 
+const buildingNameLabels = createBuildingNameLabelController({
+  loadCatalog: loadBuildingsCatalog,
+  getCampus: getCurrentCampusKey,
+  render: (feature, layer, building) => {
+    const fullLabel = building ? getFeatureDisplayName(feature, building) : getFeatureMapLabel(feature);
+    const content = `<span title="${escapeHtml(fullLabel)}">${escapeHtml(compactMapLabel(fullLabel))}</span>`;
+    layer.setTooltipContent(content);
+    scheduleReconcileBuildingNameLabels();
+  },
+});
+
 const bindBuildingNameLabel = (feature, layer) => {
   const fullLabel = getFeatureMapLabel(feature);
   const compactLabel = compactMapLabel(fullLabel);
@@ -1163,6 +1158,10 @@ const bindBuildingNameLabel = (feature, layer) => {
       interactive: false,
     }
   );
+
+  buildingNameLabels.add(feature, layer);
+  layer.on("remove", () => buildingNameLabels.remove(layer));
+  layer.on("add", () => buildingNameLabels.add(feature, layer));
 
   if (buildingLabelsVisible) {
     layer.openTooltip?.();
@@ -4411,10 +4410,12 @@ window.addEventListener("syntro-session-changed", (event) => {
 });
 
 window.addEventListener("syntro-campus-changed", () => {
+  buildingNameLabels.clear();
   clearMapEquipmentState();
 });
 
 window.addEventListener("syntro-map-data-refreshed", () => {
+  void buildingNameLabels.refresh();
   window.setTimeout(() => {
     setBuildingLabelsVisible(buildingLabelsVisible);
     scheduleReconcileBuildingNameLabels();
