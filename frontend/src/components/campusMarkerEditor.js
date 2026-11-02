@@ -10,6 +10,7 @@ import {
   CAMPUS_MARKER_BUILDING_ID,
 } from "@app/addData";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel } from "../config/staticIconCatalog.js";
+import { loadSession } from "../utils/session.js";
 import {
   getAdminMapToolSection,
   requestAdminMapToolMode,
@@ -819,16 +820,7 @@ export const syncCampusMarkerEditorForSession = (session) => {
 };
 
 export const initCampusMarkerEditor = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    const session = response.ok ? await response.json() : {};
-    syncCampusMarkerEditorForSession(session);
-  } catch {
-    syncCampusMarkerEditorForSession({});
-  }
+  syncCampusMarkerEditorForSession((await loadSession()) || {});
 };
 
 // ─── Event listeners ────────────────────────────────────────────────────────

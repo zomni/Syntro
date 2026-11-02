@@ -15,6 +15,7 @@ import {
 } from "@app/adminMapToolsPanel";
 import { registerBuildingUndo } from "@app/walkingRouteEditor";
 import { getSelectedMapFloor } from "../utils/floorButtons.js";
+import { loadSession } from "../utils/session.js";
 
 const controlsId = "building-geometry-editor-controls";
 const editButtonId = "building-shape-editor-button";
@@ -500,16 +501,7 @@ export const syncBuildingGeometryEditorForSession = (session) => {
 };
 
 export const initBuildingGeometryEditor = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    const session = response.ok ? await response.json() : {};
-    syncBuildingGeometryEditorForSession(session);
-  } catch {
-    syncBuildingGeometryEditorForSession({});
-  }
+  syncBuildingGeometryEditorForSession((await loadSession()) || {});
 };
 
 window.addEventListener("syntro-session-changed", (event) => {

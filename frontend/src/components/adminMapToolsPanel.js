@@ -1,5 +1,6 @@
 import { identifiers } from "../utils/identifiers.js";
 import { BACKEND_API_URL } from "../views/map.js";
+import { loadSession } from "../utils/session.js";
 
 const panelId = "admin-map-tools-panel";
 const buttonsId = "admin-map-tools-buttons";
@@ -114,12 +115,8 @@ const recheckSessionAndCollapse = async () => {
   const buttons = document.getElementById(buttonsId);
   if (!buttons || buttons.hidden) return;
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!response.ok) return;
-    const session = await response.json();
+    const session = await loadSession({ forceRefresh: true });
+    if (!session) return;
     if (session?.isAuthenticated === false) {
       collapseAdminMapToolsPanel();
       const panel = document.getElementById(panelId);

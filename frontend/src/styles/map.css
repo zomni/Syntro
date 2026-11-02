@@ -15,6 +15,7 @@ body,
 #map {
     display: flex;
     flex-direction: column;
+    background: #e8eef1;
 }
 
 .marker_circle {

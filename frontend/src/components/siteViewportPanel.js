@@ -10,6 +10,7 @@ import {
 import { identifiers } from "../utils/identifiers.js";
 import { validateZoomRange } from "../utils/viewportRules.js";
 import { registerBuildingUndo } from "@app/walkingRouteEditor";
+import { loadSession } from "../utils/session.js";
 
 const controlsClass = "site-viewport-controls";
 const statusClass = "site-viewport-status";
@@ -19,19 +20,6 @@ let boundaryMarkers = [];
 let boundaryPoints = [];
 let boundaryOriginal = [];
 let boundaryMapDraggingWasEnabled = true;
-
-const loadSession = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
-};
 
 const showStatus = (message, isError = false) => {
   const status = document.querySelector(`.${controlsClass} .${statusClass}`);

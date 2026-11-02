@@ -57,17 +57,6 @@ if (bootstrapLoadingOverlay) {
   bootstrapLoadingOverlay.hidden = false;
 }
 
-window.addEventListener(
-  identifiers.events.mapDataRefreshed,
-  () => {
-    const overlay = document.getElementById("map-loading-overlay");
-    if (overlay) {
-      overlay.hidden = true;
-    }
-  },
-  { once: true }
-);
-
 loadSites();
 
 const urlParams = new URLSearchParams(window.location.search);

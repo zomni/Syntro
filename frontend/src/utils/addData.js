@@ -24,8 +24,6 @@ import { getCatalogFileName, getCurrentCampusKey } from "./campusConfig.js";
 import { computeAllowedBuildingIdsForFloor, BASE_FLOOR_NUMBER } from "./buildingCatalog.js";
 import {
   loadManualBuildings,
-  mergeCatalogWithSearch,
-  mergeGeoJsonWithSearch,
   loadBuildingGeometryOverrides,
   pickGeometryOverride,
 } from "@app/searchMetadata";
@@ -74,9 +72,10 @@ const loadBuildingsCatalog = async (campus = getCurrentCampusKey()) => {
     }
 
     const data = await response.json();
-    const mergedData = await mergeCatalogWithSearch(data, campus);
-    buildingsCatalogCache.set(campus, mergedData);
-    return mergedData;
+    // Floor selection only needs the static catalog. Search metadata and the
+    // administrative backup are loaded on demand by the search/editor flows.
+    buildingsCatalogCache.set(campus, data);
+    return data;
   } catch (error) {
     console.error("Error cargando catálogo de edificios:", error);
     return { buildings: [] };
@@ -231,9 +230,8 @@ const addBaseFootprintsForMissingBuildings = async (
     if (Array.isArray(baseFloorFeatures)) {
       sourceFeatures = baseFloorFeatures;
     } else {
-      const baseJson = await loadFloorGeoJson(school, location, BASE_FLOOR_NUMBER);
-      const enrichedBaseJson = await mergeGeoJsonWithSearch(baseJson, location, floorNumber);
-      sourceFeatures = enrichedBaseJson.features || [];
+       const baseJson = await loadFloorGeoJson(school, location, BASE_FLOOR_NUMBER);
+       sourceFeatures = baseJson.features || [];
     }
 
     const fallbackFeatures = sourceFeatures
@@ -344,6 +342,15 @@ const hideMapLoading = () => {
   const overlay = document.getElementById("map-loading-overlay");
   if (overlay) {
     overlay.hidden = true;
+  }
+};
+
+const setAuxiliaryLoading = (isLoading, expectedRenderSequence) => {
+  if (expectedRenderSequence !== renderSequence) return;
+  const container = document.getElementById("map");
+  if (container) {
+    container.classList.toggle("map-auxiliary-loading", isLoading);
+    container.setAttribute("aria-busy", String(isLoading));
   }
 };
 
@@ -461,7 +468,11 @@ export const renderMapMarkerLayer = (marker) => {
   if (!Array.isArray(marker.longitude) && typeof marker.longitude !== "number") return null;
 
   const layer = L.marker([marker.latitude, marker.longitude], {
-    icon: buildStaticMarkerIcon(marker.iconKey, staticMarkerSizeForZoom(map.getZoom())),
+    icon: buildStaticMarkerIcon(
+      marker.iconKey,
+      staticMarkerSizeForZoom(map.getZoom()),
+      "map-static-marker-icon map-auxiliary-layer"
+    ),
     pane: "iconsPane",
     interactive: false,
     keyboard: false,
@@ -653,8 +664,8 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       return;
     }
 
-    const enrichedJson = floorJson ? await mergeGeoJsonWithSearch(floorJson, location, floorNumber) : { features: [] };
-    const baseFeatures = Array.isArray(enrichedJson.features) ? enrichedJson.features : [];
+    const renderJson = floorJson || { features: [] };
+    const baseFeatures = Array.isArray(renderJson.features) ? renderJson.features : [];
 
     if (expectedRenderSequence !== renderSequence) {
       return;
@@ -669,11 +680,11 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       : baseFeatures;
 
     const filteredJson = {
-      ...enrichedJson,
+       ...renderJson,
       features: filteredFeatures,
     };
 
-    const renderJson = await addBaseFootprintsForMissingBuildings(
+    const filteredRenderJson = await addBaseFootprintsForMissingBuildings(
       school,
       location,
       floorNumber,
@@ -681,17 +692,15 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       allowedBuildingIds,
       Number(floorNumber) === BASE_FLOOR_NUMBER ? baseFeatures : null
     );
-    const manualFeatures = await loadManualFeaturesForFloor(floorNumber);
-
     if (expectedRenderSequence !== renderSequence) {
       return;
     }
 
-    const featuresToRender = [...(renderJson.features || []), ...manualFeatures];
+    const featuresToRender = filteredRenderJson.features || [];
 
     featuresLayerGroup(
       {
-        ...renderJson,
+        ...filteredRenderJson,
         features: featuresToRender,
       },
       expectedRenderSequence
@@ -702,8 +711,15 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
     // The main building layer is usable before auxiliary backend layers arrive.
     // Keep rooms and markers in the background so they do not delay interaction.
     hideMapLoading();
-    void addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence)
+    setAuxiliaryLoading(true, expectedRenderSequence);
+    void loadManualFeaturesForFloor(floorNumber)
+      .then((manualFeatures) => {
+        if (expectedRenderSequence !== renderSequence || manualFeatures.length === 0) return;
+        featuresLayerGroup({ type: "FeatureCollection", features: manualFeatures }, expectedRenderSequence);
+      })
+      .then(() => addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence))
       .then(() => addMapMarkersForFloor(floorNumber, expectedRenderSequence))
+      .finally(() => setAuxiliaryLoading(false, expectedRenderSequence))
       .catch((error) => console.error("Error cargando capas auxiliares del mapa:", error));
   } finally {
     if (expectedRenderSequence === renderSequence) {

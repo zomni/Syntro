@@ -1,6 +1,7 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "./identifiers.js";
 import { getPrimaryCampusKey, toCampusFileSegment } from "./campusConfig.js";
+import { loadSession as loadCachedSession } from "./session.js";
 
 const STORAGE_PREFIX = identifiers.storage.networkTelemetry;
 const STATIC_BACKUP_URL = "data/network_telemetry_backup.json?v=20260615a";
@@ -114,15 +115,6 @@ export const loadNetworkTelemetryStaticBackup = async (campus) => {
   }
 };
 
-const loadSession = async () => {
-  try {
-    return await fetchJson(`${BACKEND_API_URL}/api/auth/session`);
-  } catch (error) {
-    console.error("[network-telemetry] error consultando sesion:", error);
-    return null;
-  }
-};
-
 export const canAccessLiveTelemetry = (session) => {
   const role = String(session?.role || "").trim().toLowerCase();
   return Boolean(session?.isAuthenticated) && (session?.isAdmin || role === "auditor");
@@ -136,7 +128,7 @@ export const loadNetworkTelemetryStatus = async (campus = defaultCampus(), { for
   }
 
   telemetryPromise = (async () => {
-    const session = await loadSession();
+    const session = await loadCachedSession();
 
     if (canAccessLiveTelemetry(session)) {
       try {

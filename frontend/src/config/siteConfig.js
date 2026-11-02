@@ -8,6 +8,7 @@
 import campuses from "../data/campuses.js";
 import { appConfig } from "./appConfig.js";
 import { identifiers } from "../utils/identifiers.js";
+import { loadSession } from "../utils/session.js";
 
 const parseStaticSite = (campusKey, config) => ({
   campusKey,
@@ -158,17 +159,11 @@ export const loadSites = () => {
     sitesLoadedPromise = (async () => {
       try {
         const [sessionResponse] = await Promise.all([
-          fetch(`${appConfig.apiBaseUrl}/api/auth/session`, {
-            credentials: "include",
-            cache: "no-store",
-          }),
+          loadSession(),
           fetchServerOverrides(),
         ]);
 
-        if (sessionResponse.ok) {
-          const session = await sessionResponse.json();
-          isBackendAuthenticated = session?.isAuthenticated === true;
-        }
+        isBackendAuthenticated = sessionResponse?.isAuthenticated === true;
 
         sites = applyViewportOverrides(normalizeStaticSites());
         sitesSource = "static";

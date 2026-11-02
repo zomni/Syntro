@@ -12,6 +12,7 @@ import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { getActiveCampus } from "../utils/goToCampus.js";
 import { loadWalkingRouteNetwork } from "../utils/walkingRouteStorage.js?v=20260608b";
 import { appConfirm } from "../utils/appDialog.js";
+import { loadSession } from "../utils/session.js";
 
 const controlsId = "walking-route-editor-controls";
 const editorButtonId = "walking-route-editor-toggle";
@@ -1268,18 +1269,6 @@ const removeEditorControls = () => {
   removeModal();
   getEditorControls()?.remove();
   removeAdminMapToolSection("routes");
-};
-
-const loadSession = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    return response.ok ? await response.json() : {};
-  } catch {
-    return {};
-  }
 };
 
 export const syncWalkingRouteEditorForSession = (session) => {

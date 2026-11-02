@@ -18,6 +18,7 @@ import {
 import { divideBuildingIntoSectors, sectorCountForArea } from "../utils/sectorDivision.js";
 import { STATIC_ICON_KEYS, staticIconUrl, staticIconLabel, STATIC_MARKER_ICON_SIZE } from "../config/staticIconCatalog.js";
 import { appConfirm, appPrompt } from "../utils/appDialog.js";
+import { loadSession } from "../utils/session.js";
 
 const VERTEX_CLASS = "room-editor-vertex-marker";
 const ROOM_LAYER_CLASS = "room-editor-room-layer";
@@ -75,18 +76,6 @@ let isPaletteDragging = false;
 
 const getApiUrl = () => {
   return BACKEND_API_URL || "http://localhost:5001";
-};
-
-const loadSession = async () => {
-  try {
-    const response = await fetch(`${getApiUrl()}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
 };
 
 const readSelectedMapFloor = () => {

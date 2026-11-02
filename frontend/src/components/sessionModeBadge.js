@@ -4,6 +4,7 @@ import { goTo } from "@app/goToCampus";
 import { getPrimaryCampusKey } from "../utils/campusConfig.js";
 import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { setBuildingMatchMode, syncSessionButtonsToFilters } from "@app/featureDisplay";
+import { loadSession, resetSessionCache } from "../utils/session.js";
 
 const rootId = "session-mode-badge";
 const inventoryLinkId = "session-inventory-link";
@@ -11,7 +12,7 @@ const sessionPollMs = 10000;
 let lastSessionKey = "";
 let pollHandle = null;
 let minimalMapMode = true;
-let satelliteActive = true;
+let satelliteActive = false;
 let buildingMatchActive = false;
 
 const updateMinimalMapMode = () => {
@@ -25,19 +26,6 @@ const updateMinimalMapMode = () => {
   button.classList.toggle("is-active", minimalMapMode);
 };
 
-const loadSession = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
-};
-
 const logout = async () => {
   try {
     await fetch(`${BACKEND_API_URL}/api/auth/logout`, {
@@ -46,6 +34,7 @@ const logout = async () => {
       cache: "no-store",
     });
   } finally {
+    resetSessionCache();
     goTo(getPrimaryCampusKey());
     window.dispatchEvent(new CustomEvent(identifiers.events.sessionChanged, { detail: { isAuthenticated: false } }));
     window.location.reload();
@@ -294,11 +283,11 @@ const positionInventoryLink = () => {
   link.style.top = `${Math.round(badgeRect.bottom + 6)}px`;
 };
 
-const refreshSessionBadge = async () => {
+const refreshSessionBadge = async ({ forceRefresh = false } = {}) => {
   const badge = ensureBadge();
   if (!badge) return;
 
-  const session = await loadSession();
+  const session = await loadSession({ forceRefresh });
   const sessionKey = getSessionKey(session);
   if (sessionKey === lastSessionKey) return;
 
@@ -317,10 +306,10 @@ const refreshSessionBadge = async () => {
 export const initSessionModeBadge = async () => {
   await refreshSessionBadge();
 
-  window.addEventListener("focus", refreshSessionBadge);
+  window.addEventListener("focus", () => refreshSessionBadge({ forceRefresh: true }));
   window.addEventListener("resize", positionInventoryLink);
 
   if (!pollHandle) {
-    pollHandle = window.setInterval(refreshSessionBadge, sessionPollMs);
+    pollHandle = window.setInterval(() => refreshSessionBadge({ forceRefresh: true }), sessionPollMs);
   }
 };

@@ -13,6 +13,7 @@ import { isWayfindingMode } from "../utils/wayfinding.js";
 import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
 import { pointInRing, ringCentroidLatLng } from "../utils/roomEditorGeometry.js";
+import { loadSession } from "../utils/session.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -595,15 +596,11 @@ const loadBackendSession = async () => {
 
   backendSessionPendingPromise = (async () => {
     try {
-      const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (!response.ok) {
+      const session = await loadSession();
+      if (!session) {
         backendSessionCache = { isAuthenticated: false, isAdmin: false };
       } else {
-        backendSessionCache = await response.json();
+        backendSessionCache = session;
       }
     } catch {
       backendSessionCache = { isAuthenticated: false, isAdmin: false };

@@ -43,7 +43,30 @@ export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGI
   updateWhenIdle: false,
   updateWhenZooming: true,
   attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGPSW, and the GIS User Community",
-}).addTo(map);
+});
+
+const installTileFallback = (layer, fallbackTemplate) => {
+  layer.on("tileerror", (event) => {
+    const tile = event?.tile;
+    if (!tile || tile.dataset.syntroFallbackAttempted === "true") return;
+    tile.dataset.syntroFallbackAttempted = "true";
+    const coords = event.coords;
+    if (!coords) return;
+    tile.src = L.Util.template(fallbackTemplate, {
+      s: "a",
+      x: coords.x,
+      y: coords.y,
+      z: coords.z,
+    });
+  });
+};
+
+installTileFallback(osmLayer, "https://tile.openstreetmap.de/{z}/{x}/{y}.png");
+installTileFallback(satelliteLayer, "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png");
+
+// Street tiles are the default for normal users; satellite imagery remains an
+// explicit opt-in through the map view toggle.
+osmLayer.addTo(map);
 
 let locationTrackingActive = false;
 let userLocationMarker = null;

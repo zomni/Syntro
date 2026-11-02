@@ -12,6 +12,7 @@ import {
   setAdminMapToolsStatus,
 } from "@app/adminMapToolsPanel";
 import { registerBuildingUndo } from "@app/walkingRouteEditor";
+import { loadSession } from "../utils/session.js";
 
 let isDrawing = false;
 let points = [];
@@ -346,19 +347,6 @@ const removeEditorControls = () => {
   removeModal();
   getEditorControls()?.remove();
   removeAdminMapToolSection("buildings");
-};
-
-const loadSession = async () => {
-  try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    return response.ok ? await response.json() : null;
-  } catch {
-    return null;
-  }
 };
 
 export const initManualBuildingEditor = async () => {

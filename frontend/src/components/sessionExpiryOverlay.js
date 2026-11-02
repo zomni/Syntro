@@ -1,5 +1,6 @@
 import { BACKEND_API_URL } from "../views/map.js";
 import { identifiers } from "../utils/identifiers.js";
+import { loadSession } from "../utils/session.js";
 
 const ACTIVITY_KEY = "syntro-admin-last-activity";
 const ACTIVITY_THROTTLE_MS = 4000;
@@ -185,11 +186,7 @@ const ensureOverlays = () => {
 
 const loadSessionSettings = async () => {
   try {
-    const response = await fetch(`${BACKEND_API_URL}/api/auth/session`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    const session = response.ok ? await response.json() : {};
+    const session = (await loadSession()) || {};
     isAuthenticated = Boolean(session?.isAuthenticated);
     if (Number.isFinite(session?.idleMinutes) && session.idleMinutes > 0) {
       idleMs = session.idleMinutes * 60 * 1000;
