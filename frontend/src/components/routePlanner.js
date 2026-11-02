@@ -7,6 +7,7 @@ import { map } from "../views/map.js";
 import { mergeCatalogWithSearch } from "@app/searchMetadata";
 import { clearRouteHighlight, closeCurrentPopup, setRouteHighlight } from "@app/featureDisplay";
 import { loadWalkingRouteNetwork } from "../utils/walkingRouteStorage.js?v=20260608b";
+import { fetchRevalidated } from "../utils/revalidatedFetch.js";
 
 const DEFAULT_CAMPUS = () => String(getActiveCampus() || getPrimaryCampusKey() || "").trim();
 const MAX_ATTEMPTS = 48;
@@ -166,7 +167,7 @@ const loadBuildingsCatalog = async () => {
     const campusKey = getActiveCampus() || getPrimaryCampusKey();
     // Sin `?v=Date.now()` ni `no-store`: el catálogo es estático y se versiona en el
     // despliegue. Antes se re-descargaban 45 KB en cada population de selectores.
-    const response = await fetch(getCatalogFileName(campusKey));
+    const response = await fetchRevalidated(getCatalogFileName(campusKey));
 
     if (!response.ok) {
       throw new Error("No se pudo cargar el catálogo de edificios");

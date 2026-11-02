@@ -14,6 +14,7 @@ import { canAccessLiveTelemetry } from "../utils/networkTelemetryStorage.js";
 import { buildingMatchColor, buildingMatchPercentLabel } from "../utils/buildingMatchGradient.js";
 import { pointInRing, ringCentroidLatLng } from "../utils/roomEditorGeometry.js";
 import { loadSession } from "../utils/session.js";
+import { fetchRevalidated } from "../utils/revalidatedFetch.js";
 
 const DISPLAY_LOCALE = appConfig.display.locale;
 const DISPLAY_TIME_ZONE = appConfig.display.timeZone;
@@ -903,9 +904,7 @@ const startEquipmentSyncMonitor = () => {
 
 const loadBuildingsCatalog = async () => {
   try {
-    const response = await fetch(`${getCatalogFileName()}?v=${Date.now()}`, {
-      cache: "no-store",
-    });
+    const response = await fetchRevalidated(getCatalogFileName());
 
     if (!response.ok) {
       throw new Error("No se pudo cargar catalogo de edificios");

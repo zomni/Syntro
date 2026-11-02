@@ -32,6 +32,7 @@ import { shouldRenderRoomForFloor } from "./manualRoomFloor.js";
 import { pointInRing } from "../utils/geometry.js";
 import { getActiveCampus } from "./goToCampus.js";
 import { getSite } from "../config/siteConfig.js";
+import { fetchRevalidated, resetRevalidatedFetch } from "./revalidatedFetch.js";
 
 // Create a layer group
 var layerGroup = L.layerGroup().addTo(map);
@@ -54,18 +55,11 @@ if (iconsPane) {
   iconsPane.style.zIndex = 455;
 }
 
-let buildingsCatalogCache = new Map();
 let renderSequence = 0;
 
 const loadBuildingsCatalog = async (campus = getCurrentCampusKey()) => {
-  if (buildingsCatalogCache.has(campus)) {
-    return buildingsCatalogCache.get(campus);
-  }
-
   try {
-    const response = await fetch(`${getCatalogFileName(campus)}?v=${Date.now()}`, {
-      cache: "no-store",
-    });
+    const response = await fetchRevalidated(getCatalogFileName(campus));
 
     if (!response.ok) {
       throw new Error("No se pudo cargar el catálogo de edificios");
@@ -74,7 +68,6 @@ const loadBuildingsCatalog = async (campus = getCurrentCampusKey()) => {
     const data = await response.json();
     // Floor selection only needs the static catalog. Search metadata and the
     // administrative backup are loaded on demand by the search/editor flows.
-    buildingsCatalogCache.set(campus, data);
     return data;
   } catch (error) {
     console.error("Error cargando catálogo de edificios:", error);
@@ -176,13 +169,11 @@ const addSVG = (floorNumber, building, location, expectedRenderSequence) => {
 };
 
 const buildFloorGeoJsonUrl = (school, location, floorNumber) => {
-  return `data/${school}_${location}_${floorNumber.toString()}.json?v=${Date.now()}`;
+  return `data/${school}_${location}_${floorNumber.toString()}.json`;
 };
 
 const loadFloorGeoJson = async (school, location, floorNumber) => {
-  const response = await fetch(buildFloorGeoJsonUrl(school, location, floorNumber), {
-    cache: "no-store",
-  });
+  const response = await fetchRevalidated(buildFloorGeoJsonUrl(school, location, floorNumber));
 
   if (!response.ok) {
     throw new Error(`No se pudo cargar el piso ${floorNumber}`);
@@ -753,5 +744,5 @@ export const clearAllMapData = () => {
 };
 
 export const resetBuildingsCatalogCache = () => {
-  buildingsCatalogCache = new Map();
+  resetRevalidatedFetch();
 };
