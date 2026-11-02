@@ -697,11 +697,14 @@ const addFeatures = async (school, floorNumber, location, expectedRenderSequence
       expectedRenderSequence
     );
 
-    await addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence);
-
-    await addMapMarkersForFloor(floorNumber, expectedRenderSequence);
-
     updateEmptyCampusNotice(!hasSvgForFloor(location, floorNumber) && featuresToRender.length === 0);
+
+    // The main building layer is usable before auxiliary backend layers arrive.
+    // Keep rooms and markers in the background so they do not delay interaction.
+    hideMapLoading();
+    void addManualRoomPolygonsForFloor(floorNumber, expectedRenderSequence)
+      .then(() => addMapMarkersForFloor(floorNumber, expectedRenderSequence))
+      .catch((error) => console.error("Error cargando capas auxiliares del mapa:", error));
   } finally {
     if (expectedRenderSequence === renderSequence) {
       hideMapLoading();
