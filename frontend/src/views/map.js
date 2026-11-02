@@ -47,15 +47,17 @@ export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGI
 });
 
 let tileWarning;
-const showTileWarning = () => {
-  if (!tileWarning) {
+let satelliteWarning = false;
+let osmWarning = false;
+const updateTileWarning = () => {
+  if (!tileWarning && (satelliteWarning || osmWarning)) {
     tileWarning = document.createElement("div");
     tileWarning.className = "map-tile-warning";
     tileWarning.setAttribute("role", "status");
     tileWarning.textContent = "No se pudieron cargar algunos mosaicos.";
     map.getContainer().appendChild(tileWarning);
   }
-  tileWarning.hidden = false;
+  if (tileWarning) tileWarning.hidden = !satelliteWarning && !osmWarning;
 };
 
 const installTileFallback = (layer, fallbackTemplate) => {
@@ -63,13 +65,20 @@ const installTileFallback = (layer, fallbackTemplate) => {
     const tile = event?.tile;
     if (!tile) return;
     if (tile.dataset.syntroFallbackAttempted === "true") {
-      showTileWarning();
+      if (map.hasLayer(layer)) {
+        osmWarning = true;
+        updateTileWarning();
+      }
       return;
     }
     tile.dataset.syntroFallbackAttempted = "true";
     const coords = event.coords;
     if (!coords) return;
-    tile.addEventListener("error", showTileWarning, { once: true });
+    tile.addEventListener("error", () => {
+      if (!map.hasLayer(layer)) return;
+      osmWarning = true;
+      updateTileWarning();
+    }, { once: true });
     tile.src = L.Util.template(fallbackTemplate, {
       s: "a",
       x: coords.x,
@@ -80,7 +89,131 @@ const installTileFallback = (layer, fallbackTemplate) => {
 };
 
 installTileFallback(osmLayer, "https://tile.openstreetmap.de/{z}/{x}/{y}.png");
-installTileFallback(satelliteLayer, "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png");
+
+let satelliteFailures = 0;
+let satelliteFallback = false;
+let probeTimer;
+let probeImage;
+let probeTimeout;
+let lastFailedCoords;
+const satelliteTileTimers = new Map();
+const timedOutTiles = new WeakSet();
+
+const clearSatelliteTileTimer = (tile) => {
+  clearTimeout(satelliteTileTimers.get(tile));
+  satelliteTileTimers.delete(tile);
+};
+
+const clearSatelliteTileTimers = () => {
+  satelliteTileTimers.forEach((timer) => clearTimeout(timer));
+  satelliteTileTimers.clear();
+};
+
+const cancelSatelliteProbe = () => {
+  clearTimeout(probeTimer);
+  clearTimeout(probeTimeout);
+  if (probeImage) {
+    probeImage.onload = null;
+    probeImage.onerror = null;
+    probeImage.src = "";
+    probeImage = null;
+  }
+};
+
+const scheduleSatelliteProbe = () => {
+  probeTimer = setTimeout(() => {
+    if (!satelliteFallback || !map.hasLayer(osmLayer)) return;
+    const image = new Image();
+    probeImage = image;
+    const finish = (success) => {
+      if (probeImage !== image) return;
+      cancelSatelliteProbe();
+      if (!satelliteFallback || !map.hasLayer(osmLayer)) return;
+      if (success) {
+        satelliteFallback = false;
+        satelliteFailures = 0;
+        satelliteWarning = false;
+        updateTileWarning();
+        osmLayer.remove();
+        satelliteLayer.addTo(map);
+      } else {
+        scheduleSatelliteProbe();
+      }
+    };
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
+    probeTimeout = setTimeout(() => finish(false), 10000);
+    image.src = satelliteLayer.getTileUrl(lastFailedCoords);
+  }, 30000);
+};
+
+const recordSatelliteFailure = (coords) => {
+  if (satelliteFallback || !map.hasLayer(satelliteLayer)) return;
+  if (!coords) return;
+  lastFailedCoords = coords;
+  satelliteFailures += 1;
+  if (satelliteFailures < 3) return;
+  satelliteFallback = true;
+  satelliteLayer.remove();
+  osmLayer.addTo(map);
+  satelliteWarning = true;
+  updateTileWarning();
+  scheduleSatelliteProbe();
+};
+
+satelliteLayer.on("tileloadstart", (event) => {
+  if (!event.tile || !event.coords || !map.hasLayer(satelliteLayer)) return;
+  const { tile, coords } = event;
+  clearSatelliteTileTimer(tile);
+  satelliteTileTimers.set(tile, setTimeout(() => {
+    satelliteTileTimers.delete(tile);
+    if (!map.hasLayer(satelliteLayer) || satelliteFallback) return;
+    timedOutTiles.add(tile);
+    recordSatelliteFailure(coords);
+    if (map.hasLayer(satelliteLayer)) {
+      // Replacing the source aborts the stalled request without counting its load as success.
+      tile.src = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
+    }
+  }, 10000));
+});
+satelliteLayer.on("tileload", (event) => {
+  clearSatelliteTileTimer(event.tile);
+  if (!timedOutTiles.has(event.tile) && !satelliteFallback && map.hasLayer(satelliteLayer)) satelliteFailures = 0;
+});
+satelliteLayer.on("tileerror", (event) => {
+  clearSatelliteTileTimer(event.tile);
+  if (!timedOutTiles.has(event.tile)) recordSatelliteFailure(event.coords);
+});
+satelliteLayer.on("tileunload", (event) => clearSatelliteTileTimer(event.tile));
+satelliteLayer.on("remove", () => {
+  clearSatelliteTileTimers();
+  if (!satelliteFallback) satelliteFailures = 0;
+});
+osmLayer.on("remove", () => {
+  if (!satelliteFallback) return;
+  satelliteFallback = false;
+  satelliteFailures = 0;
+  satelliteWarning = false;
+  updateTileWarning();
+  cancelSatelliteProbe();
+});
+const disposeSatelliteFallback = () => {
+  satelliteFallback = false;
+  clearSatelliteTileTimers();
+  cancelSatelliteProbe();
+};
+map.on("unload", disposeSatelliteFallback);
+window.addEventListener("unload", disposeSatelliteFallback);
+
+// The toggle records user intent even when the temporary OSM layer is already active.
+document.addEventListener("click", (event) => {
+  if (!satelliteFallback || !event.target.closest?.(".session-mode-globe")) return;
+  satelliteFallback = false;
+  satelliteFailures = 0;
+  satelliteWarning = false;
+  updateTileWarning();
+  cancelSatelliteProbe();
+}, true);
 
 export const getSatellitePreference = () => {
   try {
