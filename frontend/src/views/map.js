@@ -30,7 +30,8 @@ export const map = L.map("map", {
   maxBoundsViscosity: 1.0,
 }).setView(firstCampus.center, firstCampus.zoom);
 
-export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+const osmUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+export const osmLayer = L.tileLayer(osmUrl, {
   maxZoom: 19,
   keepBuffer: 8,
   updateWhenIdle: false,
@@ -38,13 +39,35 @@ export const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 });
 
-export const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+const satelliteUrl = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+export const satelliteLayer = L.tileLayer(satelliteUrl, {
   maxZoom: 23,
   keepBuffer: 8,
   updateWhenIdle: false,
   updateWhenZooming: true,
   attribution: 'Tiles &copy; Esri and contributors; fallback &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
 });
+
+// One 256px source tile covers 1024px on screen, limiting background requests.
+// A separate pane keeps it below the active layer without affecting attribution.
+map.createPane("baseUnderlay").style.zIndex = 190;
+const installUnderlay = (layer, url, maxNativeZoom) => {
+  const underlay = L.tileLayer(url, {
+    pane: "baseUnderlay",
+    tileSize: 1024,
+    zoomOffset: -2,
+    minZoom: 2,
+    maxZoom: 23,
+    maxNativeZoom,
+    keepBuffer: 0,
+    updateWhenIdle: true,
+    updateWhenZooming: false,
+  });
+  layer.on("add", () => underlay.addTo(map));
+  layer.on("remove", () => underlay.remove());
+};
+installUnderlay(osmLayer, osmUrl, 19);
+installUnderlay(satelliteLayer, satelliteUrl, 23);
 
 let tileWarning;
 let satelliteWarning = false;
@@ -95,7 +118,7 @@ let satelliteFallback = false;
 let probeTimer;
 let probeImage;
 let probeTimeout;
-let lastFailedCoords;
+let lastFailedUrl;
 const satelliteTileTimers = new Map();
 const timedOutTiles = new WeakSet();
 
@@ -143,14 +166,15 @@ const scheduleSatelliteProbe = () => {
     image.onload = () => finish(true);
     image.onerror = () => finish(false);
     probeTimeout = setTimeout(() => finish(false), 10000);
-    image.src = satelliteLayer.getTileUrl(lastFailedCoords);
+    image.src = lastFailedUrl;
   }, 30000);
 };
 
 const recordSatelliteFailure = (coords) => {
   if (satelliteFallback || !map.hasLayer(satelliteLayer)) return;
   if (!coords) return;
-  lastFailedCoords = coords;
+  // Tile event coordinates can be unwrapped; use the same wrapping as Leaflet.
+  lastFailedUrl = L.Util.template(satelliteUrl, satelliteLayer._wrapCoords(coords));
   satelliteFailures += 1;
   if (satelliteFailures < 3) return;
   satelliteFallback = true;
@@ -185,6 +209,7 @@ satelliteLayer.on("tileerror", (event) => {
   if (!timedOutTiles.has(event.tile)) recordSatelliteFailure(event.coords);
 });
 satelliteLayer.on("tileunload", (event) => clearSatelliteTileTimer(event.tile));
+satelliteLayer.on("tileabort", (event) => clearSatelliteTileTimer(event.tile));
 satelliteLayer.on("remove", () => {
   clearSatelliteTileTimers();
   if (!satelliteFallback) satelliteFailures = 0;
@@ -215,13 +240,7 @@ document.addEventListener("click", (event) => {
   cancelSatelliteProbe();
 }, true);
 
-export const getSatellitePreference = () => {
-  try {
-    return window.localStorage.getItem("syntro-map-layer") !== "streets";
-  } catch {
-    return true;
-  }
-};
+export const getSatellitePreference = () => true;
 
 (getSatellitePreference() ? satelliteLayer : osmLayer).addTo(map);
 

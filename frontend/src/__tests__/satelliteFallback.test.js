@@ -5,7 +5,7 @@ jest.mock("../config/siteConfig.js", () => ({
 jest.mock("../config/appConfig.js", () => ({ appConfig: {} }));
 
 describe("satellite tile circuit breaker", () => {
-  let map, osm, satellite, images, click, storage, container, windowEvents;
+  let map, osm, satellite, images, click, storage, container, windowEvents, createdLayers;
 
   beforeEach(() => {
     jest.resetModules();
@@ -23,22 +23,29 @@ describe("satellite tile circuit breaker", () => {
       addEventListener: (type, handler) => { if (type === "click") click = handler; },
     };
     const layers = new Set();
+    createdLayers = [];
     map = {
       setView() { return this; },
+      createPane: () => ({ style: {} }),
       handlers: {},
       on(type, handler) { this.handlers[type] = handler; },
       hasLayer: (layer) => layers.has(layer),
       getContainer: () => container,
     };
-    const makeLayer = () => ({
+    const makeLayer = (url, options) => {
+      const layer = {
+      url, options,
       handlers: {},
-      on(type, handler) { this.handlers[type] = handler; return this; },
-      addTo() { layers.add(this); return this; },
-      remove() { if (layers.delete(this) && this.handlers.remove) this.fire("remove"); return this; },
-      getTileUrl: jest.fn(() => "https://arcgis/tile"),
-      fire(type, event = {}) { this.handlers[type](event); },
-    });
-    global.L = { map: () => map, tileLayer: makeLayer, divIcon: () => ({}), Util: { template: () => "https://tile.openstreetmap.de/tile" } };
+      on(type, handler) { (this.handlers[type] ||= []).push(handler); return this; },
+      addTo() { if (!layers.has(this)) { layers.add(this); this.fire("add"); } return this; },
+      remove() { if (layers.delete(this)) this.fire("remove"); return this; },
+      _wrapCoords: (coords) => ({ ...coords, x: ((coords.x % (2 ** coords.z)) + (2 ** coords.z)) % (2 ** coords.z) }),
+      fire(type, event = {}) { (this.handlers[type] || []).forEach((handler) => handler(event)); },
+      };
+      createdLayers.push(layer);
+      return layer;
+    };
+    global.L = { map: () => map, tileLayer: makeLayer, divIcon: () => ({}), Util: { template: (url, data) => url.replace(/\{(\w+)\}/g, (_, key) => data[key]) } };
     ({ osmLayer: osm, satelliteLayer: satellite } = require("../views/map.js"));
   });
 
@@ -72,15 +79,12 @@ describe("satellite tile circuit breaker", () => {
     expect(storage.setItem).not.toHaveBeenCalled();
   });
 
-  test("honors a saved streets preference without starting probes", () => {
+  test("starts with satellite even when streets was saved", () => {
     jest.resetModules();
     storage.getItem.mockReturnValue("streets");
     ({ osmLayer: osm, satelliteLayer: satellite } = require("../views/map.js"));
-    expect(map.hasLayer(osm)).toBe(true);
-    expect(map.hasLayer(satellite)).toBe(false);
-    fail(satellite);
-    jest.advanceTimersByTime(60000);
-    expect(images).toHaveLength(0);
+    expect(map.hasLayer(satellite)).toBe(true);
+    expect(require("../views/map.js").getSatellitePreference()).toBe(true);
   });
 
   test("uses spaced single probes and restores satellite only on success", () => {
@@ -88,7 +92,7 @@ describe("satellite tile circuit breaker", () => {
     fail(satellite);
     jest.advanceTimersByTime(30000);
     expect(images).toHaveLength(1);
-    expect(images[0].src).toBe("https://arcgis/tile");
+    expect(images[0].src).toBe("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/1");
     images[0].onerror();
     jest.advanceTimersByTime(29999);
     expect(images).toHaveLength(1);
@@ -150,6 +154,42 @@ describe("satellite tile circuit breaker", () => {
     jest.advanceTimersByTime(10000);
     expect(map.hasLayer(satellite)).toBe(true);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test("aborted zoom tiles cannot trigger fallback or leave timers", () => {
+    const tiles = [startTile(), startTile(), startTile()];
+    tiles.forEach((tile) => satellite.fire("tileabort", { tile }));
+    jest.advanceTimersByTime(10000);
+    expect(map.hasLayer(satellite)).toBe(true);
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  test("only the active provider has a bounded underlay, including fallback and recovery", () => {
+    const [osmUnderlay, satelliteUnderlay] = createdLayers.slice(2);
+    expect(satelliteUnderlay.options).toMatchObject({ tileSize: 1024, zoomOffset: -2, keepBuffer: 0, pane: "baseUnderlay" });
+    expect(satelliteUnderlay.options.attribution).toBeUndefined();
+    expect(map.hasLayer(satelliteUnderlay)).toBe(true);
+    expect(map.hasLayer(osmUnderlay)).toBe(false);
+    for (let i = 0; i < 3; i++) satelliteUnderlay.fire("tileerror", { coords: { x: 1, y: 2, z: 3 } });
+    expect(map.hasLayer(satellite)).toBe(true);
+    open(satellite);
+    expect(map.hasLayer(satelliteUnderlay)).toBe(false);
+    expect(map.hasLayer(osmUnderlay)).toBe(true);
+    jest.advanceTimersByTime(30000);
+    images[0].onload();
+    expect(map.hasLayer(osmUnderlay)).toBe(false);
+    expect(map.hasLayer(satelliteUnderlay)).toBe(true);
+    satellite.remove();
+    osm.addTo(map);
+    expect(map.hasLayer(satelliteUnderlay)).toBe(false);
+    expect(map.hasLayer(osmUnderlay)).toBe(true);
+  });
+
+  test("probe uses the failed tile zoom and wrapped coordinates after removal", () => {
+    const coords = { x: -1, y: 2, z: 3 };
+    for (let i = 0; i < 3; i++) satellite.fire("tileerror", { coords });
+    jest.advanceTimersByTime(30000);
+    expect(images[0].src).toBe("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/3/2/7");
   });
 
   test("layer removal and page or map unload cancel pending work", () => {
