@@ -2858,6 +2858,7 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
 /* Satelital/coincidencias movidos al panel de filtros: paleta del panel claro
    en vez de la del badge azul. */
 .map-equipment-type-filter .session-mode-globe,
+.map-equipment-type-filter .osm-3d-filter,
 .map-equipment-type-filter .session-mode-match {
     display: inline-flex;
     align-items: center;
@@ -2873,6 +2874,8 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
 
 .map-equipment-type-filter .session-mode-globe:hover,
 .map-equipment-type-filter .session-mode-globe.is-active,
+.map-equipment-type-filter .osm-3d-filter:hover,
+.map-equipment-type-filter .osm-3d-filter.is-active,
 .map-equipment-type-filter .session-mode-match:hover,
 .map-equipment-type-filter .session-mode-match.is-active {
     background: var(--pi-primary-soft);
@@ -2883,6 +2886,10 @@ html[data-admin-map-tool-mode="geometry-move"] .building-match-bubble {
 .map-equipment-type-filter .session-mode-match.is-muted {
     color: var(--pi-gray-500);
 }
+
+.map-equipment-type-filter .osm-3d-filter.is-muted { color: var(--pi-gray-500); }
+.osm-3d-filter { cursor: pointer; }
+.osm-3d-icon { font-size: 12px; font-weight: 700; }
 
 .route-planner-panel {
     position: relative;

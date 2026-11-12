@@ -47,6 +47,8 @@ import { initRoomEditor } from "@app/roomEditor";
 // Mobile "wayfinding" mode (map only: orientation + routes)
 import { initWayfindingMode } from "./utils/wayfinding.js";
 import { initWayfindingControls } from "@app/featureDisplay";
+import { map } from "./views/map.js";
+import { initOsmBuildingsView } from "./components/osmBuildingsView.js";
 
 applyBrandingTheme();
 
@@ -123,6 +125,7 @@ initCampusMarkerEditor();
 initRoomEditor();
 initWalkingRouteEditor();
 initSiteViewportPanel();
+initOsmBuildingsView(map);
 
 initWayfindingControls();
 window.addEventListener("syntro-wayfinding-changed", initWayfindingControls);

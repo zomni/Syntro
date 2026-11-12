@@ -1535,6 +1535,8 @@ export const syncSessionButtonsToFilters = () => {
     const button = document.querySelector(selector);
     if (button && button.parentElement !== target) target.appendChild(button);
   });
+  const view3d = document.getElementById("osm-3d-toggle");
+  if (view3d && view3d.parentElement !== target) target.appendChild(view3d);
 };
 
 const ensureWayfindingControls = () => {
